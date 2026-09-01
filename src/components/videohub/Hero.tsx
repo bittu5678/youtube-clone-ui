@@ -22,7 +22,7 @@ export function Hero() {
           <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 backdrop-blur">
             <Logo size={20} showName={false} />
             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
-              VideoHub Originals
+              Facetube Originals
             </span>
           </div>
           <h1 className="text-3xl font-extrabold leading-[1.08] tracking-tight sm:text-5xl">
@@ -30,7 +30,7 @@ export function Hero() {
           </h1>
           <p className="mt-4 max-w-lg text-sm leading-relaxed text-white/70 sm:text-base">
             A feature-length look at the workflows, gear and editing systems behind the
-            fastest-growing channels on VideoHub.
+            fastest-growing channels on Facetube.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <button className="inline-flex items-center gap-2 rounded-full bg-brand px-6 py-3 text-sm font-semibold text-brand-foreground shadow-lift transition hover:bg-brand-dark active:scale-95">

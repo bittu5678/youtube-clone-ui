@@ -1,0 +1,6 @@
+{
+  "name": "Facetube",
+  "description": "Facetube - A modern video streaming and discovery platform with authentication, role-based access control, and interactive video playback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

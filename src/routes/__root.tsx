@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { AuthProvider } from "../lib/auth-context";
 
 function NotFoundComponent() {
   return (
@@ -77,13 +78,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "VideoHub — Stream. Create. Discover." },
+      { title: "Facetube — Stream. Create. Discover." },
       {
         name: "description",
         content:
-          "VideoHub is a modern video streaming experience for creators and viewers — trending videos, popular creators and fresh uploads.",
+          "Facetube is a modern video streaming experience for creators and viewers — trending videos, popular creators, role management and fresh uploads.",
       },
-      { property: "og:title", content: "VideoHub — Stream. Create. Discover." },
+      { property: "og:title", content: "Facetube — Stream. Create. Discover." },
       {
         property: "og:description",
         content: "A premium video streaming interface for creators and viewers.",
@@ -131,8 +132,10 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <AuthProvider>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

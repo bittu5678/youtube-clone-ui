@@ -14,7 +14,7 @@ export function Footer() {
             </li>
           ))}
         </ul>
-        <p className="text-sm text-muted-foreground">© 2026 VideoHub</p>
+        <p className="text-sm text-muted-foreground">© 2026 Facetube</p>
       </div>
     </footer>
   );

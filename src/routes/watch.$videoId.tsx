@@ -26,14 +26,11 @@ export const Route = createFileRoute("/watch/$videoId")({
   head: ({ loaderData }) => {
     if (!loaderData) {
       return {
-        meta: [
-          { title: "Video unavailable — VideoHub" },
-          { name: "robots", content: "noindex" },
-        ],
+        meta: [{ title: "Video unavailable — Facetube" }, { name: "robots", content: "noindex" }],
       };
     }
     const { video } = loaderData;
-    const title = `${video.title} — VideoHub`;
+    const title = `${video.title} — Facetube`;
     return {
       meta: [
         { title },

@@ -12,16 +12,16 @@ export function Logo({
   return (
     <a href="/" className={`flex shrink-0 items-center gap-2 ${className}`}>
       <img
-  src="/favicon.png"
-  alt="VideoHub"
-  width={size}
-  height={size}
-  className="object-contain"
-  style={{ width: size, height: size }}
-/>
+        src="/favicon.png"
+        alt="Facetube"
+        width={size}
+        height={size}
+        className="object-contain"
+        style={{ width: size, height: size }}
+      />
       {showName && (
         <span className="text-[1.15rem] font-extrabold tracking-tight text-foreground">
-          Video<span className="text-brand">Hub</span>
+          Face<span className="text-brand">tube</span>
         </span>
       )}
     </a>

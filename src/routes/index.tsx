@@ -13,13 +13,13 @@ import { allVideos, categories, creators, recent, recommended, trending } from "
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "VideoHub — Stream, Discover and Create Video" },
+      { title: "Facetube — Stream, Discover and Create Video" },
       {
         name: "description",
         content:
-          "Browse trending videos, follow popular creators and discover fresh uploads on VideoHub, a modern video streaming experience.",
+          "Browse trending videos, follow popular creators and discover fresh uploads on Facetube, a modern video streaming experience.",
       },
-      { property: "og:title", content: "VideoHub — Stream, Discover and Create Video" },
+      { property: "og:title", content: "Facetube — Stream, Discover and Create Video" },
       {
         property: "og:description",
         content: "Trending videos, popular creators and fresh uploads in one polished feed.",
@@ -91,11 +91,7 @@ function Index() {
       />
 
       <div className="flex">
-        <Sidebar
-          open={railOpen}
-          drawerOpen={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-        />
+        <Sidebar open={railOpen} drawerOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
 
         <main className="min-w-0 flex-1 pb-24 lg:pb-10">
           {/* Category chips */}
@@ -135,7 +131,9 @@ function Index() {
               <section>
                 <SectionHeading
                   icon={Search}
-                  title={query.trim() ? `Results for “${query.trim()}”` : `${activeCategory} videos`}
+                  title={
+                    query.trim() ? `Results for “${query.trim()}”` : `${activeCategory} videos`
+                  }
                   subtitle={`${results.length} ${results.length === 1 ? "video" : "videos"} found${
                     query.trim() && activeCategory !== "All" ? ` in ${activeCategory}` : ""
                   }`}
@@ -168,73 +166,73 @@ function Index() {
               </section>
             ) : (
               <>
-            <Hero />
+                <Hero />
 
-            <section className="mt-12">
-              <SectionHeading
-                icon={Sparkles}
-                title="Recommended for you"
-                subtitle="Picked from channels you watch"
-              />
-              <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                {recommended.map((v) => (
-                  <VideoCard key={v.id} video={v} />
-                ))}
-              </div>
-            </section>
+                <section className="mt-12">
+                  <SectionHeading
+                    icon={Sparkles}
+                    title="Recommended for you"
+                    subtitle="Picked from channels you watch"
+                  />
+                  <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                    {recommended.map((v) => (
+                      <VideoCard key={v.id} video={v} />
+                    ))}
+                  </div>
+                </section>
 
-            <section className="mt-14">
-              <SectionHeading
-                icon={Flame}
-                title="Trending now"
-                subtitle="What everyone is watching today"
-              />
-              <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                {trending.map((v) => (
-                  <VideoCard key={v.id} video={v} />
-                ))}
-              </div>
-            </section>
+                <section className="mt-14">
+                  <SectionHeading
+                    icon={Flame}
+                    title="Trending now"
+                    subtitle="What everyone is watching today"
+                  />
+                  <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                    {trending.map((v) => (
+                      <VideoCard key={v.id} video={v} />
+                    ))}
+                  </div>
+                </section>
 
-            <section className="mt-14">
-              <SectionHeading
-                icon={BadgeCheck}
-                title="Popular creators"
-                subtitle="Channels growing fast on VideoHub"
-              />
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-                {creators.map((c) => (
-                  <article
-                    key={c.name}
-                    className="group rounded-2xl border border-border p-5 text-center shadow-card transition-all hover:-translate-y-1 hover:border-brand/30 hover:shadow-lift"
-                  >
-                    <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-brand to-brand-dark text-sm font-bold text-brand-foreground transition-transform group-hover:scale-105">
-                      {c.initials}
-                    </span>
-                    <h3 className="mt-3 truncate text-sm font-semibold text-foreground">
-                      {c.name}
-                    </h3>
-                    <p className="truncate text-xs text-muted-foreground">{c.subs}</p>
-                    <button className="mt-3 w-full rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-brand hover:text-brand-foreground">
-                      Subscribe
-                    </button>
-                  </article>
-                ))}
-              </div>
-            </section>
+                <section className="mt-14">
+                  <SectionHeading
+                    icon={BadgeCheck}
+                    title="Popular creators"
+                    subtitle="Channels growing fast on Facetube"
+                  />
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                    {creators.map((c) => (
+                      <article
+                        key={c.name}
+                        className="group rounded-2xl border border-border p-5 text-center shadow-card transition-all hover:-translate-y-1 hover:border-brand/30 hover:shadow-lift"
+                      >
+                        <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-brand to-brand-dark text-sm font-bold text-brand-foreground transition-transform group-hover:scale-105">
+                          {c.initials}
+                        </span>
+                        <h3 className="mt-3 truncate text-sm font-semibold text-foreground">
+                          {c.name}
+                        </h3>
+                        <p className="truncate text-xs text-muted-foreground">{c.subs}</p>
+                        <button className="mt-3 w-full rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-brand hover:text-brand-foreground">
+                          Subscribe
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                </section>
 
-            <section className="mt-14">
-              <SectionHeading
-                icon={Clock3}
-                title="Recently uploaded"
-                subtitle="Fresh from your subscriptions"
-              />
-              <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                {recent.map((v) => (
-                  <VideoCard key={v.id} video={v} />
-                ))}
-              </div>
-            </section>
+                <section className="mt-14">
+                  <SectionHeading
+                    icon={Clock3}
+                    title="Recently uploaded"
+                    subtitle="Fresh from your subscriptions"
+                  />
+                  <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                    {recent.map((v) => (
+                      <VideoCard key={v.id} video={v} />
+                    ))}
+                  </div>
+                </section>
               </>
             )}
 
