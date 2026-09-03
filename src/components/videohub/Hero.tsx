@@ -20,7 +20,7 @@ export function Hero() {
       <div className="relative grid gap-8 p-6 sm:p-10 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-center lg:p-14">
         <div className="max-w-xl">
           <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 backdrop-blur">
-            <Logo size={20} showName={false} />
+            <Logo size={20} showName={false} asLink={false} />
             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
               FaceTube Originals
             </span>

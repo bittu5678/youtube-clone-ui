@@ -12,6 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Logo } from "@/components/videohub/Logo";
+import { ThemeToggle } from "@/components/videohub/ThemeToggle";
 import { FacetubeLogoIcon } from "@/components/videohub/FacetubeLogoIcon";
 import { useAuth } from "@/lib/auth-context";
 
@@ -209,13 +210,16 @@ function AuthPage() {
 
       <main className="flex min-h-screen flex-col justify-center px-5 py-10 sm:px-10 lg:px-16">
         <div className="mx-auto w-full max-w-md">
-          <Link
-            to="/"
-            className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition hover:text-brand"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to FaceTube
-          </Link>
+          <div className="mb-8 flex items-center justify-between">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition hover:text-brand"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to FaceTube
+            </Link>
+            <ThemeToggle showLabelsOnWide={false} />
+          </div>
 
           <div className="mb-8 lg:hidden">
             <Logo size={40} />

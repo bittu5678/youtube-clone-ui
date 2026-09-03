@@ -42,8 +42,18 @@ function getStoredTheme(): Theme {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(getStoredTheme);
-  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(getSystemTheme);
+  // Always initialize with deterministic SSR defaults so client initial hydration matches server HTML exactly.
+  // The client's saved preference from localStorage is synced immediately in useEffect after hydration.
+  const [theme, setThemeState] = useState<Theme>("system");
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>("dark");
+
+  useEffect(() => {
+    const stored = getStoredTheme();
+    if (stored) {
+      setThemeState(stored);
+    }
+    setSystemTheme(getSystemTheme());
+  }, []);
 
   // Calculate the currently resolved theme
   const resolvedTheme: ResolvedTheme = useMemo(() => {
