@@ -19,7 +19,7 @@ const initialDemoUsers: (UserWithRole & { password?: string })[] = [
   {
     id: "user_admin_01",
     username: "admin",
-    full_name: "Facetube Administrator",
+    full_name: "FaceTube Administrator",
     email: "admin@facetube.com",
     role: "admin",
     created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),

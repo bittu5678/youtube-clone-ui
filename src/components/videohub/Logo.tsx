@@ -1,4 +1,4 @@
-import logo from "@/assets/videohub-logo.png.asset.json";
+import { FacetubeLogoIcon } from "./FacetubeLogoIcon";
 
 export function Logo({
   size = 34,
@@ -10,18 +10,11 @@ export function Logo({
   className?: string;
 }) {
   return (
-    <a href="/" className={`flex shrink-0 items-center gap-2 ${className}`}>
-      <img
-        src="/favicon.png"
-        alt="Facetube"
-        width={size}
-        height={size}
-        className="object-contain"
-        style={{ width: size, height: size }}
-      />
+    <a href="/" className={`flex shrink-0 items-center gap-2.5 ${className}`}>
+      <FacetubeLogoIcon size={size} />
       {showName && (
-        <span className="text-[1.15rem] font-extrabold tracking-tight text-foreground">
-          Face<span className="text-brand">tube</span>
+        <span className="text-[1.18rem] font-extrabold tracking-tight text-foreground">
+          Face<span className="text-brand">Tube</span>
         </span>
       )}
     </a>

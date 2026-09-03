@@ -26,9 +26,9 @@ import type { RoleType } from "@/types/auth";
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
-      { title: "Admin Portal — Facetube" },
+      { title: "Admin Portal — FaceTube" },
       { name: "robots", content: "noindex, nofollow" },
-      { name: "description", content: "Facetube Admin Dashboard and Role-Based Access Control." },
+      { name: "description", content: "FaceTube Admin Dashboard and Role-Based Access Control." },
     ],
   }),
   component: AdminPage,
@@ -164,7 +164,7 @@ ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;`;
                   <ShieldCheck className="h-4 w-4" />
                 </span>
                 <span className="text-xs font-bold uppercase tracking-widest text-brand">
-                  Facetube Admin Portal
+                  FaceTube Admin Portal
                 </span>
               </div>
               <h1 className="mt-1.5 text-2xl font-extrabold tracking-tight sm:text-3xl">
@@ -245,7 +245,7 @@ ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;`;
                 </span>
               </div>
               <p className="mt-3 text-2xl font-black">{allVideos.length}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Facetube stream catalog</p>
+              <p className="mt-1 text-xs text-muted-foreground">FaceTube stream catalog</p>
             </div>
           </div>
 

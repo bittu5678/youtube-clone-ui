@@ -12,22 +12,22 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Logo } from "@/components/videohub/Logo";
-import logo from "@/assets/videohub-logo.png.asset.json";
+import { FacetubeLogoIcon } from "@/components/videohub/FacetubeLogoIcon";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in or Create Account — Facetube" },
+      { title: "Sign in or Create Account — FaceTube" },
       {
         name: "description",
         content:
-          "Sign in to Facetube or create a free account to save videos, follow creators and pick up where you left off.",
+          "Sign in to FaceTube or create a free account to save videos, follow creators and pick up where you left off.",
       },
-      { property: "og:title", content: "Sign in or Create Account — Facetube" },
+      { property: "og:title", content: "Sign in or Create Account — FaceTube" },
       {
         property: "og:description",
-        content: "Access your Facetube feed, subscriptions and watch history.",
+        content: "Access your FaceTube feed, subscriptions and watch history.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -179,25 +179,14 @@ function AuthPage() {
           className="pointer-events-none absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-black/30 blur-3xl"
         />
         <div className="relative flex items-center gap-3">
-          <img
-            src={logo.url}
-            alt="Facetube logo"
-            width={44}
-            height={44}
-            className="h-11 w-11 object-contain drop-shadow-lg"
-          />
-          <span className="text-xl font-extrabold tracking-tight text-white">Facetube</span>
+          <FacetubeLogoIcon size={44} className="drop-shadow-lg" />
+          <span className="text-xl font-extrabold tracking-tight text-white">FaceTube</span>
         </div>
 
         <div className="relative max-w-md">
-          <img
-            src={logo.url}
-            alt=""
-            aria-hidden
-            width={96}
-            height={96}
-            className="mb-6 h-24 w-24 object-contain opacity-90 drop-shadow-2xl"
-          />
+          <div className="mb-6 drop-shadow-2xl">
+            <FacetubeLogoIcon size={96} />
+          </div>
           <h2 className="text-4xl font-extrabold leading-tight tracking-tight text-white">
             Every story worth watching, in one hub.
           </h2>
@@ -214,7 +203,7 @@ function AuthPage() {
         </div>
 
         <p className="relative text-xs text-white/60">
-          © 2026 Facetube. Role-based streaming platform with Supabase authentication.
+          © 2026 FaceTube. Role-based streaming platform with Supabase authentication.
         </p>
       </aside>
 
@@ -225,7 +214,7 @@ function AuthPage() {
             className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition hover:text-brand"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Facetube
+            Back to FaceTube
           </Link>
 
           <div className="mb-8 lg:hidden">
@@ -292,7 +281,7 @@ function AuthPage() {
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 {isSignup
-                  ? "Join millions of viewers and creators on Facetube."
+                  ? "Join millions of viewers and creators on FaceTube."
                   : "Sign in to continue watching where you left off."}
               </p>
 
@@ -469,7 +458,7 @@ function AuthPage() {
               </div>
 
               <p className="mt-8 text-center text-sm text-muted-foreground">
-                {isSignup ? "Already have an account?" : "New to Facetube?"}{" "}
+                {isSignup ? "Already have an account?" : "New to FaceTube?"}{" "}
                 <button
                   type="button"
                   onClick={() => setMode(isSignup ? "login" : "signup")}

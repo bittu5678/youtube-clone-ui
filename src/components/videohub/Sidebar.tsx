@@ -91,7 +91,7 @@ export function Sidebar({
         <NavList />
         <div className="px-6 pb-8 text-xs leading-relaxed text-muted-foreground">
           <p>About · Terms · Privacy</p>
-          <p className="mt-2">© 2026 Facetube</p>
+          <p className="mt-2">© 2026 FaceTube</p>
         </div>
       </aside>
 

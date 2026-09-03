@@ -13,13 +13,13 @@ import { allVideos, categories, creators, recent, recommended, trending } from "
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Facetube — Stream, Discover and Create Video" },
+      { title: "FaceTube — Stream, Discover and Create Video" },
       {
         name: "description",
         content:
-          "Browse trending videos, follow popular creators and discover fresh uploads on Facetube, a modern video streaming experience.",
+          "Browse trending videos, follow popular creators and discover fresh uploads on FaceTube, a modern video streaming experience.",
       },
-      { property: "og:title", content: "Facetube — Stream, Discover and Create Video" },
+      { property: "og:title", content: "FaceTube — Stream, Discover and Create Video" },
       {
         property: "og:description",
         content: "Trending videos, popular creators and fresh uploads in one polished feed.",
@@ -198,7 +198,7 @@ function Index() {
                   <SectionHeading
                     icon={BadgeCheck}
                     title="Popular creators"
-                    subtitle="Channels growing fast on Facetube"
+                    subtitle="Channels growing fast on FaceTube"
                   />
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
                     {creators.map((c) => (

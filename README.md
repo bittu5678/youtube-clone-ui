@@ -1,6 +1,6 @@
-# Facetube
+# FaceTube
 
-A professional, modern and attractive YouTube-style video streaming application called **Facetube** with full authentication and role-based access control (RBAC).
+A professional, modern and attractive YouTube-style video streaming application called **FaceTube** with full authentication and role-based access control (RBAC).
 
 ## Features
 

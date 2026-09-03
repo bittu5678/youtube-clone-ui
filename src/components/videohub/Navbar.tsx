@@ -2,6 +2,7 @@ import { Menu, Search, Mic, Plus, Bell, ShieldCheck, LogOut, User } from "lucide
 import { Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { Logo } from "./Logo";
+import { ThemeToggle } from "./ThemeToggle";
 import { useAuth } from "@/lib/auth-context";
 
 export function Navbar({
@@ -93,13 +94,16 @@ export function Navbar({
             </Link>
           )}
 
-          <button
-            type="button"
+          <Link
+            to="/upload"
             className="hidden items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-semibold text-brand-foreground shadow-lift transition hover:bg-brand-dark active:scale-95 sm:flex"
           >
             <Plus className="h-4 w-4" />
             Create
-          </button>
+          </Link>
+
+          {/* Theme Toggle Switch */}
+          <ThemeToggle />
 
           <button
             type="button"
