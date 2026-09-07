@@ -11,7 +11,8 @@ export const Route = createFileRoute("/subscriptions")({
       { title: "Subscriptions — FaceTube" },
       {
         name: "description",
-        content: "Catch the latest uploads and live streams from channels you subscribe to on FaceTube.",
+        content:
+          "Catch the latest uploads and live streams from channels you subscribe to on FaceTube.",
       },
     ],
   }),
@@ -19,7 +20,9 @@ export const Route = createFileRoute("/subscriptions")({
 });
 
 function SubscriptionsPage() {
-  const [selectedFilter, setSelectedFilter] = useState<"All" | "Today" | "Live" | "Continue">("All");
+  const [selectedFilter, setSelectedFilter] = useState<"All" | "Today" | "Live" | "Continue">(
+    "All",
+  );
   const [selectedCreator, setSelectedCreator] = useState<string | null>(null);
 
   const filteredVideos = allVideos.filter((v) => {

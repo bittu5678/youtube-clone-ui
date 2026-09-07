@@ -25,6 +25,9 @@ import { SHORTS_LIST, type ShortItem } from "@/data/shorts";
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/shorts")({
+  validateSearch: (search: Record<string, unknown>): { id?: string } => ({
+    id: typeof search.id === "string" ? search.id : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Shorts — FaceTube" },
@@ -39,8 +42,24 @@ export const Route = createFileRoute("/shorts")({
 });
 
 function ShortsPage() {
+  const searchParams = Route.useSearch();
   const { user, profile } = useAuth();
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const initialIndex = searchParams.id
+    ? Math.max(
+        0,
+        SHORTS_LIST.findIndex((s) => s.id === searchParams.id),
+      )
+    : 0;
+  const [currentIndex, setCurrentIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
+
+  useEffect(() => {
+    if (searchParams.id) {
+      const idx = SHORTS_LIST.findIndex((s) => s.id === searchParams.id);
+      if (idx !== -1) {
+        setCurrentIndex(idx);
+      }
+    }
+  }, [searchParams.id]);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [disliked, setDisliked] = useState<Record<string, boolean>>({});
   const [subscribed, setSubscribed] = useState<Record<string, boolean>>({});

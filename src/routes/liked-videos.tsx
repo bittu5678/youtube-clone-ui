@@ -56,9 +56,7 @@ function LikedVideosPage() {
                 <Lock className="h-3 w-3" />
                 Private Playlist
               </div>
-              <h1 className="mt-1 text-2xl font-extrabold text-foreground">
-                Liked Videos
-              </h1>
+              <h1 className="mt-1 text-2xl font-extrabold text-foreground">Liked Videos</h1>
               <p className="text-xs text-muted-foreground mt-1 font-medium">
                 {username} · {likedList.length} videos · Saved to your favorites
               </p>

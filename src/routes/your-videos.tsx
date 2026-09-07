@@ -21,7 +21,8 @@ export const Route = createFileRoute("/your-videos")({
       { title: "Your Videos — Channel Content — FaceTube" },
       {
         name: "description",
-        content: "Manage your uploaded videos, track monetization revenue, and publish new content on FaceTube.",
+        content:
+          "Manage your uploaded videos, track monetization revenue, and publish new content on FaceTube.",
       },
     ],
   }),
@@ -141,11 +142,7 @@ function YourVideosPage() {
                 {/* Thumbnail + Title */}
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="relative shrink-0 w-32 aspect-video rounded-xl overflow-hidden bg-black">
-                    <img
-                      src={item.thumb}
-                      alt={item.title}
-                      className="h-full w-full object-cover"
-                    />
+                    <img src={item.thumb} alt={item.title} className="h-full w-full object-cover" />
                     <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 py-0.5 text-[9px] font-bold text-white">
                       {item.duration}
                     </span>

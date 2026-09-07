@@ -22,7 +22,8 @@ export const Route = createFileRoute("/settings")({
       { title: "Settings — FaceTube" },
       {
         name: "description",
-        content: "Manage your FaceTube account, appearance theme, playback settings, and privacy preferences.",
+        content:
+          "Manage your FaceTube account, appearance theme, playback settings, and privacy preferences.",
       },
     ],
   }),
@@ -59,7 +60,9 @@ function SettingsPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-full bg-brand text-white font-bold">
-                {profile?.username?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || "U"}
+                {profile?.username?.charAt(0).toUpperCase() ||
+                  user?.email?.charAt(0).toUpperCase() ||
+                  "U"}
               </div>
               <div>
                 <h2 className="text-base font-bold text-foreground">
@@ -149,7 +152,9 @@ function SettingsPage() {
 
             <label className="flex items-center justify-between cursor-pointer">
               <div>
-                <p className="text-sm font-semibold text-foreground">High Quality Streaming (1080p / 4K)</p>
+                <p className="text-sm font-semibold text-foreground">
+                  High Quality Streaming (1080p / 4K)
+                </p>
                 <p className="text-xs text-muted-foreground">
                   Prefer highest resolution bitrate on unmetered broadband connections
                 </p>
@@ -189,7 +194,9 @@ function SettingsPage() {
           <div className="space-y-4">
             <label className="flex items-center justify-between cursor-pointer">
               <div>
-                <p className="text-sm font-semibold text-foreground">Channel Upload Notifications</p>
+                <p className="text-sm font-semibold text-foreground">
+                  Channel Upload Notifications
+                </p>
                 <p className="text-xs text-muted-foreground">
                   Receive alerts when channels you subscribe to upload fresh videos
                 </p>

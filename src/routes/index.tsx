@@ -6,6 +6,7 @@ import { Navbar } from "@/components/videohub/Navbar";
 import { Sidebar } from "@/components/videohub/Sidebar";
 import { Hero } from "@/components/videohub/Hero";
 import { VideoCard } from "@/components/videohub/VideoCard";
+import { ShortsShelf } from "@/components/videohub/ShortsShelf";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { Footer } from "@/components/videohub/Footer";
 import { allVideos, categories, creators, recent, recommended, trending } from "@/data/videos";
@@ -149,11 +150,23 @@ function Index() {
                   }`}
                 />
                 {results.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                    {results.map((v) => (
-                      <VideoCard key={v.id} video={v} />
-                    ))}
-                  </div>
+                  <>
+                    <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                      {results.slice(0, 6).map((v) => (
+                        <VideoCard key={v.id} video={v} />
+                      ))}
+                    </div>
+
+                    <ShortsShelf />
+
+                    {results.length > 6 && (
+                      <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                        {results.slice(6).map((v) => (
+                          <VideoCard key={v.id} video={v} />
+                        ))}
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="grid place-items-center rounded-2xl border border-dashed border-border py-20 text-center">
                     <SearchX className="h-10 w-10 text-muted-foreground" />
@@ -190,6 +203,9 @@ function Index() {
                     ))}
                   </div>
                 </section>
+
+                {/* YouTube-style Horizontal Shorts Carousel Section */}
+                <ShortsShelf />
 
                 <section className="mt-14">
                   <SectionHeading
