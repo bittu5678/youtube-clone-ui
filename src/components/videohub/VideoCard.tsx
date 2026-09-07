@@ -4,9 +4,9 @@ import type { Video } from "@/data/videos";
 
 export function VideoCard({ video }: { video: Video }) {
   return (
-    <article className="group cursor-pointer">
+    <article className="group cursor-pointer transition-transform duration-300 hover:-translate-y-0.5">
       <Link to="/watch/$videoId" params={{ videoId: video.id }} className="block">
-        <div className="relative overflow-hidden rounded-2xl bg-muted shadow-card">
+        <div className="relative overflow-hidden rounded-2xl bg-muted shadow-card transition-shadow duration-300 group-hover:shadow-lg">
           <img
             src={video.thumb}
             alt={video.title}

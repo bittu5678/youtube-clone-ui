@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Flame, Sparkles, Clock3, BadgeCheck, Search, SearchX } from "lucide-react";
 
 import { Navbar } from "@/components/videohub/Navbar";
@@ -11,6 +11,9 @@ import { Footer } from "@/components/videohub/Footer";
 import { allVideos, categories, creators, recent, recommended, trending } from "@/data/videos";
 
 export const Route = createFileRoute("/")({
+  validateSearch: (search: Record<string, unknown>): { q?: string } => ({
+    q: typeof search.q === "string" ? search.q : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "FaceTube — Stream, Discover and Create Video" },
@@ -54,10 +57,17 @@ function SectionHeading({
 }
 
 function Index() {
+  const searchParams = Route.useSearch();
   const [railOpen, setRailOpen] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState("All");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(searchParams.q || "");
+
+  useEffect(() => {
+    if (searchParams.q !== undefined) {
+      setQuery(searchParams.q);
+    }
+  }, [searchParams.q]);
 
   const isFiltering = query.trim().length > 0 || activeCategory !== "All";
 

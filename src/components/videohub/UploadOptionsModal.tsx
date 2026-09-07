@@ -26,7 +26,7 @@ export interface UploadOptionItem {
 export const UPLOAD_OPTIONS_LIST: UploadOptionItem[] = [
   {
     id: "premium",
-    title: "Premium Video Upload",
+    title: "Premium Video Upload (Ads Earnings + $)",
     subtitle: "Ads Earnings Enabled",
     badge: "Monetized · $ Revenue Share",
     icon: DollarSign,

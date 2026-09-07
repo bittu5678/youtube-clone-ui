@@ -17,14 +17,14 @@ import { useAuth } from "@/lib/auth-context";
 
 const items = [
   { label: "Home", icon: Home, to: "/" },
-  { label: "Explore", icon: Compass, to: "/" },
-  { label: "Subscriptions", icon: Clapperboard, to: "/" },
-  { label: "History", icon: History, to: "/" },
-  { label: "Watch Later", icon: Clock, to: "/" },
-  { label: "Liked Videos", icon: ThumbsUp, to: "/" },
-  { label: "Your Videos", icon: Video, to: "/" },
-  { label: "Settings", icon: Settings, to: "/auth" },
-  { label: "Help", icon: CircleHelp, to: "/" },
+  { label: "Explore", icon: Compass, to: "/explore" },
+  { label: "Subscriptions", icon: Clapperboard, to: "/subscriptions" },
+  { label: "History", icon: History, to: "/history" },
+  { label: "Watch Later", icon: Clock, to: "/watch-later" },
+  { label: "Liked Videos", icon: ThumbsUp, to: "/liked-videos" },
+  { label: "Your Videos", icon: Video, to: "/your-videos" },
+  { label: "Settings", icon: Settings, to: "/settings" },
+  { label: "Help", icon: CircleHelp, to: "/help" },
 ];
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
@@ -40,7 +40,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           onClick={onNavigate}
           className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all ${
             currentPath === "/admin"
-              ? "bg-brand text-brand-foreground shadow-lift"
+              ? "bg-brand text-white shadow-lift font-bold"
               : "bg-brand/10 text-brand hover:bg-brand/20"
           }`}
         >
@@ -50,19 +50,22 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
       )}
 
       {items.map(({ label, icon: Icon, to }) => {
-        const active = currentPath === to && label === "Home";
+        const active =
+          to === "/" ? currentPath === "/" : currentPath === to || currentPath.startsWith(to + "/");
         return (
           <Link
             key={label}
             to={to}
             onClick={onNavigate}
-            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
               active
-                ? "bg-brand/10 text-brand"
-                : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground"
+                ? "bg-brand text-white shadow-sm font-bold"
+                : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
             }`}
           >
-            <Icon className="h-[18px] w-[18px] shrink-0" />
+            <Icon
+              className={`h-[18px] w-[18px] shrink-0 ${active ? "text-white stroke-[2.4]" : ""}`}
+            />
             <span className="truncate">{label}</span>
           </Link>
         );

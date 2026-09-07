@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ThumbsUp,
   ThumbsDown,
@@ -14,11 +14,15 @@ import {
   ChevronDown,
   Sparkles,
   Search,
+  X,
+  Send,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Logo } from "@/components/videohub/Logo";
 import { ThemeToggle } from "@/components/videohub/ThemeToggle";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { SHORTS_LIST, type ShortItem } from "@/data/shorts";
+import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/shorts")({
   head: () => ({
@@ -35,6 +39,7 @@ export const Route = createFileRoute("/shorts")({
 });
 
 function ShortsPage() {
+  const { user, profile } = useAuth();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [disliked, setDisliked] = useState<Record<string, boolean>>({});
@@ -42,7 +47,17 @@ function ShortsPage() {
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const [shortComments, setShortComments] = useState<
+    Record<string, Array<{ id: string; user: string; text: string; time: string }>>
+  >({
+    "s-1": [
+      { id: "1", user: "Jordan Cole", text: "That transition at 0:05 was insane!", time: "2h ago" },
+      { id: "2", user: "Sara Connor", text: "Which lens did you use for this?", time: "4h ago" },
+    ],
+  });
 
+  const touchStartY = useRef<number | null>(null);
   const activeShort: ShortItem = SHORTS_LIST[currentIndex] || SHORTS_LIST[0];
 
   const handleNext = () => {
@@ -73,8 +88,27 @@ function ShortsPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartY.current === null) return;
+    const deltaY = touchStartY.current - e.changedTouches[0].clientY;
+    if (deltaY > 40) {
+      handleNext();
+    } else if (deltaY < -40) {
+      handlePrev();
+    }
+    touchStartY.current = null;
+  };
+
   const toggleLike = (id: string) => {
-    setLiked((prev) => ({ ...prev, [id]: !prev[id] }));
+    setLiked((prev) => {
+      const next = !prev[id];
+      if (next) toast.success("Added to Liked Videos");
+      return { ...prev, [id]: next };
+    });
     if (!liked[id] && disliked[id]) {
       setDisliked((prev) => ({ ...prev, [id]: false }));
     }
@@ -88,7 +122,29 @@ function ShortsPage() {
   };
 
   const toggleSubscribe = (handle: string) => {
-    setSubscribed((prev) => ({ ...prev, [handle]: !prev[handle] }));
+    setSubscribed((prev) => {
+      const next = !prev[handle];
+      toast.success(next ? `Subscribed to ${handle}!` : `Unsubscribed from ${handle}`);
+      return { ...prev, [handle]: next };
+    });
+  };
+
+  const handleAddComment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    const authorName = profile?.full_name || user?.email?.split("@")[0] || "You";
+    const newEntry = {
+      id: String(Date.now()),
+      user: authorName,
+      text: newComment.trim(),
+      time: "Just now",
+    };
+    setShortComments((prev) => ({
+      ...prev,
+      [activeShort.id]: [newEntry, ...(prev[activeShort.id] || [])],
+    }));
+    setNewComment("");
+    toast.success("Comment posted!");
   };
 
   return (
@@ -116,11 +172,15 @@ function ShortsPage() {
         </div>
       </header>
 
-      {/* Main Shorts Theater */}
+      {/* Main Shorts Theater with Touch Swipe */}
       <main className="flex-1 flex items-center justify-center p-2 sm:p-4 pb-24 md:pb-28">
         <div className="relative flex flex-col md:flex-row items-center gap-4 max-w-full">
           {/* Vertical Video Reel Card */}
-          <div className="relative w-[340px] xs:w-[380px] sm:w-[420px] aspect-[9/16] max-h-[calc(100vh-160px)] rounded-3xl overflow-hidden bg-black shadow-2xl border border-border/70 flex flex-col justify-between">
+          <div
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            className="relative w-[340px] xs:w-[380px] sm:w-[420px] aspect-[9/16] max-h-[calc(100vh-160px)] rounded-3xl overflow-hidden bg-black shadow-2xl border border-border/70 flex flex-col justify-between select-none"
+          >
             {/* Background Thumbnail Image with Gradient Accent */}
             <div className="absolute inset-0 z-0">
               <img
@@ -274,7 +334,8 @@ function ShortsPage() {
                 <MessageSquare className="h-5 w-5" />
               </div>
               <span className="text-[11px] font-semibold text-foreground">
-                {activeShort.comments}
+                {(shortComments[activeShort.id]?.length || 0) +
+                  parseInt(activeShort.comments, 10) || activeShort.comments}
               </span>
             </button>
 
@@ -288,6 +349,7 @@ function ShortsPage() {
                     .catch(() => {});
                 } else {
                   navigator.clipboard.writeText(window.location.href);
+                  toast.success("Short link copied to clipboard!");
                 }
               }}
               className="flex flex-col items-center gap-1 group active:scale-90 transition"
@@ -324,6 +386,60 @@ function ShortsPage() {
             </div>
           </div>
         </div>
+
+        {/* Interactive Comments Drawer / Modal */}
+        {commentsOpen && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="relative w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-border bg-card p-5 shadow-2xl animate-in slide-in-from-bottom">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <h3 className="text-base font-bold text-foreground">Comments</h3>
+                <button
+                  type="button"
+                  onClick={() => setCommentsOpen(false)}
+                  className="rounded-full p-1.5 text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="my-4 max-h-60 overflow-y-auto space-y-3 pr-1">
+                {(shortComments[activeShort.id] || []).map((c) => (
+                  <div key={c.id} className="rounded-xl bg-secondary/50 p-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-foreground">{c.user}</span>
+                      <span className="text-[10px] text-muted-foreground">{c.time}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-foreground/90">{c.text}</p>
+                  </div>
+                ))}
+                {!shortComments[activeShort.id]?.length && (
+                  <p className="py-6 text-center text-xs text-muted-foreground">
+                    Be the first to comment on this short!
+                  </p>
+                )}
+              </div>
+
+              <form
+                onSubmit={handleAddComment}
+                className="flex gap-2 border-t border-border/60 pt-3"
+              >
+                <input
+                  type="text"
+                  placeholder="Add a comment..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  className="flex-1 rounded-full border border-border bg-secondary/60 px-4 py-2 text-xs text-foreground outline-none focus:border-brand"
+                />
+                <button
+                  type="submit"
+                  className="grid h-9 w-9 place-items-center rounded-full bg-brand text-white transition hover:bg-brand-dark"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Fixed Bottom Navigation with 5 tabs */}

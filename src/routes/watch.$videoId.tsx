@@ -10,12 +10,16 @@ import {
   Volume2,
   Maximize2,
   Settings,
+  Send,
+  Check,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Navbar } from "@/components/videohub/Navbar";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { VideoCard } from "@/components/videohub/VideoCard";
 import { allVideos, findVideo } from "@/data/videos";
+import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/watch/$videoId")({
   loader: ({ params }) => {
@@ -65,11 +69,79 @@ function WatchNotFound() {
 
 function WatchPage() {
   const { video } = Route.useLoaderData();
+  const { user, profile } = useAuth();
   const [subscribed, setSubscribed] = useState(false);
   const [liked, setLiked] = useState(false);
+  const [disliked, setDisliked] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [comments, setComments] = useState([
+    {
+      id: "c1",
+      n: "Aria Kapoor",
+      i: "AK",
+      t: "The pacing on this is perfect. Bookmarked the whole middle section.",
+      time: "2 days ago",
+    },
+    {
+      id: "c2",
+      n: "Marcus Bell",
+      i: "MB",
+      t: "Been waiting for this one. The part at 08:12 finally made it click for me.",
+      time: "2 days ago",
+    },
+  ]);
 
   const related = allVideos.filter((v) => v.id !== video.id).slice(0, 8);
+
+  const handleToggleLike = () => {
+    setLiked((v) => !v);
+    if (!liked && disliked) setDisliked(false);
+  };
+
+  const handleToggleDislike = () => {
+    setDisliked((v) => !v);
+    if (!disliked && liked) setLiked(false);
+  };
+
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({ title: video.title, url: window.location.href }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      toast.success("Link copied to clipboard!");
+    }
+  };
+
+  const handleToggleSave = () => {
+    setSaved((prev) => {
+      const next = !prev;
+      toast.success(next ? "Added to Watch Later!" : "Removed from Watch Later.");
+      return next;
+    });
+  };
+
+  const handleAddComment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentText.trim()) return;
+
+    const authorName = profile?.full_name || user?.email?.split("@")[0] || "You";
+    const authorInitials = authorName.slice(0, 2).toUpperCase();
+
+    setComments((prev) => [
+      {
+        id: `c-${Date.now()}`,
+        n: authorName,
+        i: authorInitials,
+        t: commentText.trim(),
+        time: "Just now",
+      },
+      ...prev,
+    ]);
+    setCommentText("");
+    toast.success("Comment posted!");
+  };
 
   return (
     <div className="min-h-screen bg-background font-sans text-foreground">
@@ -128,7 +200,13 @@ function WatchPage() {
             </div>
             <button
               type="button"
-              onClick={() => setSubscribed((v) => !v)}
+              onClick={() => {
+                setSubscribed((v) => {
+                  const next = !v;
+                  toast.success(next ? `Subscribed to ${video.channel}!` : `Unsubscribed.`);
+                  return next;
+                });
+              }}
               className={`ml-1 rounded-full px-5 py-2 text-sm font-semibold transition ${
                 subscribed
                   ? "bg-secondary text-foreground hover:bg-muted"
@@ -142,37 +220,58 @@ function WatchPage() {
               <div className="flex items-center overflow-hidden rounded-full bg-secondary">
                 <button
                   type="button"
-                  onClick={() => setLiked((v) => !v)}
+                  onClick={handleToggleLike}
                   className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition hover:bg-muted ${
-                    liked ? "text-brand" : "text-foreground"
+                    liked ? "text-brand font-bold" : "text-foreground"
                   }`}
                 >
-                  <ThumbsUp className="h-4 w-4" />
+                  <ThumbsUp className={`h-4 w-4 ${liked ? "fill-brand" : ""}`} />
                   {liked ? "24K" : "23K"}
                 </button>
                 <span className="h-6 w-px bg-border" />
                 <button
                   type="button"
                   aria-label="Dislike"
-                  className="px-4 py-2 text-foreground transition hover:bg-muted"
+                  onClick={handleToggleDislike}
+                  className={`px-4 py-2 transition hover:bg-muted ${
+                    disliked ? "text-foreground font-bold" : "text-foreground"
+                  }`}
                 >
-                  <ThumbsDown className="h-4 w-4" />
+                  <ThumbsDown className={`h-4 w-4 ${disliked ? "fill-foreground" : ""}`} />
                 </button>
               </div>
-              {[
-                { icon: Share2, label: "Share" },
-                { icon: Download, label: "Download" },
-                { icon: Bookmark, label: "Save" },
-              ].map(({ icon: Icon, label }) => (
-                <button
-                  key={label}
-                  type="button"
-                  className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted"
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{label}</span>
-                </button>
-              ))}
+
+              {/* Share */}
+              <button
+                type="button"
+                onClick={handleShare}
+                className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted active:scale-95"
+              >
+                <Share2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Share</span>
+              </button>
+
+              {/* Download */}
+              <button
+                type="button"
+                onClick={() => toast.info("Download starting...")}
+                className="flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted active:scale-95"
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Download</span>
+              </button>
+
+              {/* Save / Watch Later */}
+              <button
+                type="button"
+                onClick={handleToggleSave}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition active:scale-95 ${
+                  saved ? "bg-brand text-white" : "bg-secondary text-foreground hover:bg-muted"
+                }`}
+              >
+                <Bookmark className={`h-4 w-4 ${saved ? "fill-white" : ""}`} />
+                <span className="hidden sm:inline">{saved ? "Saved" : "Save"}</span>
+              </button>
             </div>
           </div>
 
@@ -198,30 +297,57 @@ function WatchPage() {
             </button>
           </div>
 
-          <section className="mt-8">
-            <h2 className="text-base font-bold">1,284 Comments</h2>
-            <div className="mt-4 space-y-5">
-              {[
-                {
-                  n: "Aria Kapoor",
-                  i: "AK",
-                  t: "The pacing on this is perfect. Bookmarked the whole middle section.",
-                },
-                {
-                  n: "Marcus Bell",
-                  i: "MB",
-                  t: "Been waiting for this one. The part at 08:12 finally made it click for me.",
-                },
-              ].map((c) => (
-                <div key={c.n} className="flex gap-3">
+          {/* Interactive Comments Section */}
+          <section className="mt-8 space-y-6">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold">{comments.length + 1282} Comments</h2>
+            </div>
+
+            {/* Add Comment Input Form */}
+            <form onSubmit={handleAddComment} className="flex items-start gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand to-brand-dark text-xs font-bold text-white shadow-sm">
+                {(profile?.username || user?.email || "U").charAt(0).toUpperCase()}
+              </span>
+              <div className="flex-1 space-y-2">
+                <input
+                  type="text"
+                  placeholder="Add a comment..."
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  className="w-full border-b border-border bg-transparent pb-1.5 text-sm text-foreground outline-none transition focus:border-brand"
+                />
+                {commentText.trim() && (
+                  <div className="flex justify-end gap-2 animate-in fade-in">
+                    <button
+                      type="button"
+                      onClick={() => setCommentText("")}
+                      className="rounded-full px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-brand-dark"
+                    >
+                      <Send className="h-3 w-3" />
+                      Comment
+                    </button>
+                  </div>
+                )}
+              </div>
+            </form>
+
+            <div className="space-y-5">
+              {comments.map((c) => (
+                <div key={c.id} className="flex gap-3 animate-in fade-in">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand to-brand-dark text-xs font-bold text-brand-foreground">
                     {c.i}
                   </span>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold">
-                      {c.n} <span className="font-normal text-muted-foreground">· 2 days ago</span>
+                      {c.n} <span className="font-normal text-muted-foreground">· {c.time}</span>
                     </p>
-                    <p className="text-sm text-foreground/85">{c.t}</p>
+                    <p className="text-sm text-foreground/85 mt-0.5">{c.t}</p>
                   </div>
                 </div>
               ))}

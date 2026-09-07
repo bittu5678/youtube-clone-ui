@@ -1,10 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Radio, Users, Send, Sparkles, Share2, Heart, Search, Video } from "lucide-react";
+import { toast } from "sonner";
 import { Logo } from "@/components/videohub/Logo";
 import { ThemeToggle } from "@/components/videohub/ThemeToggle";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { LIVE_STREAMS, type LiveStream } from "@/data/live";
+import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/live")({
   head: () => ({
@@ -23,6 +25,7 @@ export const Route = createFileRoute("/live")({
 const LIVE_CATEGORIES = ["All Live", "Coding & Tech", "Gaming", "Music", "Science & Tech"];
 
 function LivePage() {
+  const { user, profile } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState("All Live");
   const [activeStream, setActiveStream] = useState<LiveStream>(LIVE_STREAMS[0]);
   const [chatInput, setChatInput] = useState("");
@@ -37,10 +40,12 @@ function LivePage() {
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
+    const authorName =
+      profile?.full_name || profile?.username || user?.email?.split("@")[0] || "You";
     setChatMessages((prev) => [
       ...prev,
       {
-        user: "You",
+        user: authorName,
         text: chatInput.trim(),
         color: "text-brand font-bold",
       },
