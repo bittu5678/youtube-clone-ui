@@ -235,7 +235,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    */
   const signUp = async (params: SignUpParams): Promise<SignUpResult> => {
     try {
-      const { user: newDbUser, userId } = await registerUserInDatabase({
+      const {
+        user: newDbUser,
+        userId,
+        emailDelivery,
+      } = await registerUserInDatabase({
         name: params.name || params.fullName || "FaceTube User",
         mobile: params.mobile,
         email: params.email,
@@ -294,6 +298,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         success: true,
         user: newDbUser,
         userId,
+        emailDelivery,
         error: null,
       };
     } catch (err: unknown) {

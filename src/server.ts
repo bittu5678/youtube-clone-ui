@@ -47,6 +47,65 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+      if (url.pathname === "/api/send-welcome-email") {
+        if (request.method === "GET") {
+          try {
+            const { resolveResendConfig } = await import("./server/email");
+            const conf = resolveResendConfig(
+              undefined,
+              env && typeof env === "object"
+                ? (env as Record<string, string | undefined>)
+                : undefined,
+            );
+            return new Response(
+              JSON.stringify({
+                status: "ok",
+                resendConfigured: Boolean(conf.apiKey),
+                source: conf.source,
+                sender: conf.from,
+                prefix: conf.apiKey ? `${conf.apiKey.slice(0, 5)}...` : "NOT_SET",
+              }),
+              {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              },
+            );
+          } catch (_e) {
+            return new Response(JSON.stringify({ status: "ok" }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          }
+        }
+
+        if (request.method === "POST") {
+          try {
+            const payload = await request.json();
+            const { sendWelcomeEmailServer } = await import("./server/email");
+            const result = await sendWelcomeEmailServer(
+              payload,
+              env && typeof env === "object"
+                ? (env as Record<string, string | undefined>)
+                : undefined,
+            );
+            return new Response(JSON.stringify(result), {
+              status: result.success ? 200 : 500,
+              headers: { "content-type": "application/json" },
+            });
+          } catch (err: unknown) {
+            console.error("[SSR Server] Error handling send-welcome-email:", err);
+            return new Response(
+              JSON.stringify({ success: false, error: "Email delivery failed" }),
+              {
+                status: 500,
+                headers: { "content-type": "application/json" },
+              },
+            );
+          }
+        }
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

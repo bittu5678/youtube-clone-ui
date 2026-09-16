@@ -79,6 +79,12 @@ export interface SignUpResult {
   user?: DbUser;
   userId?: string; // FT######
   error?: Error | null;
+  emailDelivery?: {
+    success: boolean;
+    provider?: "resend" | "smtp" | "none";
+    error?: string;
+    messageId?: string;
+  };
 }
 
 export interface SignInParams {

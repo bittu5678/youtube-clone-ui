@@ -23,7 +23,7 @@ import { Logo } from "@/components/videohub/Logo";
 import { ThemeToggle } from "@/components/videohub/ThemeToggle";
 import { FacetubeLogoIcon } from "@/components/videohub/FacetubeLogoIcon";
 import { useAuth } from "@/lib/auth-context";
-import { generateWelcomeEmailContent } from "@/lib/email-service";
+import { generateWelcomeEmailContent, sendWelcomeEmail } from "@/lib/email-service";
 import type { DbUser } from "@/types/auth";
 
 export const Route = createFileRoute("/auth")({
@@ -101,6 +101,13 @@ function AuthPage() {
 
   // Email Viewer Modal State
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailDeliveryStatus, setEmailDeliveryStatus] = useState<{
+    success: boolean;
+    error?: string;
+    provider?: "resend" | "smtp" | "none";
+  } | null>(null);
+  const [registeredPassword, setRegisteredPassword] = useState("");
+  const [isRetryingEmail, setIsRetryingEmail] = useState(false);
 
   const isSignup = mode === "signup";
 
@@ -116,6 +123,30 @@ function AuthPage() {
     setCopiedId(true);
     toast.success("User ID copied to clipboard!");
     setTimeout(() => setCopiedId(false), 2500);
+  };
+
+  const handleRetryEmail = async () => {
+    if (!registeredUserId) return;
+    setIsRetryingEmail(true);
+    try {
+      const res = await sendWelcomeEmail({
+        name: registeredUser?.name || fullName,
+        email: registeredUser?.email || email,
+        userId: registeredUserId,
+        password: registeredPassword || password,
+        loginLink: "https://youtube-clone-ui-8qmb.vercel.app/login",
+      });
+      setEmailDeliveryStatus(res);
+      if (res.success) {
+        toast.success(`Welcome email sent to ${registeredUser?.email || email}`);
+      } else {
+        toast.error("Email delivery failed");
+      }
+    } catch (_e) {
+      toast.error("Email delivery failed");
+    } finally {
+      setIsRetryingEmail(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -180,6 +211,17 @@ function AuthPage() {
         // Registration Flow Step 5: Show popup
         setRegisteredUserId(res.userId);
         if (res.user) setRegisteredUser(res.user);
+        setRegisteredPassword(password);
+
+        if (res.emailDelivery) {
+          setEmailDeliveryStatus(res.emailDelivery);
+          if (!res.emailDelivery.success) {
+            toast.error("Email delivery failed");
+          } else {
+            toast.success(`Welcome email sent to ${res.user?.email || email}`);
+          }
+        }
+
         setShowSuccessPopup(true);
         setSuccessMsg(`Registration successful! Generated User ID: ${res.userId}`);
 
@@ -725,19 +767,35 @@ function AuthPage() {
             )}
 
             {/* Welcome Email Trigger Notice */}
-            <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 text-xs text-emerald-600 dark:text-emerald-400">
-              <div className="flex items-center gap-2">
-                <Inbox className="h-4 w-4 shrink-0" />
-                <span>Welcome email sent to {registeredUser?.email || email}</span>
+            {emailDeliveryStatus?.success === false ? (
+              <div className="mt-4 flex items-center justify-between rounded-xl border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-xs text-destructive">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span className="font-semibold">Email delivery failed</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowEmailModal(true)}
+                  className="font-bold underline hover:opacity-80"
+                >
+                  View Details
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowEmailModal(true)}
-                className="font-bold underline hover:text-emerald-700 dark:hover:text-emerald-300"
-              >
-                View Email
-              </button>
-            </div>
+            ) : (
+              <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 text-xs text-emerald-600 dark:text-emerald-400">
+                <div className="flex items-center gap-2">
+                  <Inbox className="h-4 w-4 shrink-0" />
+                  <span>Welcome email sent to {registeredUser?.email || email}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowEmailModal(true)}
+                  className="font-bold underline hover:text-emerald-700 dark:hover:text-emerald-300"
+                >
+                  View Email
+                </button>
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="mt-6 flex flex-col gap-2.5">
@@ -797,6 +855,41 @@ function AuthPage() {
               </div>
             </div>
 
+            {/* Delivery Status Banner */}
+            {emailDeliveryStatus?.success === false ? (
+              <div className="mt-3.5 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                <div className="flex items-center justify-between font-semibold">
+                  <span className="flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    Email delivery failed
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRetryEmail}
+                    disabled={isRetryingEmail}
+                    className="rounded-md bg-destructive text-destructive-foreground px-2.5 py-1 text-[11px] font-bold hover:opacity-90 disabled:opacity-50"
+                  >
+                    {isRetryingEmail ? "Retrying..." : "Retry Delivery"}
+                  </button>
+                </div>
+                {emailDeliveryStatus.error && (
+                  <p className="mt-1 text-[11px] opacity-80">{emailDeliveryStatus.error}</p>
+                )}
+              </div>
+            ) : emailDeliveryStatus?.success ? (
+              <div className="mt-3.5 flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400">
+                <span className="font-semibold flex items-center gap-1.5">
+                  <Check className="h-4 w-4" /> Delivered via{" "}
+                  {emailDeliveryStatus.provider?.toUpperCase() || "SMTP/RESEND"}
+                </span>
+                {emailDeliveryStatus.messageId && (
+                  <span className="font-mono text-[10px] opacity-75">
+                    ID: {emailDeliveryStatus.messageId.slice(0, 14)}...
+                  </span>
+                )}
+              </div>
+            ) : null}
+
             <div className="mt-4 rounded-xl border border-border bg-secondary/30 p-4 text-xs font-mono">
               <div className="border-b border-border/80 pb-2 mb-3 space-y-1">
                 <p>
@@ -815,6 +908,7 @@ function AuthPage() {
                     registeredUser?.name || fullName,
                     registeredUser?.email || email,
                     registeredUserId,
+                    registeredPassword || password,
                   ).body
                 }
               </div>

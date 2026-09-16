@@ -4,15 +4,16 @@
  * Subject:
  * Welcome to Facetube
  *
- * Body:
- * Hello {{name}}
+ * Email contains:
+ * - User Name
+ * - User ID (FT + 6 digits)
+ * - Registered Email
+ * - Password
+ * - Login Link (https://youtube-clone-ui-8qmb.vercel.app/login)
  *
- * Your Facetube account has been created successfully.
- *
- * User ID: FT123456
- * Email: {{email}}
- *
- * You can log in using either your User ID or Email.
+ * Real Delivery:
+ * Dispatches to /api/send-welcome-email, which delivers via SMTP (Gmail) or Resend.
+ * If sending fails, handles failure with: "Email delivery failed".
  */
 
 export interface SentWelcomeEmail {
@@ -23,15 +24,35 @@ export interface SentWelcomeEmail {
   subject: string;
   body: string;
   sentAt: string;
-  status: "delivered" | "queued";
+  status: "delivered" | "failed" | "queued";
+  provider?: "resend" | "smtp" | "none";
+  error?: string;
 }
 
-const STORAGE_KEY_SENT_EMAILS = "facetube_sent_welcome_emails_v1";
+export interface WelcomeEmailParams {
+  name: string;
+  email: string;
+  userId: string;
+  password?: string;
+  loginLink?: string;
+}
+
+export interface EmailDispatchResult {
+  success: boolean;
+  provider?: "resend" | "smtp" | "none";
+  messageId?: string;
+  error?: string;
+}
+
+const STORAGE_KEY_SENT_EMAILS = "facetube_sent_welcome_emails_v2";
+export const OFFICIAL_LOGIN_LINK = "https://youtube-clone-ui-8qmb.vercel.app/login";
 
 export function generateWelcomeEmailContent(
   name: string,
   email: string,
   userId: string,
+  password: string = "••••••••",
+  loginLink: string = OFFICIAL_LOGIN_LINK,
 ): {
   subject: string;
   body: string;
@@ -41,8 +62,16 @@ export function generateWelcomeEmailContent(
 
 Your Facetube account has been created successfully.
 
-User ID: ${userId}
-Email: ${email}
+Account Details:
+------------------------------------------
+• User Name: ${name}
+• User ID: ${userId}
+• Registered Email: ${email}
+• Password: ${password}
+------------------------------------------
+
+Login Link:
+${loginLink}
 
 You can log in using either your User ID or Email.`;
 
@@ -50,18 +79,73 @@ You can log in using either your User ID or Email.`;
 }
 
 /**
- * Dispatches the welcome email upon user registration.
+ * Dispatches real welcome email through the server endpoint.
+ * Falls back to recording the failure gracefully if the server returns an error.
  */
 export async function sendWelcomeEmail({
   name,
   email,
   userId,
-}: {
-  name: string;
-  email: string;
-  userId: string;
-}): Promise<SentWelcomeEmail> {
-  const { subject, body } = generateWelcomeEmailContent(name, email, userId);
+  password,
+  loginLink = OFFICIAL_LOGIN_LINK,
+}: WelcomeEmailParams): Promise<EmailDispatchResult> {
+  const { subject, body } = generateWelcomeEmailContent(name, email, userId, password, loginLink);
+
+  let dispatchResult: EmailDispatchResult = {
+    success: false,
+    error: "Email delivery failed",
+  };
+
+  try {
+    const clientResendKey =
+      typeof import.meta !== "undefined" && import.meta.env
+        ? (import.meta.env.VITE_RESEND_API_KEY as string | undefined)
+        : undefined;
+    const clientResendFrom =
+      typeof import.meta !== "undefined" && import.meta.env
+        ? (import.meta.env.VITE_RESEND_FROM as string | undefined)
+        : undefined;
+
+    const response = await fetch("/api/send-welcome-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userName: name,
+        userId,
+        email,
+        password: password || "",
+        loginLink,
+        resendApiKey: clientResendKey,
+        resendFrom: clientResendFrom,
+      }),
+    });
+
+    const data = await response.json();
+    if (response.ok && data.success) {
+      dispatchResult = {
+        success: true,
+        provider: data.provider,
+        messageId: data.messageId,
+      };
+    } else {
+      dispatchResult = {
+        success: false,
+        provider: data.provider || "none",
+        error: data.error || "Email delivery failed",
+      };
+    }
+  } catch (netErr: unknown) {
+    const msg = netErr instanceof Error ? netErr.message : String(netErr);
+    console.error("[Email Client] Network error reaching email endpoint:", msg);
+    dispatchResult = {
+      success: false,
+      error: "Email delivery failed",
+    };
+  }
+
+  // Record into sent emails history
   const emailRecord: SentWelcomeEmail = {
     id: "email_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6),
     recipientEmail: email,
@@ -70,17 +154,11 @@ export async function sendWelcomeEmail({
     subject,
     body,
     sentAt: new Date().toISOString(),
-    status: "delivered",
+    status: dispatchResult.success ? "delivered" : "failed",
+    provider: dispatchResult.provider,
+    error: dispatchResult.error,
   };
 
-  // 1. Console confirmation for development & audit
-  console.info(
-    `%c[FaceTube Welcome Email]%c Sent to ${email} (User ID: ${userId})\n\nSubject: ${subject}\n\n${body}`,
-    "color: #e11d48; font-weight: bold;",
-    "color: inherit;",
-  );
-
-  // 2. Persist in Sent Emails repository
   try {
     const existing = getSentWelcomeEmails();
     const updated = [emailRecord, ...existing.slice(0, 49)];
@@ -89,7 +167,7 @@ export async function sendWelcomeEmail({
     // Storage quota or sandboxing
   }
 
-  // 3. Dispatch custom window event so UI can react
+  // Dispatch custom window event
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("facetube:welcome_email_sent", {
@@ -98,7 +176,7 @@ export async function sendWelcomeEmail({
     );
   }
 
-  return emailRecord;
+  return dispatchResult;
 }
 
 export function getSentWelcomeEmails(): SentWelcomeEmail[] {

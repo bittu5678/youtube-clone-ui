@@ -199,20 +199,40 @@ export async function registerUserInDatabase({
   const localList = getLocalDbUsers();
   saveLocalDbUsers([newUser, ...localList]);
 
-  // 7. Send Welcome Email containing:
+  // 7. Send Welcome Email (only after the user is successfully saved in the database)
   // Subject: Welcome to Facetube
-  // Body: Hello {{name}} ... User ID: FT123456 ... Email: {{email}}
+  // Email contains: User Name, User ID, Registered Email, Password, Login Link
+  let emailDelivery = {
+    success: false,
+    provider: "none" as "resend" | "smtp" | "none",
+    error: "Email delivery failed",
+  };
+
   try {
-    await sendWelcomeEmail({
+    const res = await sendWelcomeEmail({
       name: trimmedName,
       email: normalizedEmail,
       userId: generatedUserId,
+      password: password,
+      loginLink: "https://youtube-clone-ui-8qmb.vercel.app/login",
     });
-  } catch (emailErr) {
-    console.error("Failed to send welcome email:", emailErr);
+    emailDelivery = {
+      success: res.success,
+      provider: res.provider || "none",
+      error: res.error,
+      messageId: res.messageId,
+    };
+  } catch (emailErr: unknown) {
+    const msg = emailErr instanceof Error ? emailErr.message : String(emailErr);
+    console.error("Failed to send welcome email:", msg);
+    emailDelivery = {
+      success: false,
+      provider: "none",
+      error: `Email delivery failed: ${msg}`,
+    };
   }
 
-  return { user: newUser, userId: generatedUserId };
+  return { user: newUser, userId: generatedUserId, emailDelivery };
 }
 
 /**
