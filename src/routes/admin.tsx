@@ -301,17 +301,22 @@ ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;`;
                               {u.username.substring(0, 2).toUpperCase()}
                             </span>
                             <div>
-                              <p className="font-semibold text-foreground">
-                                @{u.username}{" "}
+                              <p className="font-semibold text-foreground flex items-center gap-1.5">
+                                {u.user_id && (
+                                  <span className="font-mono text-xs font-bold text-brand bg-brand/10 px-1.5 py-0.5 rounded">
+                                    {u.user_id}
+                                  </span>
+                                )}
+                                <span>{u.name || u.full_name || `@${u.username}`}</span>
                                 {isSelf && (
                                   <span className="text-[10px] font-normal text-muted-foreground">
                                     (You)
                                   </span>
                                 )}
                               </p>
-                              {u.full_name && (
-                                <p className="text-xs text-muted-foreground">{u.full_name}</p>
-                              )}
+                              <p className="text-xs text-muted-foreground">
+                                {u.mobile ? `${u.mobile} · ` : ""}@{u.username}
+                              </p>
                             </div>
                           </div>
                         </td>

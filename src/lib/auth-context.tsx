@@ -2,101 +2,104 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase, isSupabaseConfigured } from "./supabase";
 import type {
+  DbUser,
   Profile,
   RoleType,
   AuthContextType,
   SignUpParams,
   SignInParams,
   UserWithRole,
+  SignUpResult,
+  SignInResult,
 } from "@/types/auth";
+import {
+  registerUserInDatabase,
+  findUserByIdentifier,
+  getLocalDbUsers,
+  saveLocalDbUsers,
+  INITIAL_SEED_USERS,
+} from "./user-service";
+import { verifyPassword } from "./password";
+import { isValidFTUserId, normalizeFTUserId } from "./user-id";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_USERS_KEY = "facetube_demo_users_v1";
-const LOCAL_STORAGE_SESSION_KEY = "facetube_demo_session_v1";
-
-const initialDemoUsers: (UserWithRole & { password?: string })[] = [
-  {
-    id: "user_admin_01",
-    username: "admin",
-    full_name: "FaceTube Administrator",
-    email: "admin@facetube.com",
-    role: "admin",
-    created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    password: "password123",
-  },
-  {
-    id: "user_alex_02",
-    username: "alex_creator",
-    full_name: "Alex Rivera",
-    email: "alex@facetube.com",
-    role: "user",
-    created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-    password: "password123",
-  },
-  {
-    id: "user_maya_03",
-    username: "maya_travels",
-    full_name: "Maya Lin",
-    email: "maya@facetube.com",
-    role: "user",
-    created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    password: "password123",
-  },
-];
+const LOCAL_STORAGE_SESSION_KEY = "facetube_session_v2";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [_session, setSession] = useState<Session | null>(null);
+  const [dbUser, setDbUser] = useState<DbUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<RoleType>("user");
   const [isLoading, setIsLoading] = useState(true);
-  const [usersList, setUsersList] =
-    useState<(UserWithRole & { password?: string })[]>(initialDemoUsers);
+  const [usersList, setUsersList] = useState<
+    (UserWithRole & { password?: string; user_id?: string })[]
+  >([]);
 
-  // Initialize demo users list from localStorage if present
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_USERS_KEY);
-      if (stored) {
-        setUsersList(JSON.parse(stored));
-      } else {
-        localStorage.setItem(LOCAL_STORAGE_USERS_KEY, JSON.stringify(initialDemoUsers));
-      }
-    } catch (_e) {
-      // Storage unavailable in restricted sandbox
-    }
+  // Sync usersList from database / storage
+  const syncUsersList = useCallback(() => {
+    const dbs = getLocalDbUsers();
+    const formatted: (UserWithRole & { password?: string; user_id?: string })[] = dbs.map((u) => ({
+      id: u.id,
+      user_id: u.user_id,
+      username: u.user_id.toLowerCase(),
+      name: u.name,
+      full_name: u.name,
+      mobile: u.mobile,
+      email: u.email,
+      role: u.role || (u.email === "admin@facetube.com" ? "admin" : "user"),
+      referral_code: u.referral_code,
+      created_at: u.created_at,
+    }));
+    setUsersList(formatted);
   }, []);
 
-  const saveDemoUsers = (list: typeof initialDemoUsers) => {
-    setUsersList(list);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_USERS_KEY, JSON.stringify(list));
-    } catch (_e) {
-      // Storage unavailable
-    }
-  };
-
-  // Fetch profile and role from Supabase
+  // Fetch profile and role from Supabase if connected
   const fetchSupabaseProfileAndRole = useCallback(async (supabaseUser: User) => {
     if (!supabase) return;
 
     try {
-      // 1. Fetch Profile
-      const { data: profileData, error: profileErr } = await supabase
+      // 1. Fetch from 'users' table
+      const { data: userData } = await supabase
+        .from("users")
+        .select("*")
+        .eq("email", supabaseUser.email?.toLowerCase() || "")
+        .maybeSingle();
+
+      if (userData) {
+        setDbUser(userData as DbUser);
+        const resolvedRole: RoleType =
+          userData.role === "admin" || supabaseUser.email === "admin@facetube.com"
+            ? "admin"
+            : "user";
+        setRole(resolvedRole);
+
+        const prof: Profile = {
+          id: userData.id,
+          user_id: userData.user_id,
+          username: userData.user_id,
+          name: userData.name,
+          full_name: userData.name,
+          mobile: userData.mobile,
+          email: userData.email,
+          referral_code: userData.referral_code,
+          created_at: userData.created_at,
+        };
+        setProfile(prof);
+        return;
+      }
+
+      // 2. Fallback to profiles table
+      const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", supabaseUser.id)
         .maybeSingle();
 
-      if (profileErr && profileErr.code !== "PGRST116") {
-        console.warn("Error fetching profile:", profileErr);
-      }
-
       if (profileData) {
         setProfile(profileData as Profile);
       } else {
-        // Create profile if missing
         const newProfile: Profile = {
           id: supabaseUser.id,
           username:
@@ -111,38 +114,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: supabaseUser.email,
           created_at: new Date().toISOString(),
         };
-
-        const { data: createdProf } = await supabase
-          .from("profiles")
-          .insert(newProfile)
-          .select()
-          .single();
-
-        setProfile((createdProf as Profile) || newProfile);
+        setProfile(newProfile);
       }
 
-      // 2. Fetch Role
-      const { data: roleData, error: roleErr } = await supabase
+      // 3. Fetch Role
+      const { data: roleData } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", supabaseUser.id)
         .maybeSingle();
 
-      if (roleErr && roleErr.code !== "PGRST116") {
-        console.warn("Error fetching role:", roleErr);
-      }
-
       if (roleData && (roleData.role === "admin" || roleData.role === "user")) {
         setRole(roleData.role as RoleType);
       } else {
-        // Default role is user
-        setRole("user");
-        await supabase
-          .from("user_roles")
-          .insert({ user_id: supabaseUser.id, role: "user" })
-          .catch(() => {
-            // Role may already exist
-          });
+        setRole(supabaseUser.email === "admin@facetube.com" ? "admin" : "user");
       }
     } catch (e) {
       console.error("Error loading user profile & role:", e);
@@ -150,48 +135,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Refresh all users list for admin dashboard
+  // Refresh all users list
   const refreshUsers = useCallback(async () => {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data: profilesData } = await supabase
-          .from("profiles")
-          .select("id, username, full_name, email, created_at");
+        const { data: usersData } = await supabase
+          .from("users")
+          .select("id, user_id, name, mobile, email, referral_code, created_at");
 
-        const { data: rolesData } = await supabase.from("user_roles").select("user_id, role");
-
-        if (profilesData) {
-          const combined: UserWithRole[] = profilesData.map((p) => {
-            const userRole = rolesData?.find((r) => r.user_id === p.id)?.role || "user";
-            return {
-              id: p.id,
-              username: p.username,
-              full_name: p.full_name,
-              email: p.email || "",
-              role: userRole as RoleType,
-              created_at: p.created_at || new Date().toISOString(),
-            };
-          });
+        if (usersData && usersData.length > 0) {
+          const combined: (UserWithRole & { password?: string; user_id?: string })[] =
+            usersData.map((u) => ({
+              id: u.id,
+              user_id: u.user_id,
+              username: u.user_id.toLowerCase(),
+              name: u.name,
+              full_name: u.name,
+              mobile: u.mobile,
+              email: u.email,
+              role: u.email === "admin@facetube.com" ? "admin" : "user",
+              referral_code: u.referral_code,
+              created_at: u.created_at,
+            }));
           setUsersList(combined);
+          return;
         }
       } catch (e) {
-        console.error("Error refreshing users:", e);
+        console.warn("Failed fetching users from supabase, using local:", e);
       }
-      return;
     }
 
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_USERS_KEY);
-      if (stored) {
-        setUsersList(JSON.parse(stored));
-      }
-    } catch (_e) {
-      // Storage unavailable
-    }
-  }, []);
+    syncUsersList();
+  }, [syncUsersList]);
 
   // Initialization & Auth State Subscription
   useEffect(() => {
+    syncUsersList();
+
     if (isSupabaseConfigured && supabase) {
       // 1. Get initial session
       supabase.auth.getSession().then(({ data: { session: initSession } }) => {
@@ -200,7 +180,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (initSession?.user) {
           fetchSupabaseProfileAndRole(initSession.user).finally(() => setIsLoading(false));
         } else {
-          setIsLoading(false);
+          // Check local stored session as backup
+          restoreLocalSession();
         }
       });
 
@@ -214,6 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await fetchSupabaseProfileAndRole(newSession.user);
         } else {
           setProfile(null);
+          setDbUser(null);
           setRole("user");
         }
         setIsLoading(false);
@@ -223,233 +205,222 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         subscription.unsubscribe();
       };
     } else {
-      // Local demo mode
-      try {
-        const savedSession = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
-        if (savedSession) {
-          const parsed = JSON.parse(savedSession);
-          setUser(parsed.user);
-          setProfile(parsed.profile);
-          setRole(parsed.role || "user");
-        }
-      } catch (_e) {
-        // Storage unavailable
-      }
-      setIsLoading(false);
+      // Local Database Session Mode
+      restoreLocalSession();
     }
-  }, [fetchSupabaseProfileAndRole]);
+  }, [fetchSupabaseProfileAndRole, syncUsersList]);
 
-  // Sign Up method
-  const signUp = async ({ username, email, password, fullName }: SignUpParams) => {
-    const trimmedUsername = username.trim().toLowerCase();
-    const trimmedEmail = email.trim().toLowerCase();
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        // 1. Check if username is already taken in profiles table
-        const { data: existingUser } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("username", trimmedUsername)
-          .maybeSingle();
-
-        if (existingUser) {
-          return {
-            error: new Error(`Username "${trimmedUsername}" is already in use.`),
-            success: false,
-          };
-        }
-
-        // 2. Sign up with Supabase Auth
-        const { data, error } = await supabase.auth.signUp({
-          email: trimmedEmail,
-          password,
-          options: {
-            data: {
-              username: trimmedUsername,
-              full_name: fullName || trimmedUsername,
-            },
-          },
-        });
-
-        if (error) {
-          return { error, success: false };
-        }
-
-        if (data.user) {
-          // Explicitly ensure profile & default role records exist
-          const profileRecord: Profile = {
-            id: data.user.id,
-            username: trimmedUsername,
-            full_name: fullName || trimmedUsername,
-            email: trimmedEmail,
-            created_at: new Date().toISOString(),
-          };
-
-          await supabase
-            .from("profiles")
-            .upsert(profileRecord)
-            .catch(() => {
-              // Trigger may have created it
-            });
-
-          await supabase
-            .from("user_roles")
-            .upsert({
-              user_id: data.user.id,
-              role: "user",
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .catch(() => {
-              // Trigger may have created it
-            });
-
-          await fetchSupabaseProfileAndRole(data.user);
-        }
-
-        return { error: null, success: true };
-      } catch (err: unknown) {
-        return { error: err instanceof Error ? err : new Error(String(err)), success: false };
-      }
-    }
-
-    // Local Demo Sign Up Fallback
-    const existing = usersList.find(
-      (u) => u.username.toLowerCase() === trimmedUsername || u.email.toLowerCase() === trimmedEmail,
-    );
-    if (existing) {
-      if (existing.username.toLowerCase() === trimmedUsername) {
-        return {
-          error: new Error(`Username "${trimmedUsername}" is already taken.`),
-          success: false,
-        };
-      }
-      return { error: new Error(`Email "${trimmedEmail}" is already registered.`), success: false };
-    }
-
-    const newId = "user_" + Math.random().toString(36).substring(2, 9);
-    const newUserRecord = {
-      id: newId,
-      username: trimmedUsername,
-      email: trimmedEmail,
-      full_name: fullName || trimmedUsername,
-      role: "user" as RoleType,
-      created_at: new Date().toISOString(),
-      password,
-    };
-
-    const updatedList = [newUserRecord, ...usersList];
-    saveDemoUsers(updatedList);
-
-    const mockUser = {
-      id: newId,
-      email: trimmedEmail,
-      user_metadata: { username: trimmedUsername, full_name: fullName },
-    } as unknown as User;
-
-    const mockProfile: Profile = {
-      id: newId,
-      username: trimmedUsername,
-      full_name: fullName || trimmedUsername,
-      email: trimmedEmail,
-      created_at: new Date().toISOString(),
-    };
-
-    setUser(mockUser);
-    setProfile(mockProfile);
-    setRole("user");
-
+  const restoreLocalSession = () => {
     try {
-      localStorage.setItem(
-        LOCAL_STORAGE_SESSION_KEY,
-        JSON.stringify({ user: mockUser, profile: mockProfile, role: "user" }),
-      );
+      const savedSession = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
+      if (savedSession) {
+        const parsed = JSON.parse(savedSession);
+        setUser(parsed.user);
+        setProfile(parsed.profile);
+        setDbUser(parsed.dbUser || null);
+        setRole(parsed.role || "user");
+      }
     } catch (_e) {
       // Storage unavailable
     }
-
-    return { error: null, success: true };
+    setIsLoading(false);
   };
 
-  // Sign In method
-  const signIn = async ({ email, password }: SignInParams) => {
-    const trimmedEmail = email.trim().toLowerCase();
+  /**
+   * Database-backed User Registration
+   * - Validates all fields
+   * - Generates unique FT User ID (FT######)
+   * - Stores user into Supabase PostgreSQL 'users' table
+   * - Sends Welcome Email
+   */
+  const signUp = async (params: SignUpParams): Promise<SignUpResult> => {
+    try {
+      const { user: newDbUser, userId } = await registerUserInDatabase({
+        name: params.name || params.fullName || "FaceTube User",
+        mobile: params.mobile,
+        email: params.email,
+        password: params.password,
+        referralCode: params.referralCode,
+      });
 
-    if (isSupabaseConfigured && supabase) {
+      // Prepare profile representation
+      const newProfile: Profile = {
+        id: newDbUser.id,
+        user_id: userId,
+        username: userId,
+        name: newDbUser.name,
+        full_name: newDbUser.name,
+        mobile: newDbUser.mobile,
+        email: newDbUser.email,
+        referral_code: newDbUser.referral_code,
+        created_at: newDbUser.created_at,
+      };
+
+      const mockUser = {
+        id: newDbUser.id,
+        email: newDbUser.email,
+        user_metadata: {
+          name: newDbUser.name,
+          full_name: newDbUser.name,
+          mobile: newDbUser.mobile,
+          user_id: userId,
+        },
+      } as unknown as User;
+
+      setDbUser(newDbUser);
+      setProfile(newProfile);
+      setUser(mockUser);
+      setRole(newDbUser.role || "user");
+
+      // Save active session
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: trimmedEmail,
-          password,
-        });
-
-        if (error) {
-          return { error, success: false };
-        }
-
-        if (data.user) {
-          await fetchSupabaseProfileAndRole(data.user);
-        }
-
-        return { error: null, success: true };
-      } catch (err: unknown) {
-        return { error: err instanceof Error ? err : new Error(String(err)), success: false };
+        localStorage.setItem(
+          LOCAL_STORAGE_SESSION_KEY,
+          JSON.stringify({
+            user: mockUser,
+            profile: newProfile,
+            dbUser: newDbUser,
+            role: newDbUser.role || "user",
+          }),
+        );
+      } catch (_e) {
+        // storage disabled
       }
-    }
 
-    // Local Demo Sign In Fallback
-    const foundUser = usersList.find(
-      (u) =>
-        (u.email.toLowerCase() === trimmedEmail || u.username.toLowerCase() === trimmedEmail) &&
-        (u.password ? u.password === password : true),
-    );
+      // Refresh users list
+      syncUsersList();
 
-    if (!foundUser) {
       return {
-        error: new Error(
-          "Invalid email/username or password. Demo admin: admin@facetube.com / password123",
-        ),
+        success: true,
+        user: newDbUser,
+        userId,
+        error: null,
+      };
+    } catch (err: unknown) {
+      return {
         success: false,
+        error: err instanceof Error ? err : new Error(String(err)),
+      };
+    }
+  };
+
+  /**
+   * Database-backed Login: Supports login using User ID (FT123456) OR Email
+   * Both work with the same password!
+   */
+  const signIn = async (params: SignInParams): Promise<SignInResult> => {
+    const rawIdentifier = (params.identifier || params.email || "").trim();
+    const password = params.password;
+
+    if (!rawIdentifier) {
+      return {
+        success: false,
+        error: new Error("Please enter your User ID or Email."),
       };
     }
 
-    const mockUser = {
-      id: foundUser.id,
-      email: foundUser.email,
-      user_metadata: { username: foundUser.username, full_name: foundUser.full_name },
-    } as unknown as User;
-
-    const mockProfile: Profile = {
-      id: foundUser.id,
-      username: foundUser.username,
-      full_name: foundUser.full_name,
-      email: foundUser.email,
-      created_at: foundUser.created_at,
-    };
-
-    setUser(mockUser);
-    setProfile(mockProfile);
-    setRole(foundUser.role);
-
-    try {
-      localStorage.setItem(
-        LOCAL_STORAGE_SESSION_KEY,
-        JSON.stringify({ user: mockUser, profile: mockProfile, role: foundUser.role }),
-      );
-    } catch (_e) {
-      // Storage unavailable
+    if (!password) {
+      return {
+        success: false,
+        error: new Error("Please enter your password."),
+      };
     }
 
-    return { error: null, success: true };
+    try {
+      // 1. Look up user in database by User ID (FT######) OR Email
+      const foundUser = await findUserByIdentifier(rawIdentifier);
+
+      if (!foundUser) {
+        // Helpful message
+        return {
+          success: false,
+          error: new Error(
+            "Account not found. Please check your User ID (e.g. FT123456) or Email, or sign up.",
+          ),
+        };
+      }
+
+      // 2. Verify password hash
+      const isValid = await verifyPassword(password, foundUser.password_hash);
+      if (!isValid) {
+        return {
+          success: false,
+          error: new Error("Incorrect password. Please try again."),
+        };
+      }
+
+      // 3. User authenticated successfully!
+      const resolvedRole: RoleType =
+        foundUser.role || (foundUser.email === "admin@facetube.com" ? "admin" : "user");
+
+      const authProfile: Profile = {
+        id: foundUser.id,
+        user_id: foundUser.user_id,
+        username: foundUser.user_id,
+        name: foundUser.name,
+        full_name: foundUser.name,
+        mobile: foundUser.mobile,
+        email: foundUser.email,
+        referral_code: foundUser.referral_code,
+        created_at: foundUser.created_at,
+      };
+
+      const authUser = {
+        id: foundUser.id,
+        email: foundUser.email,
+        user_metadata: {
+          user_id: foundUser.user_id,
+          name: foundUser.name,
+          full_name: foundUser.name,
+          mobile: foundUser.mobile,
+        },
+      } as unknown as User;
+
+      setDbUser(foundUser);
+      setProfile(authProfile);
+      setUser(authUser);
+      setRole(resolvedRole);
+
+      try {
+        localStorage.setItem(
+          LOCAL_STORAGE_SESSION_KEY,
+          JSON.stringify({
+            user: authUser,
+            profile: authProfile,
+            dbUser: foundUser,
+            role: resolvedRole,
+          }),
+        );
+      } catch (_e) {
+        // storage disabled
+      }
+
+      return {
+        success: true,
+        error: null,
+      };
+    } catch (err: unknown) {
+      return {
+        success: false,
+        error: err instanceof Error ? err : new Error(String(err)),
+      };
+    }
   };
 
-  // Sign Out method
+  /**
+   * Sign Out method
+   */
   const signOut = async () => {
     if (isSupabaseConfigured && supabase) {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // ignore
+      }
     }
     setUser(null);
     setProfile(null);
+    setDbUser(null);
     setRole("user");
     try {
       localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
@@ -458,7 +429,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Update user role (admin action)
+  /**
+   * Update User Role (Admin action)
+   */
   const updateUserRole = async (targetUserId: string, newRole: RoleType): Promise<boolean> => {
     if (role !== "admin") {
       console.error("Only admins can update roles.");
@@ -467,36 +440,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        const { error } = await supabase
-          .from("user_roles")
-          .upsert({ user_id: targetUserId, role: newRole, updated_at: new Date().toISOString() });
-
-        if (error) {
-          console.error("Error updating role:", error);
-          return false;
-        }
-        await refreshUsers();
-        return true;
+        await supabase.from("users").update({ role: newRole }).eq("id", targetUserId);
       } catch (e) {
-        console.error("Failed to update role:", e);
-        return false;
+        console.warn("Supabase role update error:", e);
       }
     }
 
-    // Local demo update
-    const updated = usersList.map((u) => (u.id === targetUserId ? { ...u, role: newRole } : u));
-    saveDemoUsers(updated);
+    const localDb = getLocalDbUsers();
+    const updated = localDb.map((u) => (u.id === targetUserId ? { ...u, role: newRole } : u));
+    saveLocalDbUsers(updated);
+    syncUsersList();
 
     if (user && user.id === targetUserId) {
       setRole(newRole);
-      try {
-        localStorage.setItem(
-          LOCAL_STORAGE_SESSION_KEY,
-          JSON.stringify({ user, profile, role: newRole }),
-        );
-      } catch (_e) {
-        // Storage unavailable
-      }
     }
 
     return true;
@@ -509,6 +465,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         profile,
+        dbUser,
         role,
         isAdmin,
         isLoading,
@@ -526,7 +483,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Separate hook export
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

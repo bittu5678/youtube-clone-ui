@@ -125,7 +125,7 @@ function ProfilePage() {
 
   const handleSwitchUser = async (email: string) => {
     try {
-      await signIn({ email, password: "password123" });
+      await signIn({ identifier: email, password: "password123" });
       setDemoSwitchOpen(false);
     } catch {
       // ignore
@@ -190,8 +190,15 @@ function ProfilePage() {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  @{channelHandle} · {user ? user.email : "creator@facetube.app"}
+                <p className="text-xs text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5">
+                  <span>
+                    @{channelHandle} · {user ? user.email : "creator@facetube.app"}
+                  </span>
+                  {profile?.user_id && (
+                    <span className="font-mono font-bold text-brand bg-brand/10 px-2 py-0.5 rounded-md border border-brand/20">
+                      ID: {profile.user_id}
+                    </span>
+                  )}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   <span>
