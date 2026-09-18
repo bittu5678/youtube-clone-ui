@@ -22,7 +22,8 @@ import { ThemeToggle } from "@/components/videohub/ThemeToggle";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { useAuth } from "@/lib/auth-context";
 
-type UploadType = "premium" | "shorts" | "long" | "movie" | "ads" | null;
+type UploadType =
+  "premium" | "premium-shorts" | "premium-long" | "shorts" | "long" | "movie" | "ads" | null;
 
 interface UploadSearch {
   type?: UploadType;
@@ -30,7 +31,15 @@ interface UploadSearch {
 
 export const Route = createFileRoute("/upload")({
   validateSearch: (search: Record<string, unknown>): UploadSearch => {
-    const validTypes: UploadType[] = ["premium", "shorts", "long", "movie", "ads"];
+    const validTypes: UploadType[] = [
+      "premium",
+      "premium-shorts",
+      "premium-long",
+      "shorts",
+      "long",
+      "movie",
+      "ads",
+    ];
     const type = search.type as UploadType;
     return {
       type: validTypes.includes(type) ? type : null,
@@ -59,9 +68,42 @@ interface OptionCardConfig {
   accent: "gold" | "red" | "blue" | "purple" | "emerald";
   description: string;
   features: string[];
+  isPremium?: boolean;
 }
 
 const UPLOAD_OPTIONS: OptionCardConfig[] = [
+  {
+    id: "premium-shorts",
+    title: "Premium Shorts Video Upload",
+    subtitle: "Ads Earnings Enabled · Vertical Shorts",
+    badge: "Monetized · ⚡ Shorts",
+    icon: Zap,
+    accent: "gold",
+    isPremium: true,
+    description:
+      "Monetize viral vertical shorts with 70% ad revenue share, creator fund pools, and mobile feed boost.",
+    features: [
+      "70% Shorts feed ad revenue split",
+      "9:16 vertical algorithm fast discovery",
+      "Super Thanks & sound remixing enabled",
+    ],
+  },
+  {
+    id: "premium-long",
+    title: "Premium Long Video Upload",
+    subtitle: "Ads Earnings Enabled · Full Length 4K",
+    badge: "Monetized · ⚡ Long Form",
+    icon: Video,
+    accent: "gold",
+    isPremium: true,
+    description:
+      "Monetize extended tutorials, streams, and podcasts with pre-roll, mid-roll, and sponsor ad placements.",
+    features: [
+      "Customizable mid-roll & pre-roll ad breaks",
+      "Full 4K 60fps HDR with surround sound",
+      "Channel Memberships & Super Chat enabled",
+    ],
+  },
   {
     id: "premium",
     title: "Premium Video Upload",
@@ -69,6 +111,7 @@ const UPLOAD_OPTIONS: OptionCardConfig[] = [
     badge: "Monetized · Revenue Share",
     icon: DollarSign,
     accent: "gold",
+    isPremium: true,
     description:
       "Earn 70% ad revenue share with programmatic pre-roll, mid-roll, and sponsor placements.",
     features: [
@@ -266,11 +309,11 @@ function SelectionView({ onSelect }: { onSelect: (type: NonNullable<UploadType>)
         </div>
       </div>
 
-      {/* Five Option Cards Grid */}
+      {/* Option Cards Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {UPLOAD_OPTIONS.map((opt, idx) => {
+        {UPLOAD_OPTIONS.map((opt) => {
           const isGold = opt.accent === "gold";
-          const isLarge = idx === 0;
+          const isPremium = opt.isPremium || isGold;
 
           return (
             <button
@@ -278,10 +321,8 @@ function SelectionView({ onSelect }: { onSelect: (type: NonNullable<UploadType>)
               type="button"
               onClick={() => onSelect(opt.id)}
               className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border text-left transition-all duration-200 active:scale-[0.99] ${
-                isLarge ? "sm:col-span-2 lg:col-span-1" : ""
-              } ${
-                isGold
-                  ? "border-amber-500/50 bg-gradient-to-b from-amber-500/15 via-card/90 to-card shadow-lg hover:border-amber-400 hover:shadow-amber-500/10 hover:shadow-xl"
+                isPremium
+                  ? "border-amber-500/50 bg-gradient-to-b from-amber-500/15 via-card/90 to-card shadow-[0_0_24px_rgba(245,158,11,0.12)] hover:border-amber-400 hover:shadow-[0_0_32px_rgba(245,158,11,0.22)] ring-1 ring-amber-500/30"
                   : opt.accent === "red"
                     ? "border-red-500/30 bg-gradient-to-b from-red-500/10 via-card/90 to-card hover:border-red-500/60 hover:shadow-lg"
                     : opt.accent === "blue"
@@ -291,10 +332,14 @@ function SelectionView({ onSelect }: { onSelect: (type: NonNullable<UploadType>)
                         : "border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 via-card/90 to-card hover:border-emerald-500/60 hover:shadow-lg"
               } p-6`}
             >
-              {/* Gold card special glow banner */}
-              {isGold && (
-                <div className="absolute right-0 top-0 rounded-bl-xl bg-gradient-to-l from-amber-500 to-yellow-500 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-black shadow-sm">
-                  ★ Revenue Enabled
+              {/* Premium card corner ribbon */}
+              {isPremium && (
+                <div className="absolute right-0 top-0 rounded-bl-xl bg-gradient-to-l from-amber-500 to-yellow-500 px-3 py-0.5 text-[9px] font-black uppercase tracking-wider text-black shadow-sm">
+                  {opt.id === "premium-shorts"
+                    ? "⚡ Monetized Shorts"
+                    : opt.id === "premium-long"
+                      ? "⚡ Monetized 4K Master"
+                      : "★ Revenue Enabled"}
                 </div>
               )}
 
@@ -317,10 +362,22 @@ function SelectionView({ onSelect }: { onSelect: (type: NonNullable<UploadType>)
                     <opt.icon className={`h-6 w-6 ${isGold ? "stroke-[2.5]" : "stroke-[2]"}`} />
                   </div>
 
-                  {opt.badge && !isGold && (
-                    <span className="rounded-full border border-border bg-secondary/80 px-2.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                      {opt.badge}
-                    </span>
+                  {/* Right side: Glowing lightning (⚡) premium effect with subtle gold/yellow glow */}
+                  {isPremium ? (
+                    <div className="relative flex items-center justify-center">
+                      {/* Subtle gold/yellow ambient glow */}
+                      <span className="absolute -inset-1.5 rounded-full bg-amber-400/40 blur-md animate-pulse" />
+                      <div className="relative flex items-center gap-1.5 rounded-full border border-amber-400/70 bg-gradient-to-r from-amber-500/30 via-yellow-400/40 to-amber-500/30 px-3 py-1 text-xs font-black text-amber-200 shadow-[0_0_18px_rgba(251,191,36,0.5)]">
+                        <Zap className="h-4 w-4 fill-amber-400 text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.95)] animate-pulse" />
+                        <span>⚡ PREMIUM</span>
+                      </div>
+                    </div>
+                  ) : (
+                    opt.badge && (
+                      <span className="rounded-full border border-border bg-secondary/80 px-2.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                        {opt.badge}
+                      </span>
+                    )
                   )}
                 </div>
 
@@ -375,15 +432,23 @@ function SelectionView({ onSelect }: { onSelect: (type: NonNullable<UploadType>)
                 >
                   Continue to Form
                 </span>
-                <span
-                  className={`grid h-7 w-7 place-items-center rounded-full transition-transform group-hover:translate-x-1 ${
-                    isGold
-                      ? "bg-amber-400 text-black"
-                      : "bg-secondary text-foreground group-hover:bg-brand group-hover:text-white"
-                  }`}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </span>
+                <div className="flex items-center gap-2">
+                  {isPremium && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300">
+                      <Zap className="h-3 w-3 fill-amber-400 text-amber-300 animate-pulse" />
+                      Monetized
+                    </span>
+                  )}
+                  <span
+                    className={`grid h-7 w-7 place-items-center rounded-full transition-transform group-hover:translate-x-1 ${
+                      isGold
+                        ? "bg-amber-400 text-black shadow-[0_0_12px_rgba(251,191,36,0.4)]"
+                        : "bg-secondary text-foreground group-hover:bg-brand group-hover:text-white"
+                    }`}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </span>
+                </div>
               </div>
             </button>
           );
@@ -416,17 +481,23 @@ function UploadFormView({
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [isDoneUploading, setIsDoneUploading] = useState<boolean>(false);
 
+  const isShorts = type === "shorts" || type === "premium-shorts";
+  const isLong = type === "long" || type === "premium-long";
+  const isMonetized = type === "premium" || type === "premium-shorts" || type === "premium-long";
+
   const [title, setTitle] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [category, setCategory] = useState<string>("Entertainment");
   const [visibility, setVisibility] = useState<"public" | "unlisted" | "private">("public");
   const [tagInput, setTagInput] = useState<string>("");
   const [tags, setTags] = useState<string[]>(
-    type === "shorts" ? ["shorts", "trending", "facetube"] : ["facetube", "creators"],
+    isShorts
+      ? ["shorts", "trending", "facetube", ...(type === "premium-shorts" ? ["monetized"] : [])]
+      : ["facetube", "creators", ...(type === "premium-long" ? ["4k", "monetized"] : [])],
   );
 
   // Specialized Fields
-  const [monetizationActive, setMonetizationActive] = useState<boolean>(type === "premium");
+  const [monetizationActive, setMonetizationActive] = useState<boolean>(isMonetized);
   const [adBreaks, setAdBreaks] = useState<{
     preroll: boolean;
     midroll: boolean;
@@ -537,7 +608,7 @@ function UploadFormView({
             >
               <opt.icon className="h-3.5 w-3.5" />
               <span>{opt.title.replace(" Upload", "")}</span>
-              {isGold && <span className="text-[10px] opacity-80 font-black">($)</span>}
+              {isGold && <span className="text-[10px] opacity-90 font-black">⚡</span>}
             </button>
           );
         })}
@@ -551,15 +622,25 @@ function UploadFormView({
           </div>
 
           <h2 className="mt-5 text-2xl font-black text-foreground sm:text-3xl">
-            {type === "ads" ? "Campaign Launched Successfully!" : "Video Published Successfully!"}
+            {type === "ads"
+              ? "Campaign Launched Successfully!"
+              : type === "premium-shorts"
+                ? "Premium Short Published Successfully!"
+                : type === "premium-long"
+                  ? "Premium Long Video Published Successfully!"
+                  : "Video Published Successfully!"}
           </h2>
 
           <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-            {type === "premium"
-              ? "Your premium video is live with ads monetization enabled. Ad earnings will update in real-time."
-              : type === "ads"
-                ? "Your promotional ad campaign is now active and delivering impressions across FaceTube."
-                : "Your video has been encoded and is now visible to viewers worldwide on FaceTube."}
+            {type === "premium-shorts"
+              ? "Your Premium Short is live with ads monetization enabled! Earnings from Shorts feed views and Super Thanks will update in real-time."
+              : type === "premium-long"
+                ? "Your Premium Long Video is live with 4K HDR monetization enabled! Pre-roll and mid-roll ad earnings will update in real-time."
+                : type === "premium"
+                  ? "Your premium video is live with ads monetization enabled. Ad earnings will update in real-time."
+                  : type === "ads"
+                    ? "Your promotional ad campaign is now active and delivering impressions across FaceTube."
+                    : "Your video has been encoded and is now visible to viewers worldwide on FaceTube."}
           </p>
 
           <div className="mx-auto mt-6 max-w-sm rounded-2xl border border-border bg-card p-4 text-left shadow-sm">
@@ -611,7 +692,7 @@ function UploadFormView({
           {/* Header Description for Selected Option */}
           <div
             className={`rounded-2xl border p-5 sm:p-6 shadow-sm ${
-              type === "premium"
+              isMonetized
                 ? "border-amber-500/40 bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-card"
                 : type === "shorts"
                   ? "border-red-500/30 bg-gradient-to-r from-red-500/10 via-card to-card"
@@ -626,7 +707,7 @@ function UploadFormView({
               <div className="flex items-center gap-3">
                 <div
                   className={`grid h-11 w-11 place-items-center rounded-xl font-bold ${
-                    type === "premium" ? "bg-amber-400 text-black" : "bg-brand/20 text-brand"
+                    isMonetized ? "bg-amber-400 text-black" : "bg-brand/20 text-brand"
                   }`}
                 >
                   <currentConfig.icon className="h-5 w-5" />
@@ -641,10 +722,10 @@ function UploadFormView({
                 </div>
               </div>
 
-              {type === "premium" && (
-                <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/50 bg-amber-400/20 px-3 py-1 text-xs font-black text-amber-300">
-                  <DollarSign className="h-3.5 w-3.5" />
-                  Estimated CPM: $6.20 - $14.50
+              {isMonetized && (
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/50 bg-amber-400/20 px-3 py-1 text-xs font-black text-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.3)]">
+                  <Zap className="h-3.5 w-3.5 fill-amber-400 text-amber-300 animate-pulse" />
+                  Estimated CPM: {type === "premium-shorts" ? "$3.80 - $8.50" : "$6.20 - $16.50"}
                 </div>
               )}
             </div>
@@ -659,7 +740,7 @@ function UploadFormView({
             <input
               ref={fileInputRef}
               type="file"
-              accept={type === "shorts" ? "video/mp4,video/webm" : "video/*"}
+              accept={isShorts ? "video/mp4,video/webm" : "video/*"}
               onChange={handleFileChange}
               className="hidden"
             />
@@ -673,8 +754,13 @@ function UploadFormView({
                   <Upload className="h-7 w-7" />
                 </div>
                 <p className="mt-4 font-bold text-foreground">
-                  Drag and drop {type === "shorts" ? "vertical video (< 60s)" : "video file"} here,
-                  or browse
+                  Drag and drop{" "}
+                  {isShorts
+                    ? "vertical video (< 60s)"
+                    : isLong
+                      ? "long-form video (1080p/4K)"
+                      : "video file"}{" "}
+                  here, or browse
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   MP4, WebM, MOV, or MKV up to 10GB. 1080p, 4K 60fps supported.
@@ -855,15 +941,25 @@ function UploadFormView({
           </div>
 
           {/* Section 3: Specialized Option Controls */}
-          {type === "premium" && (
+          {isMonetized && (
             <div className="rounded-2xl border border-amber-500/40 bg-card p-6 shadow-card space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-extrabold uppercase tracking-wider text-amber-400">
-                    Monetization & Ad Preferences
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Ads earnings are active on this video. 70% revenue split paid monthly.
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-extrabold uppercase tracking-wider text-amber-400">
+                      Monetization & Ad Preferences
+                    </h3>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/50 bg-amber-400/20 px-2.5 py-0.5 text-[10px] font-black text-amber-300 shadow-[0_0_10px_rgba(251,191,36,0.3)]">
+                      <Zap className="h-3 w-3 fill-amber-400 text-amber-300 animate-pulse" />
+                      <span>⚡ PREMIUM ACTIVE</span>
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {type === "premium-shorts"
+                      ? "Shorts Feed Ad Revenue Share (70%) + Super Thanks active on this vertical short."
+                      : type === "premium-long"
+                        ? "Long-form programmatic pre-roll, mid-roll, and post-roll ad revenue enabled with monthly payouts."
+                        : "Ads earnings are active on this video. 70% revenue split paid monthly."}
                   </p>
                 </div>
                 <span className="rounded-full bg-amber-400/20 px-3 py-1 text-xs font-black text-amber-300">
@@ -873,7 +969,9 @@ function UploadFormView({
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 pt-2">
                 <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-secondary/30 p-3">
-                  <span className="text-xs font-bold">Pre-roll Ads</span>
+                  <span className="text-xs font-bold">
+                    {type === "premium-shorts" ? "Shorts Feed Ads" : "Pre-roll Ads"}
+                  </span>
                   <input
                     type="checkbox"
                     checked={adBreaks.preroll}
@@ -883,7 +981,9 @@ function UploadFormView({
                 </label>
 
                 <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-secondary/30 p-3">
-                  <span className="text-xs font-bold">Mid-roll Ad Breaks</span>
+                  <span className="text-xs font-bold">
+                    {type === "premium-shorts" ? "Super Thanks" : "Mid-roll Ad Breaks"}
+                  </span>
                   <input
                     type="checkbox"
                     checked={adBreaks.midroll}
@@ -893,7 +993,9 @@ function UploadFormView({
                 </label>
 
                 <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-secondary/30 p-3">
-                  <span className="text-xs font-bold">Post-roll Ads</span>
+                  <span className="text-xs font-bold">
+                    {type === "premium-shorts" ? "Sponsor Badges" : "Post-roll Ads"}
+                  </span>
                   <input
                     type="checkbox"
                     checked={adBreaks.postroll}
@@ -1032,13 +1134,26 @@ function UploadFormView({
 
           {/* Notice for Shorts / Long Video */}
           {(type === "shorts" || type === "long") && (
-            <div className="rounded-xl border border-border/70 bg-secondary/20 p-4 text-xs text-muted-foreground flex items-center gap-2">
-              <Info className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span>
-                Standard {type === "shorts" ? "Shorts" : "Long Video"} format:{" "}
-                <strong>No Earnings</strong> on ad revenue. To monetize with ads, choose{" "}
-                <strong>Premium Video Upload</strong>.
-              </span>
+            <div className="rounded-xl border border-border/70 bg-secondary/20 p-4 text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Info className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span>
+                  Standard {type === "shorts" ? "Shorts" : "Long Video"} format:{" "}
+                  <strong>No Earnings</strong> on ad revenue. To monetize with ads, choose{" "}
+                  <strong className="text-amber-400">
+                    {type === "shorts" ? "Premium Shorts Video" : "Premium Long Video"}
+                  </strong>
+                  .
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onSelectType(type === "shorts" ? "premium-shorts" : "premium-long")}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-bold text-amber-400 hover:bg-amber-400/20 shrink-0 self-start sm:self-auto"
+              >
+                <Zap className="h-3 w-3 fill-amber-400 text-amber-300" />
+                Switch to {type === "shorts" ? "Premium Shorts" : "Premium Long"}
+              </button>
             </div>
           )}
 
@@ -1057,8 +1172,8 @@ function UploadFormView({
               type="submit"
               disabled={isPublishing}
               className={`inline-flex items-center justify-center gap-2 rounded-xl px-8 py-3 text-sm font-bold shadow-lift transition-all active:scale-95 disabled:opacity-50 ${
-                type === "premium"
-                  ? "bg-gradient-to-r from-amber-400 to-yellow-500 text-black hover:from-amber-300 hover:to-yellow-400"
+                isMonetized
+                  ? "bg-gradient-to-r from-amber-400 to-yellow-500 text-black hover:from-amber-300 hover:to-yellow-400 shadow-[0_0_20px_rgba(251,191,36,0.3)]"
                   : "bg-brand text-white hover:bg-brand-dark"
               }`}
             >
@@ -1070,7 +1185,13 @@ function UploadFormView({
               ) : (
                 <>
                   <Upload className="h-4 w-4" />
-                  {type === "ads" ? "Launch Ad Campaign" : "Publish Video"}
+                  {type === "ads"
+                    ? "Launch Ad Campaign"
+                    : type === "premium-shorts"
+                      ? "Publish Premium Short (⚡)"
+                      : type === "premium-long"
+                        ? "Publish Premium Long Video (⚡)"
+                        : "Publish Video"}
                 </>
               )}
             </button>
