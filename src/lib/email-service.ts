@@ -97,15 +97,6 @@ export async function sendWelcomeEmail({
   };
 
   try {
-    const clientResendKey =
-      typeof import.meta !== "undefined" && import.meta.env
-        ? (import.meta.env.VITE_RESEND_API_KEY as string | undefined)
-        : undefined;
-    const clientResendFrom =
-      typeof import.meta !== "undefined" && import.meta.env
-        ? (import.meta.env.VITE_RESEND_FROM as string | undefined)
-        : undefined;
-
     const response = await fetch("/api/send-welcome-email", {
       method: "POST",
       headers: {
@@ -117,8 +108,6 @@ export async function sendWelcomeEmail({
         email,
         password: password || "",
         loginLink,
-        resendApiKey: clientResendKey,
-        resendFrom: clientResendFrom,
       }),
     });
 

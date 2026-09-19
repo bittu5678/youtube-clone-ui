@@ -24,17 +24,20 @@ function welcomeEmailDevPlugin(): Plugin {
       server.middlewares.use("/api/send-welcome-email", async (req, res) => {
         if (req.method === "GET") {
           try {
-            const { resolveResendConfig } = await import("./src/server/email");
-            const conf = resolveResendConfig();
+            const { resolveSmtpConfig } = await import("./src/server/email");
+            const conf = resolveSmtpConfig();
             res.setHeader("Content-Type", "application/json");
             res.statusCode = 200;
             res.end(
               JSON.stringify({
                 status: "ok",
-                resendConfigured: Boolean(conf.apiKey),
+                smtpConfigured: conf.configured,
+                host: conf.host,
+                port: conf.port,
+                secure: conf.secure,
                 source: conf.source,
                 sender: conf.from,
-                prefix: conf.apiKey ? `${conf.apiKey.slice(0, 5)}...` : "NOT_SET",
+                user: conf.user ? `${conf.user.slice(0, 3)}***@***` : "NOT_SET",
               }),
             );
             return;

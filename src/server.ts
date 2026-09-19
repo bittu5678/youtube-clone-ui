@@ -51,8 +51,8 @@ export default {
       if (url.pathname === "/api/send-welcome-email") {
         if (request.method === "GET") {
           try {
-            const { resolveResendConfig } = await import("./server/email");
-            const conf = resolveResendConfig(
+            const { resolveSmtpConfig } = await import("./server/email");
+            const conf = resolveSmtpConfig(
               undefined,
               env && typeof env === "object"
                 ? (env as Record<string, string | undefined>)
@@ -61,10 +61,13 @@ export default {
             return new Response(
               JSON.stringify({
                 status: "ok",
-                resendConfigured: Boolean(conf.apiKey),
+                smtpConfigured: conf.configured,
+                host: conf.host,
+                port: conf.port,
+                secure: conf.secure,
                 source: conf.source,
                 sender: conf.from,
-                prefix: conf.apiKey ? `${conf.apiKey.slice(0, 5)}...` : "NOT_SET",
+                user: conf.user ? `${conf.user.slice(0, 3)}***@***` : "NOT_SET",
               }),
               {
                 status: 200,
