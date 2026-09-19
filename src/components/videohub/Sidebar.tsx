@@ -1,5 +1,10 @@
 import {
   Home,
+  UserPlus,
+  Users,
+  Wallet,
+  CornerDownRight,
+  ChevronDown,
   Compass,
   Clapperboard,
   History,
@@ -12,25 +17,29 @@ import {
   X,
 } from "lucide-react";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
 import { Logo } from "./Logo";
 import { useAuth } from "@/lib/auth-context";
-
-const items = [
-  { label: "Home", icon: Home, to: "/" },
-  { label: "Explore", icon: Compass, to: "/explore" },
-  { label: "Subscriptions", icon: Clapperboard, to: "/subscriptions" },
-  { label: "History", icon: History, to: "/history" },
-  { label: "Watch Later", icon: Clock, to: "/watch-later" },
-  { label: "Liked Videos", icon: ThumbsUp, to: "/liked-videos" },
-  { label: "Your Videos", icon: Video, to: "/your-videos" },
-  { label: "Settings", icon: Settings, to: "/settings" },
-  { label: "Help", icon: CircleHelp, to: "/help" },
-];
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { isAdmin } = useAuth();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
+
+  const isIncomeRoute =
+    currentPath === "/income" ||
+    currentPath === "/direct-referral-income" ||
+    currentPath === "/team-income";
+
+  const [incomeExpanded, setIncomeExpanded] = useState(true);
+
+  useEffect(() => {
+    if (isIncomeRoute) {
+      setIncomeExpanded(true);
+    }
+  }, [isIncomeRoute]);
+
+  const isHomeActive = currentPath === "/";
 
   return (
     <nav className="flex flex-col gap-1 p-3">
@@ -49,27 +58,271 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
         </Link>
       )}
 
-      {items.map(({ label, icon: Icon, to }) => {
-        const active =
-          to === "/" ? currentPath === "/" : currentPath === to || currentPath.startsWith(to + "/");
-        return (
-          <Link
-            key={label}
-            to={to}
-            onClick={onNavigate}
-            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
-              active
-                ? "bg-brand text-white shadow-sm font-bold"
-                : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-            }`}
-          >
-            <Icon
-              className={`h-[18px] w-[18px] shrink-0 ${active ? "text-white stroke-[2.4]" : ""}`}
+      {/* 1. Home */}
+      <Link
+        to="/"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          isHomeActive
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <Home
+          className={`h-[18px] w-[18px] shrink-0 ${isHomeActive ? "text-white stroke-[2.4]" : ""}`}
+        />
+        <span className="truncate">Home</span>
+      </Link>
+
+      {/* 2. Referral Members */}
+      <Link
+        to="/referral-members"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/referral-members"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <UserPlus
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/referral-members" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">Referral Members</span>
+      </Link>
+
+      {/* 3. Team Members */}
+      <Link
+        to="/team-members"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/team-members"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <Users
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/team-members" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">Team Members</span>
+      </Link>
+
+      {/* 4. Income Section (Expandable / Collapsible) */}
+      <div className="flex flex-col">
+        <button
+          type="button"
+          onClick={() => setIncomeExpanded((prev) => !prev)}
+          className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-all ${
+            isIncomeRoute && !incomeExpanded
+              ? "bg-brand text-white shadow-sm font-bold"
+              : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+          }`}
+        >
+          <div className="flex items-center gap-3 truncate">
+            <Wallet
+              className={`h-[18px] w-[18px] shrink-0 ${
+                isIncomeRoute && !incomeExpanded ? "text-white stroke-[2.4]" : ""
+              }`}
             />
-            <span className="truncate">{label}</span>
-          </Link>
-        );
-      })}
+            <span className="truncate">Income Section</span>
+          </div>
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+              incomeExpanded ? "rotate-180 text-foreground" : ""
+            } ${isIncomeRoute && !incomeExpanded ? "text-white" : ""}`}
+          />
+        </button>
+
+        {/* Indented Submenu Items */}
+        {incomeExpanded && (
+          <div className="ml-4 flex flex-col gap-1 border-l-2 border-border/60 py-1 pl-3 my-0.5">
+            <Link
+              to="/direct-referral-income"
+              onClick={onNavigate}
+              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
+                currentPath === "/direct-referral-income"
+                  ? "bg-brand text-white shadow-sm font-bold"
+                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+              }`}
+            >
+              <CornerDownRight
+                className={`h-3.5 w-3.5 shrink-0 ${
+                  currentPath === "/direct-referral-income"
+                    ? "text-white stroke-[2.4]"
+                    : "text-muted-foreground"
+                }`}
+              />
+              <span className="truncate">Direct Referral Income</span>
+            </Link>
+
+            <Link
+              to="/team-income"
+              onClick={onNavigate}
+              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
+                currentPath === "/team-income"
+                  ? "bg-brand text-white shadow-sm font-bold"
+                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+              }`}
+            >
+              <CornerDownRight
+                className={`h-3.5 w-3.5 shrink-0 ${
+                  currentPath === "/team-income"
+                    ? "text-white stroke-[2.4]"
+                    : "text-muted-foreground"
+                }`}
+              />
+              <span className="truncate">Team Income</span>
+            </Link>
+          </div>
+        )}
+      </div>
+
+      {/* 5. Explore */}
+      <Link
+        to="/explore"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/explore"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <Compass
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/explore" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">Explore</span>
+      </Link>
+
+      {/* 6. Subscriptions */}
+      <Link
+        to="/subscriptions"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/subscriptions"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <Clapperboard
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/subscriptions" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">Subscriptions</span>
+      </Link>
+
+      {/* 7. History */}
+      <Link
+        to="/history"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/history"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <History
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/history" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">History</span>
+      </Link>
+
+      {/* 8. Watch Later */}
+      <Link
+        to="/watch-later"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/watch-later"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <Clock
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/watch-later" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">Watch Later</span>
+      </Link>
+
+      {/* 9. Liked Videos */}
+      <Link
+        to="/liked-videos"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/liked-videos"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <ThumbsUp
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/liked-videos" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">Liked Videos</span>
+      </Link>
+
+      {/* 10. Your Videos */}
+      <Link
+        to="/your-videos"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/your-videos"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <Video
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/your-videos" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">Your Videos</span>
+      </Link>
+
+      {/* 11. Settings */}
+      <Link
+        to="/settings"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/settings"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <Settings
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/settings" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">Settings</span>
+      </Link>
+
+      {/* 12. Help */}
+      <Link
+        to="/help"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/help"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <CircleHelp
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/help" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">Help</span>
+      </Link>
     </nav>
   );
 }
