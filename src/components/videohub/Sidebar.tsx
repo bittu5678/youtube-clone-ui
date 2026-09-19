@@ -15,14 +15,17 @@ import {
   CircleHelp,
   ShieldCheck,
   X,
+  ArrowDownToLine,
+  LogOut,
 } from "lucide-react";
-import { Link, useRouterState } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { Logo } from "./Logo";
 import { useAuth } from "@/lib/auth-context";
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, signOut } = useAuth();
+  const navigate = useNavigate();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
 
@@ -32,8 +35,6 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
     currentPath === "/global-income" ||
     currentPath === "/adsense-income" ||
     currentPath === "/affiliate-income" ||
-    currentPath === "/wallet-balance" ||
-    currentPath === "/withdrawal-balance" ||
     currentPath === "/direct-referral-income" ||
     currentPath === "/team-income";
 
@@ -46,22 +47,16 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
     currentPath === "/advertisement-videos" ||
     currentPath === "/images-uploaded";
 
-  const [incomeExpanded, setIncomeExpanded] = useState(true);
-  const [yourVideosExpanded, setYourVideosExpanded] = useState(true);
-
-  useEffect(() => {
-    if (isIncomeRoute) {
-      setIncomeExpanded(true);
-    }
-  }, [isIncomeRoute]);
-
-  useEffect(() => {
-    if (isYourVideosRoute) {
-      setYourVideosExpanded(true);
-    }
-  }, [isYourVideosRoute]);
+  const [incomeExpanded, setIncomeExpanded] = useState(false);
+  const [yourVideosExpanded, setYourVideosExpanded] = useState(false);
 
   const isHomeActive = currentPath === "/";
+
+  const handleLogout = async () => {
+    onNavigate?.();
+    await signOut();
+    navigate({ to: "/login" });
+  };
 
   return (
     <nav className="flex flex-col gap-1 p-3">
@@ -136,6 +131,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
       <div className="flex flex-col">
         <button
           type="button"
+          aria-expanded={incomeExpanded}
           onClick={() => setIncomeExpanded((prev) => !prev)}
           className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-all ${
             isIncomeRoute && !incomeExpanded
@@ -152,136 +148,104 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             <span className="truncate">Income Section</span>
           </div>
           <ChevronDown
-            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ease-in-out ${
               incomeExpanded ? "rotate-180 text-foreground" : ""
             } ${isIncomeRoute && !incomeExpanded ? "text-white" : ""}`}
           />
         </button>
 
-        {/* Indented Submenu Items */}
-        {incomeExpanded && (
-          <div className="ml-4 flex flex-col gap-1 border-l-2 border-border/60 py-1 pl-3 my-0.5">
-            {/* Referral Income */}
-            <Link
-              to="/referral-income"
-              onClick={onNavigate}
-              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
-                currentPath === "/referral-income" || currentPath === "/direct-referral-income"
-                  ? "bg-brand text-white shadow-sm font-bold"
-                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-              }`}
-            >
-              <CornerDownRight
-                className={`h-3.5 w-3.5 shrink-0 ${
+        {/* Indented Submenu Items with smooth 200-300ms accordion animation */}
+        <div
+          className={`grid transition-all duration-300 ease-in-out ${
+            incomeExpanded
+              ? "grid-rows-[1fr] opacity-100"
+              : "grid-rows-[0fr] opacity-0 pointer-events-none"
+          }`}
+        >
+          <div className="overflow-hidden">
+            <div className="ml-4 flex flex-col gap-1 border-l-2 border-border/60 py-1 pl-3 my-0.5">
+              {/* Referral Income */}
+              <Link
+                to="/referral-income"
+                onClick={onNavigate}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
                   currentPath === "/referral-income" || currentPath === "/direct-referral-income"
-                    ? "text-white stroke-[2.4]"
-                    : "text-muted-foreground"
+                    ? "bg-brand text-white shadow-sm font-bold"
+                    : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
                 }`}
-              />
-              <span className="truncate">Referral Income</span>
-            </Link>
+              >
+                <CornerDownRight
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    currentPath === "/referral-income" || currentPath === "/direct-referral-income"
+                      ? "text-white stroke-[2.4]"
+                      : "text-muted-foreground"
+                  }`}
+                />
+                <span className="truncate">Referral Income</span>
+              </Link>
 
-            {/* Global Income */}
-            <Link
-              to="/global-income"
-              onClick={onNavigate}
-              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
-                currentPath === "/global-income"
-                  ? "bg-brand text-white shadow-sm font-bold"
-                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-              }`}
-            >
-              <CornerDownRight
-                className={`h-3.5 w-3.5 shrink-0 ${
+              {/* Global Income */}
+              <Link
+                to="/global-income"
+                onClick={onNavigate}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
                   currentPath === "/global-income"
-                    ? "text-white stroke-[2.4]"
-                    : "text-muted-foreground"
+                    ? "bg-brand text-white shadow-sm font-bold"
+                    : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
                 }`}
-              />
-              <span className="truncate">Global Income</span>
-            </Link>
+              >
+                <CornerDownRight
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    currentPath === "/global-income"
+                      ? "text-white stroke-[2.4]"
+                      : "text-muted-foreground"
+                  }`}
+                />
+                <span className="truncate">Global Income</span>
+              </Link>
 
-            {/* AdSense Income */}
-            <Link
-              to="/adsense-income"
-              onClick={onNavigate}
-              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
-                currentPath === "/adsense-income"
-                  ? "bg-brand text-white shadow-sm font-bold"
-                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-              }`}
-            >
-              <CornerDownRight
-                className={`h-3.5 w-3.5 shrink-0 ${
+              {/* AdSense Income */}
+              <Link
+                to="/adsense-income"
+                onClick={onNavigate}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
                   currentPath === "/adsense-income"
-                    ? "text-white stroke-[2.4]"
-                    : "text-muted-foreground"
+                    ? "bg-brand text-white shadow-sm font-bold"
+                    : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
                 }`}
-              />
-              <span className="truncate">AdSense Income</span>
-            </Link>
+              >
+                <CornerDownRight
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    currentPath === "/adsense-income"
+                      ? "text-white stroke-[2.4]"
+                      : "text-muted-foreground"
+                  }`}
+                />
+                <span className="truncate">AdSense Income</span>
+              </Link>
 
-            {/* Affiliate Income */}
-            <Link
-              to="/affiliate-income"
-              onClick={onNavigate}
-              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
-                currentPath === "/affiliate-income"
-                  ? "bg-brand text-white shadow-sm font-bold"
-                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-              }`}
-            >
-              <CornerDownRight
-                className={`h-3.5 w-3.5 shrink-0 ${
+              {/* Affiliate Income */}
+              <Link
+                to="/affiliate-income"
+                onClick={onNavigate}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
                   currentPath === "/affiliate-income"
-                    ? "text-white stroke-[2.4]"
-                    : "text-muted-foreground"
+                    ? "bg-brand text-white shadow-sm font-bold"
+                    : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
                 }`}
-              />
-              <span className="truncate">Affiliate Income</span>
-            </Link>
-
-            {/* Wallet Balance */}
-            <Link
-              to="/wallet-balance"
-              onClick={onNavigate}
-              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
-                currentPath === "/wallet-balance"
-                  ? "bg-brand text-white shadow-sm font-bold"
-                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-              }`}
-            >
-              <CornerDownRight
-                className={`h-3.5 w-3.5 shrink-0 ${
-                  currentPath === "/wallet-balance"
-                    ? "text-white stroke-[2.4]"
-                    : "text-muted-foreground"
-                }`}
-              />
-              <span className="truncate">Wallet Balance</span>
-            </Link>
-
-            {/* Withdrawal Balance */}
-            <Link
-              to="/withdrawal-balance"
-              onClick={onNavigate}
-              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
-                currentPath === "/withdrawal-balance"
-                  ? "bg-brand text-white shadow-sm font-bold"
-                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-              }`}
-            >
-              <CornerDownRight
-                className={`h-3.5 w-3.5 shrink-0 ${
-                  currentPath === "/withdrawal-balance"
-                    ? "text-white stroke-[2.4]"
-                    : "text-muted-foreground"
-                }`}
-              />
-              <span className="truncate">Withdrawal Balance</span>
-            </Link>
+              >
+                <CornerDownRight
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    currentPath === "/affiliate-income"
+                      ? "text-white stroke-[2.4]"
+                      : "text-muted-foreground"
+                  }`}
+                />
+                <span className="truncate">Affiliate Income</span>
+              </Link>
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* 5. Explore */}
@@ -378,6 +342,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
       <div className="flex flex-col">
         <button
           type="button"
+          aria-expanded={yourVideosExpanded}
           onClick={() => setYourVideosExpanded((prev) => !prev)}
           className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-all ${
             isYourVideosRoute && !yourVideosExpanded
@@ -394,139 +359,183 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             <span className="truncate">Your Videos</span>
           </div>
           <ChevronDown
-            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ease-in-out ${
               yourVideosExpanded ? "rotate-180 text-foreground" : ""
             } ${isYourVideosRoute && !yourVideosExpanded ? "text-white" : ""}`}
           />
         </button>
 
-        {/* Indented Submenu Items */}
-        {yourVideosExpanded && (
-          <div className="ml-4 flex flex-col gap-1 border-l-2 border-border/60 py-1 pl-3 my-0.5">
-            {/* Free Videos */}
-            <Link
-              to="/free-videos"
-              onClick={onNavigate}
-              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
-                currentPath === "/free-videos"
-                  ? "bg-brand text-white shadow-sm font-bold"
-                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-              }`}
-            >
-              <CornerDownRight
-                className={`h-3.5 w-3.5 shrink-0 ${
+        {/* Indented Submenu Items with smooth 200-300ms accordion animation */}
+        <div
+          className={`grid transition-all duration-300 ease-in-out ${
+            yourVideosExpanded
+              ? "grid-rows-[1fr] opacity-100"
+              : "grid-rows-[0fr] opacity-0 pointer-events-none"
+          }`}
+        >
+          <div className="overflow-hidden">
+            <div className="ml-4 flex flex-col gap-1 border-l-2 border-border/60 py-1 pl-3 my-0.5">
+              {/* Free Videos */}
+              <Link
+                to="/free-videos"
+                onClick={onNavigate}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
                   currentPath === "/free-videos"
-                    ? "text-white stroke-[2.4]"
-                    : "text-muted-foreground"
+                    ? "bg-brand text-white shadow-sm font-bold"
+                    : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
                 }`}
-              />
-              <span className="truncate">Free Videos</span>
-            </Link>
+              >
+                <CornerDownRight
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    currentPath === "/free-videos"
+                      ? "text-white stroke-[2.4]"
+                      : "text-muted-foreground"
+                  }`}
+                />
+                <span className="truncate">Free Videos</span>
+              </Link>
 
-            {/* Premium Videos */}
-            <Link
-              to="/premium-videos"
-              onClick={onNavigate}
-              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
-                currentPath === "/premium-videos"
-                  ? "bg-brand text-white shadow-sm font-bold"
-                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-              }`}
-            >
-              <CornerDownRight
-                className={`h-3.5 w-3.5 shrink-0 ${
+              {/* Premium Videos */}
+              <Link
+                to="/premium-videos"
+                onClick={onNavigate}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
                   currentPath === "/premium-videos"
-                    ? "text-white stroke-[2.4]"
-                    : "text-muted-foreground"
+                    ? "bg-brand text-white shadow-sm font-bold"
+                    : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
                 }`}
-              />
-              <span className="truncate">Premium Videos</span>
-            </Link>
+              >
+                <CornerDownRight
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    currentPath === "/premium-videos"
+                      ? "text-white stroke-[2.4]"
+                      : "text-muted-foreground"
+                  }`}
+                />
+                <span className="truncate">Premium Videos</span>
+              </Link>
 
-            {/* Short Videos */}
-            <Link
-              to="/short-videos"
-              onClick={onNavigate}
-              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
-                currentPath === "/short-videos"
-                  ? "bg-brand text-white shadow-sm font-bold"
-                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-              }`}
-            >
-              <CornerDownRight
-                className={`h-3.5 w-3.5 shrink-0 ${
+              {/* Short Videos */}
+              <Link
+                to="/short-videos"
+                onClick={onNavigate}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
                   currentPath === "/short-videos"
-                    ? "text-white stroke-[2.4]"
-                    : "text-muted-foreground"
+                    ? "bg-brand text-white shadow-sm font-bold"
+                    : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
                 }`}
-              />
-              <span className="truncate">Short Videos</span>
-            </Link>
+              >
+                <CornerDownRight
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    currentPath === "/short-videos"
+                      ? "text-white stroke-[2.4]"
+                      : "text-muted-foreground"
+                  }`}
+                />
+                <span className="truncate">Short Videos</span>
+              </Link>
 
-            {/* Live Videos */}
-            <Link
-              to="/live-videos"
-              onClick={onNavigate}
-              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
-                currentPath === "/live-videos"
-                  ? "bg-brand text-white shadow-sm font-bold"
-                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-              }`}
-            >
-              <CornerDownRight
-                className={`h-3.5 w-3.5 shrink-0 ${
+              {/* Live Videos */}
+              <Link
+                to="/live-videos"
+                onClick={onNavigate}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
                   currentPath === "/live-videos"
-                    ? "text-white stroke-[2.4]"
-                    : "text-muted-foreground"
+                    ? "bg-brand text-white shadow-sm font-bold"
+                    : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
                 }`}
-              />
-              <span className="truncate">Live Videos</span>
-            </Link>
+              >
+                <CornerDownRight
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    currentPath === "/live-videos"
+                      ? "text-white stroke-[2.4]"
+                      : "text-muted-foreground"
+                  }`}
+                />
+                <span className="truncate">Live Videos</span>
+              </Link>
 
-            {/* Advertisement Videos */}
-            <Link
-              to="/advertisement-videos"
-              onClick={onNavigate}
-              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
-                currentPath === "/advertisement-videos"
-                  ? "bg-brand text-white shadow-sm font-bold"
-                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-              }`}
-            >
-              <CornerDownRight
-                className={`h-3.5 w-3.5 shrink-0 ${
+              {/* Advertisement Videos */}
+              <Link
+                to="/advertisement-videos"
+                onClick={onNavigate}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
                   currentPath === "/advertisement-videos"
-                    ? "text-white stroke-[2.4]"
-                    : "text-muted-foreground"
+                    ? "bg-brand text-white shadow-sm font-bold"
+                    : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
                 }`}
-              />
-              <span className="truncate">Advertisement Videos</span>
-            </Link>
+              >
+                <CornerDownRight
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    currentPath === "/advertisement-videos"
+                      ? "text-white stroke-[2.4]"
+                      : "text-muted-foreground"
+                  }`}
+                />
+                <span className="truncate">Advertisement Videos</span>
+              </Link>
 
-            {/* Images Uploaded */}
-            <Link
-              to="/images-uploaded"
-              onClick={onNavigate}
-              className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
-                currentPath === "/images-uploaded"
-                  ? "bg-brand text-white shadow-sm font-bold"
-                  : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
-              }`}
-            >
-              <CornerDownRight
-                className={`h-3.5 w-3.5 shrink-0 ${
+              {/* Images Uploaded */}
+              <Link
+                to="/images-uploaded"
+                onClick={onNavigate}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
                   currentPath === "/images-uploaded"
-                    ? "text-white stroke-[2.4]"
-                    : "text-muted-foreground"
+                    ? "bg-brand text-white shadow-sm font-bold"
+                    : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
                 }`}
-              />
-              <span className="truncate">Images Uploaded</span>
-            </Link>
+              >
+                <CornerDownRight
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    currentPath === "/images-uploaded"
+                      ? "text-white stroke-[2.4]"
+                      : "text-muted-foreground"
+                  }`}
+                />
+                <span className="truncate">Images Uploaded</span>
+              </Link>
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* 11. Settings */}
+      {/* 11. Wallet Balance */}
+      <Link
+        to="/wallet-balance"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/wallet-balance"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <Wallet
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/wallet-balance" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">Wallet Balance</span>
+      </Link>
+
+      {/* 12. Withdrawal Balance */}
+      <Link
+        to="/withdrawal-balance"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/withdrawal-balance"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <ArrowDownToLine
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/withdrawal-balance" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">Withdrawal Balance</span>
+      </Link>
+
+      {/* 13. Settings */}
       <Link
         to="/settings"
         onClick={onNavigate}
@@ -544,7 +553,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
         <span className="truncate">Settings</span>
       </Link>
 
-      {/* 12. Help */}
+      {/* 14. Help */}
       <Link
         to="/help"
         onClick={onNavigate}
@@ -561,6 +570,16 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
         />
         <span className="truncate">Help</span>
       </Link>
+
+      {/* 15. Logout */}
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-foreground/80 transition-all hover:translate-x-0.5 hover:bg-destructive/10 hover:text-red-500"
+      >
+        <LogOut className="h-[18px] w-[18px] shrink-0 text-red-500" />
+        <span className="truncate">Logout</span>
+      </button>
     </nav>
   );
 }
