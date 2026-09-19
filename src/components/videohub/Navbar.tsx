@@ -17,6 +17,7 @@ import {
   Video as VideoIcon,
   Settings as SettingsIcon,
   TrendingUp,
+  LayoutDashboard,
 } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
@@ -774,6 +775,15 @@ export function Navbar({
 
                     {/* Menu items as required */}
                     <div className="py-1">
+                      <Link
+                        to="/dashboard"
+                        onClick={() => setProfileOpen(false)}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-foreground transition hover:bg-secondary"
+                      >
+                        <LayoutDashboard className="h-4 w-4 text-brand" />
+                        Dashboard
+                      </Link>
+
                       <Link
                         to="/profile"
                         onClick={() => setProfileOpen(false)}

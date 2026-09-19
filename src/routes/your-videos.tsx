@@ -10,38 +10,85 @@ import {
   Sparkles,
   CheckCircle2,
   ExternalLink,
+  Clapperboard,
+  Radio,
+  Tv,
+  Image as ImageIcon,
+  ArrowRight,
 } from "lucide-react";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
 import { allVideos } from "@/data/videos";
 import { useAuth } from "@/lib/auth-context";
+import { DashboardSummaryCards } from "@/components/videohub/DashboardSummaryCards";
 
 export const Route = createFileRoute("/your-videos")({
   head: () => ({
     meta: [
-      { title: "Your Videos — Channel Content — FaceTube" },
+      { title: "Your Videos — Channel Studio — FaceTube" },
       {
         name: "description",
         content:
-          "Manage your uploaded videos, track monetization revenue, and publish new content on FaceTube.",
+          "Manage Free Videos, Premium Videos, Short Videos, Live Streams, Ad Placements, and Uploaded Images on FaceTube.",
       },
     ],
   }),
   component: YourVideosPage,
 });
 
+const videoCategories = [
+  {
+    title: "Free Videos",
+    count: "14 Videos",
+    desc: "Public free-to-watch standard videos",
+    icon: Video,
+    color: "text-sky-400 bg-sky-500/10",
+    link: "/free-videos",
+  },
+  {
+    title: "Premium Videos",
+    count: "6 Videos",
+    desc: "Subscriber-gated & paywalled masterclasses",
+    icon: Sparkles,
+    color: "text-amber-400 bg-amber-500/10",
+    link: "/premium-videos",
+  },
+  {
+    title: "Short Videos",
+    count: "18 Shorts",
+    desc: "Vertical 9:16 reels with viral engagement",
+    icon: Clapperboard,
+    color: "text-brand bg-brand/10",
+    link: "/short-videos",
+  },
+  {
+    title: "Live Videos",
+    count: "3 Streams",
+    desc: "Live broadcasts, stream keys & superchats",
+    icon: Radio,
+    color: "text-emerald-400 bg-emerald-500/10",
+    link: "/live-videos",
+  },
+  {
+    title: "Advertisement Videos",
+    count: "5 Campaigns",
+    desc: "Brand deals, sponsor mid-rolls & spots",
+    icon: Tv,
+    color: "text-purple-400 bg-purple-500/10",
+    link: "/advertisement-videos",
+  },
+  {
+    title: "Images Uploaded",
+    count: "32 Assets",
+    desc: "Thumbnails, community art & banners",
+    icon: ImageIcon,
+    color: "text-teal-400 bg-teal-500/10",
+    link: "/images-uploaded",
+  },
+];
+
 function YourVideosPage() {
   const { user, profile } = useAuth();
-  const [activeTab, setActiveTab] = useState<"Uploads" | "Shorts" | "Live">("Uploads");
-
   const channelName = profile?.username || user?.email?.split("@")[0] || "Creator";
-  const channelVideos = allVideos.slice(0, 5).map((v, i) => ({
-    ...v,
-    revenue: ["$1,420.50", "$890.20", "$3,120.00", "$450.80", "$670.00"][i],
-    monetized: true,
-    visibility: "Public",
-    comments: [48, 12, 114, 29, 34][i],
-    likesPct: "98.4%",
-  }));
 
   return (
     <VideoHubLayout>
@@ -57,7 +104,7 @@ function YourVideosPage() {
                 Your Videos
               </h1>
               <p className="text-sm text-muted-foreground">
-                Channel content, analytics, and monetization management for {channelName}
+                Channel content hub, monetization metrics, and video categories for {channelName}
               </p>
             </div>
           </div>
@@ -71,127 +118,42 @@ function YourVideosPage() {
           </Link>
         </div>
 
-        {/* Stats Summary Bar */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-medium">Published Videos</span>
-              <Video className="h-4 w-4 text-brand" />
-            </div>
-            <p className="text-2xl font-black text-foreground mt-2">{channelVideos.length}</p>
-            <span className="text-[11px] text-emerald-500 font-semibold">100% active</span>
-          </div>
+        {/* Video Content Summary Cards */}
+        <DashboardSummaryCards filterCategory="videos" />
 
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-medium">Total Lifetime Views</span>
-              <Eye className="h-4 w-4 text-blue-500" />
-            </div>
-            <p className="text-2xl font-black text-foreground mt-2">4.8M</p>
-            <span className="text-[11px] text-emerald-500 font-semibold">+18.2% this month</span>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-medium">Est. Ads Earnings ($)</span>
-              <DollarSign className="h-4 w-4 text-amber-500" />
-            </div>
-            <p className="text-2xl font-black text-amber-500 mt-2">$6,551.50</p>
-            <span className="text-[11px] text-amber-500 font-semibold">70% revenue share</span>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-xs font-medium">Channel Status</span>
-              <Sparkles className="h-4 w-4 text-brand" />
-            </div>
-            <p className="text-sm font-bold text-foreground mt-3 flex items-center gap-1.5">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-              Verified Partner
-            </p>
-            <span className="text-[11px] text-muted-foreground">Good standing</span>
-          </div>
-        </div>
-
-        {/* Channel Videos Table / List */}
-        <div className="rounded-3xl border border-border bg-card overflow-hidden">
-          {/* Table Tabs */}
-          <div className="flex items-center gap-2 border-b border-border px-5 py-3 bg-secondary/30">
-            {(["Uploads", "Shorts", "Live"] as const).map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={`rounded-full px-4 py-1.5 text-xs font-bold transition ${
-                  activeTab === tab
-                    ? "bg-brand text-white shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          <div className="divide-y divide-border overflow-x-auto">
-            {channelVideos.map((item) => (
-              <div
-                key={item.id}
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 hover:bg-secondary/20 transition"
-              >
-                {/* Thumbnail + Title */}
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="relative shrink-0 w-32 aspect-video rounded-xl overflow-hidden bg-black">
-                    <img src={item.thumb} alt={item.title} className="h-full w-full object-cover" />
-                    <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 py-0.5 text-[9px] font-bold text-white">
-                      {item.duration}
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <Link
-                      to="/watch/$videoId"
-                      params={{ videoId: item.id }}
-                      className="text-xs sm:text-sm font-bold text-foreground hover:text-brand transition-colors line-clamp-1 flex items-center gap-1.5"
+        {/* 6 Video Subcategory Hubs */}
+        <div className="space-y-3 pt-2">
+          <h2 className="text-base font-extrabold text-foreground">Content Categories</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {videoCategories.map((cat) => {
+              const Icon = cat.icon;
+              return (
+                <Link
+                  key={cat.title}
+                  to={cat.link}
+                  className="group block rounded-2xl border border-border bg-card p-5 shadow-card transition-all duration-200 hover:-translate-y-1 hover:border-brand/40 hover:shadow-lift"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div
+                      className={`grid h-11 w-11 place-items-center rounded-xl transition-transform group-hover:scale-105 ${cat.color}`}
                     >
-                      {item.title}
-                      <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
-                    </Link>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
-                      Uploaded {item.age} · Category: {item.category}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-500 flex items-center gap-1">
-                        <DollarSign className="h-3 w-3" />
-                        Monetized ({item.revenue})
-                      </span>
-                      <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                        {item.visibility}
-                      </span>
+                      <Icon className="h-5 w-5" />
                     </div>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary px-2.5 py-0.5 text-[11px] font-bold text-foreground">
+                      {cat.count}
+                      <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                    </span>
                   </div>
-                </div>
 
-                {/* Metrics */}
-                <div className="flex items-center gap-6 text-xs text-muted-foreground shrink-0 pl-3 sm:pl-0">
-                  <div className="text-right">
-                    <span className="block font-bold text-foreground">{item.views}</span>
-                    <span className="text-[10px]">views</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="block font-bold text-foreground">{item.likesPct}</span>
-                    <span className="text-[10px] flex items-center gap-1 justify-end">
-                      <ThumbsUp className="h-2.5 w-2.5" /> likes
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="block font-bold text-foreground">{item.comments}</span>
-                    <span className="text-[10px] flex items-center gap-1 justify-end">
-                      <MessageSquare className="h-2.5 w-2.5" /> comments
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
+                  <h3 className="text-base font-extrabold text-foreground group-hover:text-brand transition-colors">
+                    {cat.title}
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                    {cat.desc}
+                  </p>
+                </Link>
+              );
+            })}
           </div>
         </div>
       </div>
