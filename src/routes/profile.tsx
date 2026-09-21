@@ -23,6 +23,8 @@ import {
   ListVideo,
   X,
   Check,
+  Landmark,
+  Link2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/videohub/Logo";
@@ -31,6 +33,9 @@ import { BottomNav } from "@/components/videohub/BottomNav";
 import { useAuth } from "@/lib/auth-context";
 import { recommended, recent, type Video as VideoType } from "@/data/videos";
 import { SHORTS_LIST } from "@/data/shorts";
+import { PersonalKycTab } from "@/components/profile/PersonalKycTab";
+import { BankKycTab } from "@/components/profile/BankKycTab";
+import { ReferralLinkTab } from "@/components/profile/ReferralLinkTab";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -46,17 +51,40 @@ export const Route = createFileRoute("/profile")({
   component: ProfilePage,
 });
 
+type ProfileTabType = "personal-kyc" | "bank-kyc" | "referral-link";
+
 function ProfilePage() {
-  const { user, profile, role: _role, isAdmin, signOut, signIn, allUsers } = useAuth();
+  const { user, profile, dbUser, role: _role, isAdmin, signOut, signIn, allUsers } = useAuth();
   const [demoSwitchOpen, setDemoSwitchOpen] = useState(false);
+  const [profileTab, setProfileTab] = useState<ProfileTabType>("personal-kyc");
   const [activeTab, setActiveTab] = useState<"videos" | "shorts" | "playlists">("videos");
   const [editProfileOpen, setEditProfileOpen] = useState(false);
 
+  const userMeta = user?.user_metadata as Record<string, unknown> | undefined;
+  const currentUserId =
+    profile?.user_id ||
+    dbUser?.user_id ||
+    (typeof userMeta?.user_id === "string" ? userMeta.user_id : "") ||
+    "FT483921";
+  const currentFullName =
+    profile?.full_name ||
+    profile?.name ||
+    dbUser?.name ||
+    (typeof userMeta?.name === "string" ? userMeta.name : "") ||
+    "Alex Rivera";
+  const currentMobile =
+    profile?.mobile ||
+    dbUser?.mobile ||
+    (typeof userMeta?.mobile === "string" ? userMeta.mobile : "") ||
+    "+1 555-014-8392";
+
   // Editable Profile State
   const [channelName, setChannelName] = useState(
-    profile?.full_name || profile?.username || "Aria Studio",
+    profile?.full_name || profile?.name || dbUser?.name || "Alex Rivera",
   );
-  const [channelHandle, setChannelHandle] = useState(profile?.username || "ariakapoor");
+  const [channelHandle, setChannelHandle] = useState(
+    profile?.username || currentUserId.toLowerCase(),
+  );
   const [channelBio, setChannelBio] = useState(
     "Building full-stack web applications, modern UI kits, and sharing creative tutorials weekly.",
   );
@@ -194,11 +222,9 @@ function ProfilePage() {
                   <span>
                     @{channelHandle} · {user ? user.email : "creator@facetube.app"}
                   </span>
-                  {profile?.user_id && (
-                    <span className="font-mono font-bold text-brand bg-brand/10 px-2 py-0.5 rounded-md border border-brand/20">
-                      ID: {profile.user_id}
-                    </span>
-                  )}
+                  <span className="font-mono font-bold text-brand bg-brand/10 px-2 py-0.5 rounded-md border border-brand/20">
+                    ID: {currentUserId}
+                  </span>
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   <span>
@@ -336,8 +362,78 @@ function ProfilePage() {
           </div>
         </section>
 
-        {/* Profile Tabs: Videos | Shorts | Playlists */}
+        {/* Profile Tabs & Sections: 1. Personal KYC, 2. Bank KYC, 3. Referral Link */}
         <section className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 w-full sm:w-auto">
+              {(
+                [
+                  {
+                    id: "personal-kyc" as const,
+                    label: "Personal KYC",
+                    icon: User,
+                    emoji: "👤",
+                  },
+                  { id: "bank-kyc" as const, label: "Bank KYC", icon: Landmark, emoji: "🏦" },
+                  {
+                    id: "referral-link" as const,
+                    label: "Referral Link",
+                    icon: Link2,
+                    emoji: "🔗",
+                  },
+                ] as const
+              ).map((tab) => {
+                const Icon = tab.icon;
+                const isActive = profileTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setProfileTab(tab.id)}
+                    className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition whitespace-nowrap cursor-pointer ${
+                      isActive
+                        ? "bg-brand text-white shadow-lift ring-2 ring-brand/30"
+                        : "bg-secondary/60 text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    <span>{tab.emoji}</span>
+                    <Icon className="h-4 w-4" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <span className="text-[11px] text-muted-foreground font-medium hidden sm:inline">
+              Account Management & Verification
+            </span>
+          </div>
+
+          {/* Active Tab View */}
+          {profileTab === "personal-kyc" && (
+            <PersonalKycTab
+              userId={currentUserId}
+              defaultFullName={currentFullName}
+              defaultMobile={currentMobile}
+            />
+          )}
+
+          {profileTab === "bank-kyc" && (
+            <BankKycTab userId={currentUserId} defaultFullName={currentFullName} />
+          )}
+
+          {profileTab === "referral-link" && (
+            <ReferralLinkTab userId={currentUserId} userName={channelName} />
+          )}
+        </section>
+
+        {/* Channel Content Library: Videos | Shorts | Playlists */}
+        <section className="space-y-4 pt-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              Channel Media & Playlists
+            </h2>
+          </div>
           <div className="flex border-b border-border">
             {(
               [
