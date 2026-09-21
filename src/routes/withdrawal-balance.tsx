@@ -17,7 +17,8 @@ export const Route = createFileRoute("/withdrawal-balance")({
       { title: "Withdrawal Balance — FaceTube" },
       {
         name: "description",
-        content: "Track your FaceTube payout history, completed bank transfers, and withdrawal receipts.",
+        content:
+          "Track your FaceTube payout history, completed bank transfers, and withdrawal receipts.",
       },
     ],
   }),

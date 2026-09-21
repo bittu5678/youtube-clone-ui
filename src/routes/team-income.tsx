@@ -23,7 +23,8 @@ export const Route = createFileRoute("/team-income")({
       { title: "Team Income — FaceTube" },
       {
         name: "description",
-        content: "Track your multi-tier creator team overrides, downline volume bonuses, and team earnings on FaceTube.",
+        content:
+          "Track your multi-tier creator team overrides, downline volume bonuses, and team earnings on FaceTube.",
       },
     ],
   }),
@@ -196,17 +197,14 @@ function TeamIncomePage() {
                 <Award className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-foreground">
-                  Ambassador Rank Pool Bonus
-                </h3>
+                <h3 className="text-sm font-bold text-foreground">Ambassador Rank Pool Bonus</h3>
                 <p className="text-xs text-muted-foreground">
-                  Reach $50,000 monthly team volume to participate in the 2% Global Creator Bonus Pool.
+                  Reach $50,000 monthly team volume to participate in the 2% Global Creator Bonus
+                  Pool.
                 </p>
               </div>
             </div>
-            <div className="text-xs font-bold text-amber-400 shrink-0">
-              $34,490 / $50,000
-            </div>
+            <div className="text-xs font-bold text-amber-400 shrink-0">$34,490 / $50,000</div>
           </div>
 
           {/* Progress bar */}

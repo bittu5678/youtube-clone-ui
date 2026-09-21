@@ -7,13 +7,12 @@ import {
   Layers,
   Award,
   Search,
-  Filter,
   DollarSign,
   ArrowUpRight,
-  ChevronRight,
-  Shield,
+  ShieldCheck,
 } from "lucide-react";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
+import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute("/team-members")({
   head: () => ({
@@ -21,7 +20,8 @@ export const Route = createFileRoute("/team-members")({
       { title: "Team Members — FaceTube" },
       {
         name: "description",
-        content: "Manage your FaceTube creator network, team hierarchy, and multi-tier team members.",
+        content:
+          "Manage your FaceTube creator network, team hierarchy, and multi-tier team members.",
       },
     ],
   }),
@@ -38,6 +38,7 @@ interface TeamMember {
   teamSize: number;
   monthlyVolume: string;
   status: "Active" | "Inactive";
+  access: "Granted" | "Restricted";
 }
 
 const mockTeamMembers: TeamMember[] = [
@@ -51,6 +52,7 @@ const mockTeamMembers: TeamMember[] = [
     teamSize: 38,
     monthlyVolume: "$12,400",
     status: "Active",
+    access: "Granted",
   },
   {
     id: "tm-2",
@@ -62,6 +64,7 @@ const mockTeamMembers: TeamMember[] = [
     teamSize: 14,
     monthlyVolume: "$6,850",
     status: "Active",
+    access: "Granted",
   },
   {
     id: "tm-3",
@@ -73,6 +76,7 @@ const mockTeamMembers: TeamMember[] = [
     teamSize: 22,
     monthlyVolume: "$9,200",
     status: "Active",
+    access: "Granted",
   },
   {
     id: "tm-4",
@@ -84,6 +88,7 @@ const mockTeamMembers: TeamMember[] = [
     teamSize: 9,
     monthlyVolume: "$3,400",
     status: "Active",
+    access: "Granted",
   },
   {
     id: "tm-5",
@@ -95,6 +100,7 @@ const mockTeamMembers: TeamMember[] = [
     teamSize: 4,
     monthlyVolume: "$1,890",
     status: "Active",
+    access: "Restricted",
   },
   {
     id: "tm-6",
@@ -106,14 +112,24 @@ const mockTeamMembers: TeamMember[] = [
     teamSize: 2,
     monthlyVolume: "$750",
     status: "Active",
+    access: "Granted",
   },
 ];
 
 function TeamMembersPage() {
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(mockTeamMembers);
   const [selectedLevel, setSelectedLevel] = useState<number | "All">("All");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filteredTeam = mockTeamMembers.filter((m) => {
+  const toggleAccess = (memberId: string) => {
+    setTeamMembers((prev) =>
+      prev.map((m) =>
+        m.id === memberId ? { ...m, access: m.access === "Granted" ? "Restricted" : "Granted" } : m,
+      ),
+    );
+  };
+
+  const filteredTeam = teamMembers.filter((m) => {
     const matchesLevel = selectedLevel === "All" || m.level === selectedLevel;
     const matchesSearch =
       m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -227,18 +243,26 @@ function TeamMembersPage() {
             <table className="w-full text-left text-xs">
               <thead className="border-b border-border bg-secondary/40 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3">Member</th>
-                  <th className="px-4 py-3">User ID</th>
-                  <th className="px-4 py-3">Level</th>
-                  <th className="px-4 py-3">Direct Sponsor</th>
-                  <th className="px-4 py-3">Rank</th>
-                  <th className="px-4 py-3">Downline Team</th>
-                  <th className="px-4 py-3 text-right">Monthly Volume</th>
+                  <th className="px-4 py-3 text-center w-12 whitespace-nowrap">S.No.</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Member</th>
+                  <th className="px-4 py-3 whitespace-nowrap">User ID</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Level</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Direct Sponsor</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Rank</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Downline Team</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Monthly Volume</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Access</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredTeam.map((m) => (
+                {filteredTeam.map((m, index) => (
                   <tr key={m.id} className="transition hover:bg-secondary/20">
+                    {/* S.No. (auto-generated 1,2,3...) */}
+                    <td className="px-4 py-3.5 text-center font-mono text-xs font-semibold text-muted-foreground">
+                      {index + 1}
+                    </td>
+
+                    {/* Member */}
                     <td className="px-4 py-3.5 font-bold text-foreground">
                       <div className="flex items-center gap-2.5">
                         <div className="grid h-7 w-7 place-items-center rounded-full bg-secondary text-[11px] font-bold text-foreground">
@@ -247,29 +271,70 @@ function TeamMembersPage() {
                         {m.name}
                       </div>
                     </td>
+
+                    {/* User ID */}
                     <td className="px-4 py-3.5 font-mono text-[11px] font-bold text-rose-400">
                       {m.userId}
                     </td>
+
+                    {/* Level */}
                     <td className="px-4 py-3.5">
                       <span className="inline-flex items-center rounded-md bg-secondary px-2 py-0.5 font-bold text-foreground text-[10px]">
                         Level {m.level}
                       </span>
                     </td>
+
+                    {/* Direct Sponsor */}
                     <td className="px-4 py-3.5 text-muted-foreground">{m.sponsor}</td>
+
+                    {/* Rank */}
                     <td className="px-4 py-3.5">
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400">
                         <Award className="h-3 w-3" />
                         {m.rank}
                       </span>
                     </td>
+
+                    {/* Downline Team */}
                     <td className="px-4 py-3.5 text-muted-foreground font-semibold">
                       {m.teamSize} creators
                     </td>
-                    <td className="px-4 py-3.5 text-right font-bold text-emerald-400">
+
+                    {/* Monthly Volume */}
+                    <td className="px-4 py-3.5 text-right font-bold text-emerald-400 font-mono text-xs">
                       {m.monthlyVolume}
+                    </td>
+
+                    {/* Access (immediately after Monthly Volume) */}
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={m.access === "Granted"}
+                          onCheckedChange={() => toggleAccess(m.id)}
+                          aria-label={`Toggle access for ${m.name}`}
+                          className="data-[state=checked]:bg-emerald-600"
+                        />
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            m.access === "Granted"
+                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                          }`}
+                        >
+                          <ShieldCheck className="h-3 w-3" />
+                          {m.access}
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 ))}
+                {filteredTeam.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
+                      No team members found matching your search.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

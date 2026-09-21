@@ -12,9 +12,13 @@ import {
   CheckCircle2,
   Clock,
   ArrowUpRight,
+  Phone,
+  MessageCircle,
+  ShieldCheck,
 } from "lucide-react";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
 import { useAuth } from "@/lib/auth-context";
+import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute("/referral-members")({
   head: () => ({
@@ -22,7 +26,8 @@ export const Route = createFileRoute("/referral-members")({
       { title: "Referral Members — FaceTube" },
       {
         name: "description",
-        content: "View your direct referral members, invite link, and referral commission history on FaceTube.",
+        content:
+          "View your direct referral members, invite link, and referral commission history on FaceTube.",
       },
     ],
   }),
@@ -34,11 +39,13 @@ interface ReferralMember {
   userId: string;
   name: string;
   email: string;
+  mobile: string;
   joinedAt: string;
   status: "Active" | "Pending";
   tier: string;
   earnings: string;
   videosCount: number;
+  access: "Granted" | "Restricted";
 }
 
 const mockReferrals: ReferralMember[] = [
@@ -47,73 +54,97 @@ const mockReferrals: ReferralMember[] = [
     userId: "FT928412",
     name: "Alex Rivera",
     email: "alex.rivera@example.com",
+    mobile: "+1 555-014-8392",
     joinedAt: "Today, 11:20 AM",
     status: "Active",
     tier: "Creator Pro",
     earnings: "$184.50",
     videosCount: 14,
+    access: "Granted",
   },
   {
     id: "ref-2",
     userId: "FT810492",
     name: "Samantha Chen",
     email: "sam.chen@example.com",
+    mobile: "+1 555-018-9201",
     joinedAt: "Yesterday",
     status: "Active",
     tier: "Creator",
     earnings: "$92.00",
     videosCount: 8,
+    access: "Granted",
   },
   {
     id: "ref-3",
     userId: "FT748190",
     name: "Marcus Vance",
     email: "m.vance@example.com",
+    mobile: "+1 555-017-4819",
     joinedAt: "3 days ago",
     status: "Active",
     tier: "Creator Pro",
     earnings: "$310.80",
     videosCount: 29,
+    access: "Granted",
   },
   {
     id: "ref-4",
     userId: "FT619024",
     name: "Elena Rostova",
     email: "elena.r@example.com",
+    mobile: "+1 555-016-1902",
     joinedAt: "5 days ago",
     status: "Active",
     tier: "Creator",
     earnings: "$64.20",
     videosCount: 5,
+    access: "Granted",
   },
   {
     id: "ref-5",
     userId: "FT582019",
     name: "Devon Brooks",
     email: "d.brooks@example.com",
+    mobile: "+1 555-015-8201",
     joinedAt: "1 week ago",
     status: "Pending",
     tier: "Free",
     earnings: "$0.00",
     videosCount: 1,
+    access: "Restricted",
   },
   {
     id: "ref-6",
     userId: "FT419820",
     name: "Priya Sharma",
     email: "priya.s@example.com",
+    mobile: "+91 98765 43210",
     joinedAt: "2 weeks ago",
     status: "Active",
     tier: "Creator Pro",
     earnings: "$428.00",
     videosCount: 42,
+    access: "Granted",
   },
 ];
+
+function getTelUrl(mobile: string): string {
+  const hasPlus = mobile.trim().startsWith("+");
+  const digits = mobile.replace(/\D/g, "");
+  return `tel:${hasPlus ? "+" : ""}${digits}`;
+}
+
+function getWaUrl(mobile: string): string {
+  const digits = mobile.replace(/\D/g, "");
+  return `https://wa.me/${digits}`;
+}
 
 function ReferralMembersPage() {
   const { profile } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [copied, setCopied] = useState(false);
+  const [members, setMembers] = useState<ReferralMember[]>(mockReferrals);
 
   const referralCode = profile?.user_id || "FT610200";
   const referralLink = `https://facetube.app/register?ref=${referralCode}`;
@@ -124,11 +155,20 @@ function ReferralMembersPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const filteredMembers = mockReferrals.filter(
+  const toggleAccess = (memberId: string) => {
+    setMembers((prev) =>
+      prev.map((m) =>
+        m.id === memberId ? { ...m, access: m.access === "Granted" ? "Restricted" : "Granted" } : m,
+      ),
+    );
+  };
+
+  const filteredMembers = members.filter(
     (m) =>
       m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       m.userId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.email.toLowerCase().includes(searchTerm.toLowerCase()),
+      m.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.mobile.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -168,10 +208,13 @@ function ReferralMembersPage() {
                 <span className="inline-flex items-center gap-1 rounded-md bg-brand/20 px-2 py-0.5 text-[11px] font-bold text-brand uppercase tracking-wider">
                   Your Referral Link
                 </span>
-                <span className="text-xs text-muted-foreground">Code: <strong className="text-foreground">{referralCode}</strong></span>
+                <span className="text-xs text-muted-foreground">
+                  Code: <strong className="text-foreground">{referralCode}</strong>
+                </span>
               </div>
               <p className="text-sm font-semibold text-foreground">
-                Share your link to earn 10% direct commissions on all member ad revenue & subscriptions.
+                Share your link to earn 10% direct commissions on all member ad revenue &
+                subscriptions.
               </p>
             </div>
 
@@ -183,9 +226,7 @@ function ReferralMembersPage() {
                 type="button"
                 onClick={handleCopyLink}
                 className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition shadow-sm shrink-0 ${
-                  copied
-                    ? "bg-emerald-600 text-white"
-                    : "bg-brand text-white hover:bg-brand-dark"
+                  copied ? "bg-emerald-600 text-white" : "bg-brand text-white hover:bg-brand-dark"
                 }`}
               >
                 {copied ? (
@@ -238,7 +279,7 @@ function ReferralMembersPage() {
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search by name, User ID, or email..."
+              placeholder="Search by name, User ID, email, or mobile..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full rounded-xl border border-border bg-card pl-10 pr-4 py-2 text-xs font-medium text-foreground placeholder:text-muted-foreground/60 focus:border-brand focus:outline-none"
@@ -255,17 +296,26 @@ function ReferralMembersPage() {
             <table className="w-full text-left text-xs">
               <thead className="border-b border-border bg-secondary/40 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3">Member</th>
-                  <th className="px-4 py-3">User ID</th>
-                  <th className="px-4 py-3">Joined</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Videos</th>
-                  <th className="px-4 py-3 text-right">Commission Earned</th>
+                  <th className="px-4 py-3 text-center w-12 whitespace-nowrap">S.No.</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Member</th>
+                  <th className="px-4 py-3 whitespace-nowrap">User ID</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Mobile Number</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Joined</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Status</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Videos</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Commission Earned</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Access</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredMembers.map((member) => (
+                {filteredMembers.map((member, index) => (
                   <tr key={member.id} className="transition hover:bg-secondary/20">
+                    {/* S.No. */}
+                    <td className="px-4 py-3.5 text-center font-mono text-xs font-semibold text-muted-foreground">
+                      {index + 1}
+                    </td>
+
+                    {/* Member */}
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-3">
                         <div className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 font-bold text-brand">
@@ -277,11 +327,48 @@ function ReferralMembersPage() {
                         </div>
                       </div>
                     </td>
+
+                    {/* User ID */}
                     <td className="px-4 py-3.5 font-mono text-[11px] font-bold text-rose-400">
                       {member.userId}
                     </td>
-                    <td className="px-4 py-3.5 text-muted-foreground">{member.joinedAt}</td>
-                    <td className="px-4 py-3.5">
+
+                    {/* Mobile Number with Call & WhatsApp */}
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-medium text-foreground">
+                          {member.mobile}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <a
+                            href={getTelUrl(member.mobile)}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-secondary/60 text-foreground transition hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400 active:scale-95"
+                            title={`Call ${member.name} (${member.mobile})`}
+                            aria-label={`Call ${member.name}`}
+                          >
+                            <Phone className="h-3.5 w-3.5" />
+                          </a>
+                          <a
+                            href={getWaUrl(member.mobile)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-secondary/60 text-emerald-400 transition hover:border-emerald-500/40 hover:bg-emerald-500/15 hover:text-emerald-300 active:scale-95"
+                            title={`WhatsApp chat with ${member.name}`}
+                            aria-label={`WhatsApp chat with ${member.name}`}
+                          >
+                            <MessageCircle className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Joined */}
+                    <td className="px-4 py-3.5 text-muted-foreground whitespace-nowrap">
+                      {member.joinedAt}
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-4 py-3.5 whitespace-nowrap">
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
                           member.status === "Active"
@@ -297,14 +384,47 @@ function ReferralMembersPage() {
                         {member.status}
                       </span>
                     </td>
+
+                    {/* Videos */}
                     <td className="px-4 py-3.5 font-semibold text-foreground">
                       {member.videosCount}
                     </td>
-                    <td className="px-4 py-3.5 text-right font-bold text-emerald-400">
+
+                    {/* Commission Earned */}
+                    <td className="px-4 py-3.5 text-right font-bold text-emerald-400 whitespace-nowrap font-mono text-xs sm:text-sm">
                       {member.earnings}
+                    </td>
+
+                    {/* Access (immediately after Commission Earned) */}
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={member.access === "Granted"}
+                          onCheckedChange={() => toggleAccess(member.id)}
+                          aria-label={`Toggle access for ${member.name}`}
+                          className="data-[state=checked]:bg-emerald-600"
+                        />
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            member.access === "Granted"
+                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                              : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                          }`}
+                        >
+                          <ShieldCheck className="h-3 w-3" />
+                          {member.access}
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 ))}
+                {filteredMembers.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
+                      No referral members found matching &quot;{searchTerm}&quot;.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

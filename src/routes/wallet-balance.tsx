@@ -18,7 +18,8 @@ export const Route = createFileRoute("/wallet-balance")({
       { title: "Wallet Balance — FaceTube" },
       {
         name: "description",
-        content: "View your available FaceTube creator wallet balance, payout methods, and transfer funds.",
+        content:
+          "View your available FaceTube creator wallet balance, payout methods, and transfer funds.",
       },
     ],
   }),
