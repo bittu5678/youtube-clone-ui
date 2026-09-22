@@ -74,6 +74,34 @@ function welcomeEmailDevPlugin(): Plugin {
           }
         });
       });
+
+      server.middlewares.use("/api/send-certificate-email", async (req, res) => {
+        if (req.method !== "POST") {
+          res.statusCode = 405;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ success: false, error: "Method Not Allowed" }));
+          return;
+        }
+        let body = "";
+        req.on("data", (chunk) => {
+          body += chunk;
+        });
+        req.on("end", async () => {
+          try {
+            const payload = JSON.parse(body || "{}");
+            const { sendCertificateEmailServer } = await import("./src/server/email");
+            const result = await sendCertificateEmailServer(payload);
+            res.setHeader("Content-Type", "application/json");
+            res.statusCode = result.success ? 200 : 500;
+            res.end(JSON.stringify(result));
+          } catch (err: unknown) {
+            console.error("[Certificate Email Dev Server Error]", err);
+            res.setHeader("Content-Type", "application/json");
+            res.statusCode = 500;
+            res.end(JSON.stringify({ success: false, error: "Email delivery failed" }));
+          }
+        });
+      });
     },
   };
 }

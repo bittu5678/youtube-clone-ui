@@ -17,6 +17,8 @@ import {
   X,
   ArrowDownToLine,
   LogOut,
+  Megaphone,
+  ScrollText,
 } from "lucide-react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
@@ -533,6 +535,42 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           }`}
         />
         <span className="truncate">Withdrawal Balance</span>
+      </Link>
+
+      {/* Ads Promotions */}
+      <Link
+        to="/ads-promotions"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/ads-promotions"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <Megaphone
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/ads-promotions" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">📢 Ads Promotions</span>
+      </Link>
+
+      {/* My Certificate */}
+      <Link
+        to="/my-certificate"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          currentPath === "/my-certificate"
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <ScrollText
+          className={`h-[18px] w-[18px] shrink-0 ${
+            currentPath === "/my-certificate" ? "text-white stroke-[2.4]" : ""
+          }`}
+        />
+        <span className="truncate">📜 My Certificate</span>
       </Link>
 
       {/* 13. Settings */}

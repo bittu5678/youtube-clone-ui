@@ -443,3 +443,220 @@ export async function sendWelcomeEmailServer(
     };
   }
 }
+
+export interface CertificateEmailPayload {
+  userName: string;
+  userId: string;
+  email: string;
+  rank: string;
+  subscribers: string;
+  certificateId: string;
+  issueDate: string;
+  pdfBase64?: string;
+  reason?: string;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpHost?: string;
+  smtpPort?: number | string;
+  smtpSecure?: boolean | string;
+  smtpFrom?: string;
+}
+
+export function generateCertificateEmailText(payload: CertificateEmailPayload): string {
+  return `Hello ${payload.userName},
+
+Congratulations! Your official FaceTube Digital Certificate of Creator Excellence has been issued.
+
+Certificate Details:
+------------------------------------------
+• User Name: ${payload.userName}
+• FT User ID: ${payload.userId}
+• Creator Rank Achieved: ${payload.rank}
+• Subscriber Milestone: ${payload.subscribers}
+• Certificate ID: ${payload.certificateId}
+• Issue Date: ${payload.issueDate}
+• Authorized By: FaceTube Global Creator Board
+------------------------------------------
+
+You can access and verify your certificate directly at:
+https://youtube-clone-ui-8qmb.vercel.app/my-certificate
+
+Keep creating, inspiring, and growing on FaceTube!
+
+Best regards,
+FaceTube Creator Governance Board`;
+}
+
+export function generateCertificateEmailHtml(payload: CertificateEmailPayload): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FaceTube Creator Certificate</title>
+</head>
+<body style="margin:0;padding:0;background-color:#090a0f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#ffffff;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#090a0f;padding:40px 15px;">
+    <tr>
+      <td align="center">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:#12131a;border:1px solid #27272a;border-radius:20px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.6);">
+          <!-- Gold & Red Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#e11d48 0%,#be123c 50%,#b45309 100%);padding:32px 36px;text-align:left;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <span style="display:inline-block;font-size:26px;font-weight:900;letter-spacing:-0.5px;color:#ffffff;">Face<span style="color:#fef08a;">Tube</span></span>
+                    <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#fed7aa;margin-top:4px;">Official Creator Accreditation</div>
+                  </td>
+                  <td align="right">
+                    <span style="background:rgba(0,0,0,0.3);border:1px solid rgba(254,240,138,0.4);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:800;color:#fef08a;">
+                      ${payload.rank}
+                    </span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Certificate Announcement -->
+          <tr>
+            <td style="padding:36px 36px 20px 36px;">
+              <h1 style="margin:0 0 10px 0;font-size:24px;font-weight:800;color:#ffffff;letter-spacing:-0.3px;">
+                Congratulations, ${payload.userName}! 🎉
+              </h1>
+              <p style="margin:0 0 24px 0;font-size:15px;line-height:1.6;color:#a1a1aa;">
+                In recognition of your exceptional content creation, community engagement, and reaching the <strong style="color:#fef08a;">${payload.rank}</strong> milestone with <strong style="color:#ffffff;">${payload.subscribers}</strong>, FaceTube has officially issued your Digital Certificate of Creator Excellence.
+              </p>
+
+              <!-- Certificate Specs Box -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background:#181924;border:1px solid #2d2e3d;border-radius:14px;padding:20px;margin-bottom:24px;">
+                <tr>
+                  <td style="padding:8px 0;border-bottom:1px solid #272838;font-size:13px;color:#71717a;">Recipient</td>
+                  <td align="right" style="padding:8px 0;border-bottom:1px solid #272838;font-size:14px;font-weight:700;color:#ffffff;">${payload.userName}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;border-bottom:1px solid #272838;font-size:13px;color:#71717a;">FT User ID</td>
+                  <td align="right" style="padding:8px 0;border-bottom:1px solid #272838;font-size:13px;font-family:monospace;font-weight:700;color:#f43f5e;">${payload.userId}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;border-bottom:1px solid #272838;font-size:13px;color:#71717a;">Creator Rank</td>
+                  <td align="right" style="padding:8px 0;border-bottom:1px solid #272838;font-size:14px;font-weight:700;color:#f59e0b;">${payload.rank}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;border-bottom:1px solid #272838;font-size:13px;color:#71717a;">Subscribers</td>
+                  <td align="right" style="padding:8px 0;border-bottom:1px solid #272838;font-size:13px;font-weight:700;color:#ffffff;">${payload.subscribers}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;border-bottom:1px solid #272838;font-size:13px;color:#71717a;">Certificate ID</td>
+                  <td align="right" style="padding:8px 0;border-bottom:1px solid #272838;font-size:12px;font-family:monospace;color:#94a3b8;">${payload.certificateId}</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0;font-size:13px;color:#71717a;">Issue Date</td>
+                  <td align="right" style="padding:8px 0;font-size:13px;font-weight:600;color:#ffffff;">${payload.issueDate}</td>
+                </tr>
+              </table>
+
+              <!-- Call to Action -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center" style="padding:10px 0 24px 0;">
+                    <a href="https://youtube-clone-ui-8qmb.vercel.app/my-certificate" style="display:inline-block;background:#e11d48;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:14px 32px;border-radius:12px;box-shadow:0 8px 20px rgba(225,29,72,0.35);">
+                      View & Print Certificate Online →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0;font-size:12px;line-height:1.5;color:#52525b;text-align:center;">
+                This certificate has been cryptographically registered and authorized by the FaceTube Creator Governance Board.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#0c0d12;padding:20px 36px;border-top:1px solid #1f2029;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#71717a;">
+                © 2026 FaceTube Inc. · Creator Milestone Rewards Program · All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendCertificateEmailServer(
+  payload: CertificateEmailPayload,
+  envOverride?: Record<string, string | undefined>,
+): Promise<EmailDeliveryResult> {
+  const smtpConfig = resolveSmtpConfig(payload, envOverride);
+
+  const text = generateCertificateEmailText(payload);
+  const html = generateCertificateEmailHtml(payload);
+  const subject = `🏆 FaceTube Digital Certificate: ${payload.rank} Achieved (${payload.userName})`;
+
+  if (!smtpConfig.configured || !smtpConfig.user || !smtpConfig.pass) {
+    console.warn(
+      "[SMTP] Skipping physical dispatch — credentials not provided. Returning simulated success for live preview.",
+    );
+    return {
+      success: true,
+      provider: "none",
+      messageId: `simulated-cert-${Date.now()}`,
+    };
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      auth: {
+        user: smtpConfig.user,
+        pass: smtpConfig.pass,
+      },
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000,
+    });
+
+    const attachments: Array<{ filename: string; content: Buffer; contentType: string }> = [];
+    if (payload.pdfBase64) {
+      const cleanBase64 = payload.pdfBase64.replace(/^data:application\/pdf;base64,/, "");
+      attachments.push({
+        filename: `FaceTube_Certificate_${payload.userId}_${payload.certificateId}.pdf`,
+        content: Buffer.from(cleanBase64, "base64"),
+        contentType: "application/pdf",
+      });
+    }
+
+    const info = await transporter.sendMail({
+      from: smtpConfig.from,
+      to: payload.email,
+      subject,
+      text,
+      html,
+      attachments: attachments.length > 0 ? attachments : undefined,
+    });
+
+    console.info(
+      `[SMTP] Successfully delivered certificate email to ${payload.email}! Message ID: ${info.messageId}`,
+    );
+    return {
+      success: true,
+      provider: "smtp",
+      messageId: info.messageId,
+    };
+  } catch (err: unknown) {
+    console.error("[SMTP ERROR] Failed to deliver certificate email:", err);
+    return {
+      success: false,
+      provider: "smtp",
+      error: "Email delivery failed",
+    };
+  }
+}

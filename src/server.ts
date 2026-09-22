@@ -109,6 +109,32 @@ export default {
         }
       }
 
+      if (url.pathname === "/api/send-certificate-email" && request.method === "POST") {
+        try {
+          const payload = await request.json();
+          const { sendCertificateEmailServer } = await import("./server/email");
+          const result = await sendCertificateEmailServer(
+            payload,
+            env && typeof env === "object"
+              ? (env as Record<string, string | undefined>)
+              : undefined,
+          );
+          return new Response(JSON.stringify(result), {
+            status: result.success ? 200 : 500,
+            headers: { "content-type": "application/json" },
+          });
+        } catch (err: unknown) {
+          console.error("[SSR Server] Error handling send-certificate-email:", err);
+          return new Response(
+            JSON.stringify({ success: false, error: "Certificate email delivery failed" }),
+            {
+              status: 500,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
