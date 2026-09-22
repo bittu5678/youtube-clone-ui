@@ -184,11 +184,14 @@ export async function captureCertificatePdf(
   const pageWidth = pdf.internal.pageSize.getWidth(); // 210 mm
   const pageHeight = pdf.internal.pageSize.getHeight(); // 297 mm
 
+  // Fill entire A4 Portrait sheet with certificate dark palette (#0b0c13) to remove white margins & blank space
+  pdf.setFillColor(11, 12, 19); // #0b0c13
+  pdf.rect(0, 0, pageWidth, pageHeight, "F");
+
   // Margin calculation to ensure crisp placement without clipping
   const marginX = 10;
-  const marginY = 14;
   const maxContentWidth = pageWidth - marginX * 2; // 190 mm
-  const maxContentHeight = pageHeight - marginY * 2; // 269 mm
+  const maxContentHeight = pageHeight - 24; // 273 mm
 
   const aspectRatio = naturalHeight / naturalWidth;
   let renderWidth = maxContentWidth;
@@ -199,7 +202,7 @@ export async function captureCertificatePdf(
     renderWidth = renderHeight / aspectRatio;
   }
 
-  // Center horizontally and vertically on A4 Portrait page
+  // Center horizontally and vertically on the single A4 Portrait page
   const posX = (pageWidth - renderWidth) / 2;
   const posY = (pageHeight - renderHeight) / 2;
 
@@ -244,60 +247,139 @@ export async function captureCertificatePdf(
 }
 
 export function printCertificateElement(element: HTMLElement) {
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    window.print();
-    return;
-  }
-
+  // 1. Collect all active stylesheets
   const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
     .map((el) => el.outerHTML)
     .join("\n");
 
-  printWindow.document.write(`
+  // 2. Prepare hidden iframe for in-place printing (works across desktop and mobile browsers)
+  let printIframe = document.getElementById(
+    "facetube-cert-print-frame",
+  ) as HTMLIFrameElement | null;
+  if (printIframe) {
+    printIframe.remove();
+  }
+
+  printIframe = document.createElement("iframe");
+  printIframe.id = "facetube-cert-print-frame";
+  printIframe.setAttribute("aria-hidden", "true");
+  printIframe.style.position = "fixed";
+  printIframe.style.top = "-9999px";
+  printIframe.style.left = "-9999px";
+  printIframe.style.width = "0";
+  printIframe.style.height = "0";
+  printIframe.style.border = "none";
+  document.body.appendChild(printIframe);
+
+  const printDoc = printIframe.contentWindow?.document || printIframe.contentDocument;
+  if (!printDoc) {
+    window.print();
+    return;
+  }
+
+  // Generate self-contained print page strictly configured for ONE A4 Portrait page
+  printDoc.open();
+  printDoc.write(`
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
       <head>
-        <title>Print Certificate — FaceTube</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>FaceTube Digital Certificate</title>
         ${styles}
         <style>
           @page {
-            size: landscape;
+            size: A4 portrait;
             margin: 0;
           }
-          body {
-            margin: 0;
-            padding: 0;
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            box-sizing: border-box !important;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 210mm !important;
+            height: 297mm !important;
+            max-height: 297mm !important;
+            background-color: #0b0c11 !important;
             background: #0b0c11 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-before: avoid !important;
+            page-break-after: avoid !important;
+            break-before: avoid !important;
+            break-after: avoid !important;
+          }
+          .cert-print-page {
+            width: 210mm !important;
+            height: 297mm !important;
+            max-height: 297mm !important;
+            padding: 10mm !important;
+            margin: 0 auto !important;
+            box-sizing: border-box !important;
+            background-color: #0b0c11 !important;
+            background: #0b0c11 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            overflow: hidden !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+          }
+          #facetube-digital-certificate {
+            width: 190mm !important;
+            max-width: 190mm !important;
+            min-width: 190mm !important;
+            margin: 0 auto !important;
+            box-shadow: none !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-before: avoid !important;
+            page-break-after: avoid !important;
+            break-before: avoid !important;
+            break-after: avoid !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          .cert-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 100vw;
-            height: 100vh;
-            padding: 20px;
-            box-sizing: border-box;
+          .cert-metric-grid {
+            display: grid !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            gap: 12px !important;
+          }
+          .cert-footer-row {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: space-between !important;
           }
         </style>
       </head>
       <body>
-        <div class="cert-container">
+        <div class="cert-print-page">
           ${element.outerHTML}
         </div>
-        <script>
-          setTimeout(() => {
-            window.focus();
-            window.print();
-            window.close();
-          }, 600);
-        </script>
       </body>
     </html>
   `);
-  printWindow.document.close();
+  printDoc.close();
+
+  // Allow fonts & styles to settle, then invoke print
+  setTimeout(() => {
+    try {
+      printIframe?.contentWindow?.focus();
+      printIframe?.contentWindow?.print();
+    } catch (_printErr) {
+      window.print();
+    }
+  }, 450);
 }
 
 export async function sendCertificateEmailApi(payload: {
