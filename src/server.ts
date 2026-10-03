@@ -135,6 +135,152 @@ export default {
         }
       }
 
+      // Razorpay Payment Order Creation Route
+      if (url.pathname === "/api/payment/create-order" && request.method === "POST") {
+        try {
+          const payload = await request.json();
+          const { createServerPaymentOrder } = await import("./server/payments");
+          const result = createServerPaymentOrder(
+            payload,
+            env && typeof env === "object"
+              ? (env as Record<string, string | undefined>)
+              : undefined,
+          );
+          return new Response(JSON.stringify(result), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        } catch (err: unknown) {
+          console.error("[SSR Server] Error creating payment order:", err);
+          return new Response(JSON.stringify({ error: "Failed to create payment order" }), {
+            status: 500,
+            headers: { "content-type": "application/json" },
+          });
+        }
+      }
+
+      // Razorpay Payment Verification & Distribution Route
+      if (url.pathname === "/api/payment/verify" && request.method === "POST") {
+        try {
+          const payload = await request.json();
+          const { verifyServerPayment } = await import("./server/payments");
+          const result = await verifyServerPayment(
+            payload,
+            ["FT483921", "FT900431"], // Seed eligible creators
+            payload.referrerUserId || null,
+            env && typeof env === "object"
+              ? (env as Record<string, string | undefined>)
+              : undefined,
+          );
+          return new Response(JSON.stringify(result), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        } catch (err: unknown) {
+          console.error("[SSR Server] Error verifying payment:", err);
+          return new Response(
+            JSON.stringify({ verified: false, error: "Payment verification failed" }),
+            {
+              status: 500,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+      }
+
+      // Query Persistent Premium Transactions & Sequence
+      if (url.pathname === "/api/payment/transactions" && request.method === "GET") {
+        try {
+          const { getPersistentTransactions, getPersistentPremiumTxNumber } = await import(
+            "./server/payments"
+          );
+          const [lastTxNumber, transactions] = await Promise.all([
+            getPersistentPremiumTxNumber(),
+            getPersistentTransactions(),
+          ]);
+          return new Response(
+            JSON.stringify({
+              status: "ok",
+              lastTxNumber,
+              totalTransactions: transactions.length,
+              transactions,
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        } catch (err: unknown) {
+          return new Response(
+            JSON.stringify({ status: "error", error: "Failed to load transactions" }),
+            {
+              status: 500,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+      }
+
+      // Server-side Withdrawal Limits & Validation Route
+      if (url.pathname === "/api/wallet/withdraw" && request.method === "POST") {
+        try {
+          const payload = await request.json();
+          const amount = Number(payload.amount);
+          const userId = String(payload.userId || "")
+            .trim()
+            .toUpperCase();
+
+          if (!userId) {
+            return new Response(
+              JSON.stringify({ success: false, error: "User identity required" }),
+              {
+                status: 400,
+                headers: { "content-type": "application/json" },
+              },
+            );
+          }
+
+          if (isNaN(amount) || amount < 1000) {
+            return new Response(
+              JSON.stringify({
+                success: false,
+                error: "Minimum withdrawal amount is ₹1,000. You cannot withdraw less than ₹1,000.",
+              }),
+              { status: 400, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          if (amount > 10000) {
+            return new Response(
+              JSON.stringify({
+                success: false,
+                error:
+                  "Maximum daily withdrawal limit is ₹10,000. You cannot withdraw more than ₹10,000 per day.",
+              }),
+              { status: 400, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: `Withdrawal request for ₹${amount.toLocaleString("en-IN")} validated and approved.`,
+              amount,
+              userId,
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        } catch {
+          return new Response(
+            JSON.stringify({ success: false, error: "Withdrawal validation failed" }),
+            {
+              status: 500,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

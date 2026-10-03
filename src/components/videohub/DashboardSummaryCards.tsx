@@ -35,7 +35,7 @@ export const DASHBOARD_SUMMARY_DATA: SummaryCardItem[] = [
   // 1. Total Referrals
   {
     id: "total-referrals",
-    title: "Total Referrals",
+    title: "Direct Referrals",
     value: "24",
     subtitle: "Direct frontline members",
     icon: Users,
@@ -44,10 +44,10 @@ export const DASHBOARD_SUMMARY_DATA: SummaryCardItem[] = [
     trend: "+4 this week",
     isPositive: true,
   },
-  // 2. Total Team
+  // 2. Team Members (Updated label per requirement)
   {
     id: "total-team",
-    title: "Total Team",
+    title: "Team Members",
     value: "89",
     subtitle: "Across 5 network tiers",
     icon: Network,
@@ -221,11 +221,22 @@ export const DASHBOARD_SUMMARY_DATA: SummaryCardItem[] = [
 export function DashboardSummaryCards({
   filterCategory,
   limit,
+  dynamicOverrides,
 }: {
   filterCategory?: "all" | "income" | "videos" | "network";
   limit?: number;
+  dynamicOverrides?: Record<string, string>;
 }) {
   let cards = DASHBOARD_SUMMARY_DATA;
+
+  if (dynamicOverrides) {
+    cards = cards.map((c) => {
+      if (dynamicOverrides[c.id] !== undefined) {
+        return { ...c, value: dynamicOverrides[c.id] };
+      }
+      return c;
+    });
+  }
 
   if (filterCategory === "income") {
     cards = cards.filter((c) =>

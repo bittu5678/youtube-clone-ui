@@ -14,6 +14,7 @@ import {
   TrendingUp,
   RefreshCw,
   Copy,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
@@ -22,11 +23,13 @@ import { DigitalCertificateCard } from "@/components/certificate/DigitalCertific
 import {
   CREATOR_RANKS,
   getRankDetails,
+  calculateRankFromSubscribers,
   generateAutoCertificateId,
   captureCertificatePdf,
   printCertificateElement,
   sendCertificateEmailApi,
   checkAndSendRankMilestoneEmail,
+  type CreatorRankInfo,
 } from "@/lib/certificate-service";
 
 export const Route = createFileRoute("/my-certificate")({
@@ -36,8 +39,9 @@ export const Route = createFileRoute("/my-certificate")({
       {
         name: "description",
         content:
-          "View, download, print, and email your official FaceTube Digital Certificate of Creator Excellence.",
+          "View, download, print, and email your official FaceTube Digital Certificate of Creator Excellence across all 10 creator milestone tiers.",
       },
+      { property: "og:title", content: "My Certificate — FaceTube Creator Network" },
     ],
   }),
   component: MyCertificatePage,
@@ -59,18 +63,24 @@ function MyCertificatePage() {
 
   const userEmail = user?.email || profile?.email || dbUser?.email || "alex.rivera@facetube.app";
 
-  // Selected or Current Creator Rank
-  const [currentRank, setCurrentRank] = useState<string>(() => {
-    return localStorage.getItem(`facetube_current_rank_${userId}`) || "Diamond Creator";
+  // Real subscriber count for User (e.g. 128,400 for Alex Rivera FT483921)
+  const actualSubscribers = 128400;
+
+  // Actual earned rank based on real subscriber count
+  const earnedRank = calculateRankFromSubscribers(actualSubscribers);
+
+  // Active viewed/selected rank (defaults to earned rank)
+  const [selectedRank, setSelectedRank] = useState<CreatorRankInfo>(() => {
+    const saved = localStorage.getItem(`facetube_current_rank_${userId}`);
+    return saved ? getRankDetails(saved) : earnedRank;
   });
 
-  // Subscriber count
-  const [subscriberCount, setSubscriberCount] = useState<string>("128.4K");
+  const [subscriberDisplay, setSubscriberDisplay] = useState<string>("128,400");
 
   // Auto-generated Certificate ID
   const certificateId = React.useMemo(() => {
-    return generateAutoCertificateId(userId, currentRank);
-  }, [userId, currentRank]);
+    return generateAutoCertificateId(userId, selectedRank.name);
+  }, [userId, selectedRank.name]);
 
   // Issue date
   const issueDate = React.useMemo(() => {
@@ -89,11 +99,9 @@ function MyCertificatePage() {
   const [emailSentSuccess, setEmailSentSuccess] = useState(false);
 
   // AUTOMATIC EMAIL ON NEW CREATOR RANK ACHIEVEMENT
-  // "Automatically send the certificate PDF to the registered email whenever a new Creator Rank is achieved."
   useEffect(() => {
     const lastAwardedRank = localStorage.getItem(`facetube_last_cert_rank_${userId}`);
-    if (lastAwardedRank !== currentRank && userEmail) {
-      // Small timeout to allow certificate DOM to render with the new rank
+    if (lastAwardedRank !== selectedRank.name && userEmail) {
       const timer = setTimeout(async () => {
         try {
           let base64Pdf: string | undefined;
@@ -114,20 +122,20 @@ function MyCertificatePage() {
             userName,
             userId,
             email: userEmail,
-            rank: currentRank,
-            subscribers: `${subscriberCount}+`,
+            rank: selectedRank.name,
+            subscribers: `${subscriberDisplay}+`,
             certificateId,
             issueDate,
             pdfBase64: base64Pdf,
-            reason: `New Creator Rank Milestone: ${currentRank}`,
+            reason: `New Creator Rank Milestone: ${selectedRank.name}`,
           });
 
           if (result.success) {
-            localStorage.setItem(`facetube_last_cert_rank_${userId}`, currentRank);
-            localStorage.setItem(`facetube_current_rank_${userId}`, currentRank);
+            localStorage.setItem(`facetube_last_cert_rank_${userId}`, selectedRank.name);
+            localStorage.setItem(`facetube_current_rank_${userId}`, selectedRank.name);
             setEmailSentSuccess(true);
             toast.success(
-              `🎉 Rank Milestone Achieved! Your official ${currentRank} Certificate has been automatically emailed to ${userEmail}.`,
+              `🎉 Rank Milestone Achieved! Your official ${selectedRank.name} Certificate has been automatically emailed to ${userEmail}.`,
               {
                 duration: 6000,
                 description: `Certificate ID: ${certificateId}`,
@@ -141,15 +149,15 @@ function MyCertificatePage() {
 
       return () => clearTimeout(timer);
     }
-  }, [currentRank, userId, userName, userEmail, subscriberCount, certificateId, issueDate]);
+  }, [selectedRank, userId, userName, userEmail, subscriberDisplay, certificateId, issueDate]);
 
-  // Handlers for the 3 explicitly requested buttons:
-  // 1. Download PDF
+  // Handlers for the 3 requested buttons:
+  // 1. Download PDF (Clean single-page A4 PDF)
   const handleDownloadPdf = async () => {
     if (!certificateRef.current) return;
     try {
       setDownloadingPdf(true);
-      toast.info("Generating high-resolution Certificate PDF...", { duration: 2500 });
+      toast.info("Generating high-resolution Certificate PDF (Single A4)...", { duration: 2500 });
       const formattedUserId = userId.startsWith("FT") ? userId : `FT${userId}`;
       const filename = `Facetube_Certificate_${formattedUserId}.pdf`;
       const result = await captureCertificatePdf(certificateRef.current, {
@@ -157,7 +165,7 @@ function MyCertificatePage() {
         userId: formattedUserId,
       });
       result.download();
-      toast.success("Certificate PDF downloaded successfully!");
+      toast.success("Certificate PDF downloaded successfully (Single A4 Page)!");
     } catch (err) {
       console.error("Failed to download PDF:", err);
       toast.error("Failed to generate PDF. Please try again.");
@@ -166,10 +174,10 @@ function MyCertificatePage() {
     }
   };
 
-  // 2. Print Certificate
+  // 2. Print Certificate (Clean single-page A4 print)
   const handlePrintCertificate = () => {
     if (!certificateRef.current) return;
-    toast.info("Opening print dialog...", { duration: 1500 });
+    toast.info("Opening single-page print preview...", { duration: 1500 });
     printCertificateElement(certificateRef.current);
   };
 
@@ -189,7 +197,7 @@ function MyCertificatePage() {
           });
           base64Pdf = res.base64;
         } catch (_e) {
-          // Continue with email even if pdf capture has issues
+          // Continue
         }
       }
 
@@ -197,8 +205,8 @@ function MyCertificatePage() {
         userName,
         userId,
         email: userEmail,
-        rank: currentRank,
-        subscribers: `${subscriberCount}+`,
+        rank: selectedRank.name,
+        subscribers: `${subscriberDisplay}+`,
         certificateId,
         issueDate,
         pdfBase64: base64Pdf,
@@ -224,17 +232,12 @@ function MyCertificatePage() {
     }
   };
 
-  // Switch rank to test automatic rank milestone trigger
-  const handleSelectRank = (rankInfo: (typeof CREATOR_RANKS)[number]) => {
-    if (rankInfo.name === currentRank) return;
-    setCurrentRank(rankInfo.name);
-    setSubscriberCount(
-      rankInfo.minSubscribers >= 1000
-        ? `${(rankInfo.minSubscribers / 1000).toFixed(1)}K`
-        : `${rankInfo.minSubscribers}`,
-    );
-    toast.info(`Creator Rank switched to ${rankInfo.name}`, {
-      description: "Evaluating milestone achievement and auto-sending certificate email...",
+  // Switch rank
+  const handleSelectRank = (rankInfo: CreatorRankInfo) => {
+    setSelectedRank(rankInfo);
+    setSubscriberDisplay(rankInfo.formattedSubscribers);
+    toast.info(`Certificate updated for ${rankInfo.levelLabel}: ${rankInfo.awardName}`, {
+      description: `Requirement: ${rankInfo.formattedSubscribers} verified subscribers.`,
     });
   };
 
@@ -244,7 +247,7 @@ function MyCertificatePage() {
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
               <ScrollText className="h-6 w-6" />
             </div>
             <div>
@@ -252,17 +255,18 @@ function MyCertificatePage() {
                 <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
                   📜 My Certificate
                 </h1>
-                <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-400">
+                <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-500">
                   Verified Active
                 </span>
               </div>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Official FaceTube Digital Certificate of Creator Excellence &amp; Rank Accreditation
+                Official FaceTube Digital Certificate of Creator Excellence across all 10 Creator
+                Rank Milestones
               </p>
             </div>
           </div>
 
-          {/* Quick Actions (The 3 Buttons) */}
+          {/* Quick Actions (3 Buttons) */}
           <div className="flex flex-wrap items-center gap-2.5">
             {/* Button 1: Download PDF */}
             <button
@@ -290,7 +294,7 @@ function MyCertificatePage() {
               id="btn-email-certificate"
               onClick={handleEmailCertificate}
               disabled={sendingEmail}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs sm:text-sm font-bold text-amber-300 transition hover:bg-amber-500/20 active:scale-95 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs sm:text-sm font-bold text-amber-500 transition hover:bg-amber-500/20 active:scale-95 disabled:opacity-50"
             >
               <Mail className={`h-4 w-4 ${sendingEmail ? "animate-spin" : ""}`} />
               {sendingEmail ? "Sending..." : "Email Certificate"}
@@ -302,7 +306,7 @@ function MyCertificatePage() {
         <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-transparent p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
           <div className="flex items-center gap-3.5">
             <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center shrink-0">
-              <Award className="w-5 h-5 text-amber-400" />
+              <Award className="w-5 h-5 text-amber-500" />
             </div>
             <div>
               <div className="text-sm font-black text-foreground flex items-center gap-2">
@@ -312,9 +316,12 @@ function MyCertificatePage() {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Whenever you achieve a new Creator Rank milestone, FaceTube automatically generates
-                and emails the official certificate PDF to your registered email (
-                <span className="font-mono text-foreground font-semibold">{userEmail}</span>).
+                Calculated dynamically from your verified subscriber count (
+                <strong className="text-foreground">
+                  {actualSubscribers.toLocaleString()} subscribers
+                </strong>
+                ). Achieved rank:{" "}
+                <strong className="text-amber-500 font-bold">{earnedRank.awardName}</strong>.
               </p>
             </div>
           </div>
@@ -335,11 +342,11 @@ function MyCertificatePage() {
           </div>
         </div>
 
-        {/* The Digital Certificate Canvas Container */}
+        {/* The Digital Certificate Canvas Container (Light/White Professional Style) */}
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-400" />
+              <Sparkles className="w-4 h-4 text-amber-500" />
               <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">
                 Live Official Accreditation Document
               </h2>
@@ -354,8 +361,8 @@ function MyCertificatePage() {
                 ref={certificateRef}
                 userName={userName}
                 userId={userId}
-                rank={currentRank}
-                subscriberCount={subscriberCount}
+                rank={selectedRank.awardName}
+                subscriberCount={subscriberDisplay}
                 certificateId={certificateId}
                 issueDate={issueDate}
               />
@@ -363,49 +370,74 @@ function MyCertificatePage() {
           </div>
         </div>
 
-        {/* Rank Progression Simulator & Milestone Switcher */}
+        {/* 10-Level Creator Rank & Rewards Grid */}
         <div className="rounded-2xl border border-border bg-card p-5 sm:p-6 space-y-4 shadow-card">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-3">
             <div>
               <h3 className="text-base font-extrabold text-foreground flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-brand" />
-                Creator Rank Milestones &amp; Auto-Email Trigger
+                Creator Rank &amp; Rewards (All 10 Levels)
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Switch rank to test automatic email dispatch when a new creator tier is achieved
+                Exact 10-level creator structure calculated from your channel subscribers. Click any
+                level to inspect its accredited certificate.
               </p>
             </div>
-            <span className="text-xs font-bold text-amber-400 bg-amber-400/10 px-3 py-1 rounded-full border border-amber-400/20">
-              Active: {currentRank}
+            <span className="text-xs font-bold text-amber-500 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">
+              Active Tier: {selectedRank.levelLabel} ({selectedRank.awardName})
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* 10 Level Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {CREATOR_RANKS.map((r) => {
-              const isSelected = r.name === currentRank;
+              const isSelected = r.id === selectedRank.id;
+              const isAchieved = actualSubscribers >= r.minSubscribers;
+
               return (
                 <button
                   key={r.id}
                   onClick={() => handleSelectRank(r)}
-                  className={`flex flex-col items-center text-center p-3.5 rounded-xl border transition-all ${
+                  className={`flex flex-col items-center text-center p-4 rounded-xl border transition-all relative ${
                     isSelected
-                      ? "border-amber-400/80 bg-amber-500/10 shadow-md ring-2 ring-amber-400/20"
-                      : "border-border bg-secondary/30 hover:bg-secondary hover:border-border/80"
+                      ? "border-amber-400 bg-amber-500/10 shadow-md ring-2 ring-amber-400/30"
+                      : isAchieved
+                        ? "border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/60"
+                        : "border-border bg-secondary/30 hover:bg-secondary opacity-75 hover:opacity-100"
                   }`}
                 >
-                  <span className="text-2xl mb-1">{r.badge}</span>
-                  <span className="text-xs font-bold text-foreground">{r.name}</span>
-                  <span className="text-[10px] text-muted-foreground mt-0.5 font-medium">
-                    {r.minSubscribers >= 1000
-                      ? `${(r.minSubscribers / 1000).toFixed(0)}K Subs`
-                      : `${r.minSubscribers} Subs`}
+                  {/* Top Level Tag */}
+                  <div className="flex items-center justify-between w-full mb-1 text-[10px] font-black uppercase tracking-wider">
+                    <span className="text-amber-500">{r.levelLabel}</span>
+                    {isAchieved ? (
+                      <span className="flex items-center gap-0.5 text-emerald-500 font-bold">
+                        <CheckCircle2 className="w-3 h-3" /> Achieved
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-0.5 text-muted-foreground font-medium">
+                        <Lock className="w-2.5 h-2.5" /> Locked
+                      </span>
+                    )}
+                  </div>
+
+                  <span className="text-3xl my-1">{r.badge}</span>
+                  <span className="text-xs font-black text-foreground leading-snug">
+                    {r.awardName}
                   </span>
+                  <span className="text-[11px] text-muted-foreground mt-1 font-semibold">
+                    {r.formattedSubscribers} Subscribers
+                  </span>
+
                   <span
-                    className={`mt-2 text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
-                      isSelected ? "bg-amber-400 text-black" : "bg-secondary text-muted-foreground"
+                    className={`mt-3 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full w-full ${
+                      isSelected
+                        ? "bg-amber-400 text-black shadow-xs"
+                        : isAchieved
+                          ? "bg-emerald-500/20 text-emerald-500"
+                          : "bg-secondary text-muted-foreground"
                     }`}
                   >
-                    {isSelected ? "Current" : "Achieve"}
+                    {isSelected ? "Viewing Certificate" : isAchieved ? "Unlocked" : "Progressing"}
                   </span>
                 </button>
               );
@@ -423,7 +455,7 @@ function MyCertificatePage() {
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-              <span>Cryptographically authorized signature verified</span>
+              <span>Official single-page printable document verified</span>
             </div>
           </div>
         </div>

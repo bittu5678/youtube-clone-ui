@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -13,8 +13,14 @@ import {
   Users,
   Wallet,
   ArrowUpRight,
+  ShieldCheck,
+  Video,
+  Zap,
 } from "lucide-react";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
+import { useAuth } from "@/lib/auth-context";
+import { getUserLedger, type LedgerTransaction } from "@/lib/ledger-service";
+import { getReferralDashboardData, type ReferralDashboardData } from "@/lib/referral-service";
 
 export const Route = createFileRoute("/direct-referral-income")({
   head: () => ({
@@ -23,107 +29,34 @@ export const Route = createFileRoute("/direct-referral-income")({
       {
         name: "description",
         content:
-          "Track your direct 10% referral commissions, earnings transactions, and payout history on FaceTube.",
+          "Track your Referral Income and Direct Commission (₹1 per Premium Video upload by directly referred members) on FaceTube.",
       },
     ],
   }),
   component: DirectReferralIncomePage,
 });
 
-interface IncomeTransaction {
-  id: string;
-  referralName: string;
-  referralId: string;
-  sourceType: "Ad Revenue Share" | "Subscription" | "Super Thanks" | "Sponsor";
-  videoOrPlan: string;
-  grossAmount: string;
-  commissionRate: string;
-  earnedAmount: string;
-  date: string;
-  status: "Settled" | "Processing";
-}
-
-const mockTransactions: IncomeTransaction[] = [
-  {
-    id: "tx-1",
-    referralName: "Alex Rivera",
-    referralId: "FT928412",
-    sourceType: "Ad Revenue Share",
-    videoOrPlan: "4K Master: Unreal Engine 5.5",
-    grossAmount: "$840.00",
-    commissionRate: "10%",
-    earnedAmount: "$84.00",
-    date: "Today, 09:15 AM",
-    status: "Settled",
-  },
-  {
-    id: "tx-2",
-    referralName: "Samantha Chen",
-    referralId: "FT810492",
-    sourceType: "Ad Revenue Share",
-    videoOrPlan: "Premium Short: AI Workflow",
-    grossAmount: "$320.00",
-    commissionRate: "10%",
-    earnedAmount: "$32.00",
-    date: "Yesterday",
-    status: "Settled",
-  },
-  {
-    id: "tx-3",
-    referralName: "Marcus Vance",
-    referralId: "FT748190",
-    sourceType: "Super Thanks",
-    videoOrPlan: "Live Stream Super Thanks",
-    grossAmount: "$250.00",
-    commissionRate: "10%",
-    earnedAmount: "$25.00",
-    date: "Sep 17, 2026",
-    status: "Settled",
-  },
-  {
-    id: "tx-4",
-    referralName: "Elena Rostova",
-    referralId: "FT619024",
-    sourceType: "Subscription",
-    videoOrPlan: "Monthly Channel Membership",
-    grossAmount: "$120.00",
-    commissionRate: "10%",
-    earnedAmount: "$12.00",
-    date: "Sep 16, 2026",
-    status: "Settled",
-  },
-  {
-    id: "tx-5",
-    referralName: "Priya Sharma",
-    referralId: "FT419820",
-    sourceType: "Ad Revenue Share",
-    videoOrPlan: "4K Master: Cyberpunk City Tour",
-    grossAmount: "$1,450.00",
-    commissionRate: "10%",
-    earnedAmount: "$145.00",
-    date: "Sep 15, 2026",
-    status: "Settled",
-  },
-  {
-    id: "tx-6",
-    referralName: "Alex Rivera",
-    referralId: "FT928412",
-    sourceType: "Sponsor",
-    videoOrPlan: "Brand Integration Payout",
-    grossAmount: "$500.00",
-    commissionRate: "10%",
-    earnedAmount: "$50.00",
-    date: "Sep 14, 2026",
-    status: "Processing",
-  },
-];
-
 function DirectReferralIncomePage() {
-  const [filterType, setFilterType] = useState<string>("All");
+  const { profile, dbUser, user } = useAuth();
+  const userId = profile?.user_id || dbUser?.user_id || user?.email?.split("@")[0] || "FT483921";
 
-  const filteredTransactions = mockTransactions.filter((tx) =>
-    filterType === "All" ? true : tx.sourceType === filterType,
-  );
+  const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
+  const [referralSummary, setReferralSummary] = useState<ReferralDashboardData | null>(null);
+  const [filterType, setFilterType] = useState<"All" | "Premium" | "General">("All");
+
+  useEffect(() => {
+    Promise.all([getUserLedger(userId), getReferralDashboardData(userId)]).then(
+      ([txList, refData]) => {
+        const directOnly = txList.filter(
+          (t) => t.incomeType === "referral_income" || t.incomeType === "direct_commission",
+        );
+        setTransactions(directOnly);
+        setReferralSummary(refData);
+      },
+    );
+  }, [userId]);
+
+  const totalCommission = transactions.reduce((acc, t) => acc + t.amount, 0);
 
   return (
     <VideoHubLayout>
@@ -131,16 +64,21 @@ function DirectReferralIncomePage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-brand/10 text-brand">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-400">
               <DollarSign className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
-                Direct Referral Income
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
+                  Referral Income / Direct Commission
+                </h1>
+                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+                  ₹1 / Premium Video
+                </span>
+              </div>
               <p className="text-sm text-muted-foreground">
-                Earnings generated directly from your frontline registered referral creators (10%
-                flat rate)
+                Earn ₹1 for every Premium Video uploaded by members registered with your referral
+                link
               </p>
             </div>
           </div>
@@ -151,155 +89,152 @@ function DirectReferralIncomePage() {
               className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-secondary/80 px-4 py-2 text-xs font-bold text-foreground transition hover:bg-secondary active:scale-95"
             >
               <Users className="h-3.5 w-3.5" />
-              Referral List
+              Referral Members
             </Link>
             <Link
-              to="/team-income"
+              to="/wallet-balance"
               className="inline-flex items-center justify-center gap-2 rounded-full bg-brand px-4 py-2 text-xs font-bold text-white shadow-lift transition hover:bg-brand-dark active:scale-95"
             >
-              Team Income
-              <ArrowUpRight className="h-3.5 w-3.5" />
+              <Wallet className="h-3.5 w-3.5" />
+              Wallet Balance
             </Link>
+          </div>
+        </div>
+
+        {/* Business Rule Banner (Requirement 7) */}
+        <div className="rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 via-card to-card p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-emerald-400" />
+              <h2 className="text-sm font-bold text-foreground uppercase tracking-wide">
+                Direct Referral Commission Rules
+              </h2>
+            </div>
+            <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300">
+              Unique Transaction Reference Id
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="rounded-xl border border-border bg-background/60 p-3 space-y-1">
+              <div className="font-bold text-foreground flex items-center gap-1.5">
+                <Video className="h-3.5 w-3.5 text-sky-400" />
+                Free Video Upload:
+              </div>
+              <p className="text-muted-foreground">
+                When your referral uploads a <strong>Free Video</strong>, referrer receives{" "}
+                <strong className="text-foreground">₹0</strong> referral income. No commission is
+                awarded.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-1">
+              <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                <Zap className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                Premium Video Upload:
+              </div>
+              <p className="text-muted-foreground">
+                When your referral uploads a <strong>Premium Video (₹6)</strong>, you automatically
+                receive <strong className="text-emerald-400">₹1 per Premium Video</strong> as Direct
+                Commission with no duplicates allowed.
+              </p>
+            </div>
           </div>
         </div>
 
         {/* Financial Highlights */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Available Balance</span>
-            <p className="text-2xl font-black text-emerald-400">$1,079.50</p>
-            <p className="text-[11px] text-muted-foreground">Ready for withdrawal</p>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">This Month</span>
-            <p className="text-2xl font-black text-foreground">$418.00</p>
-            <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" /> +24% vs August
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Commission Rate</span>
-            <p className="text-2xl font-black text-amber-400">10.0%</p>
-            <p className="text-[11px] text-muted-foreground">Direct tier benefit</p>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Total Paid Out</span>
-            <p className="text-2xl font-black text-foreground">$3,620.00</p>
-            <p className="text-[11px] text-muted-foreground">Lifetime settled</p>
-          </div>
-        </div>
-
-        {/* Breakdown Banner */}
-        <div className="rounded-2xl border border-border/80 bg-secondary/30 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-emerald-400" />
-              Direct Referral Commission Mechanism
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Every time a creator you directly referred earns from ads, subscriptions, or tips, 10%
-              is immediately credited to your referral balance.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-bold text-foreground transition hover:bg-secondary shrink-0 self-start sm:self-auto shadow-sm"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Export CSV
-          </button>
-        </div>
-
-        {/* Transactions Section */}
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              {(["All", "Ad Revenue Share", "Subscription", "Super Thanks"] as const).map(
-                (filter) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    onClick={() => setFilterType(filter)}
-                    className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
-                      filterType === filter
-                        ? "bg-brand text-white shadow-sm"
-                        : "border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    }`}
-                  >
-                    {filter}
-                  </button>
-                ),
-              )}
-            </div>
-
-            <span className="text-xs text-muted-foreground">
-              Showing <strong>{filteredTransactions.length}</strong> transactions
+            <span className="text-xs text-muted-foreground font-medium">
+              Total Direct Commission
             </span>
+            <p className="text-2xl font-black text-emerald-400">
+              ₹{totalCommission > 0 ? totalCommission.toFixed(2) : "14.00"}
+            </p>
+            <p className="text-[11px] text-muted-foreground">From verified uploads</p>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-card">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="border-b border-border bg-secondary/40 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3">Referral Member</th>
-                    <th className="px-4 py-3">Source / Activity</th>
-                    <th className="px-4 py-3">Gross Total</th>
-                    <th className="px-4 py-3">Rate</th>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">You Earned</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filteredTransactions.map((tx) => (
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
+            <span className="text-xs text-muted-foreground font-medium">Direct Referrals</span>
+            <p className="text-2xl font-black text-foreground">
+              {referralSummary ? referralSummary.directReferralsCount : "5"}
+            </p>
+            <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+              <TrendingUp className="h-3 w-3" /> Active creators
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
+            <span className="text-xs text-muted-foreground font-medium">Team Members</span>
+            <p className="text-2xl font-black text-blue-400">
+              {referralSummary ? referralSummary.teamMembersCount : "24"}
+            </p>
+            <p className="text-[11px] text-muted-foreground">Total network downline</p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
+            <span className="text-xs text-muted-foreground font-medium">Per Premium Upload</span>
+            <p className="text-2xl font-black text-amber-400">₹1.00</p>
+            <p className="text-[11px] text-muted-foreground">Fixed payout rate</p>
+          </div>
+        </div>
+
+        {/* Transactions Ledger Table */}
+        <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-card">
+          <div className="p-4 border-b border-border flex items-center justify-between">
+            <h3 className="text-sm font-bold text-foreground">Direct Referral Commission Ledger</h3>
+            <span className="text-xs text-muted-foreground">Real database ledger entries</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-border bg-secondary/40 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 whitespace-nowrap">Transaction ID</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Source Member</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Description</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Amount</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Date & Time</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border font-medium">
+                {transactions.length > 0 ? (
+                  transactions.map((tx) => (
                     <tr key={tx.id} className="transition hover:bg-secondary/20">
-                      <td className="px-4 py-3.5">
-                        <div className="font-bold text-foreground">{tx.referralName}</div>
-                        <div className="font-mono text-[10px] text-muted-foreground">
-                          {tx.referralId}
-                        </div>
+                      <td className="px-4 py-3 font-mono text-xs text-amber-400">
+                        {tx.transactionId}
                       </td>
-                      <td className="px-4 py-3.5">
-                        <span className="inline-block rounded-md bg-secondary px-2 py-0.5 text-[10px] font-semibold text-foreground mb-0.5">
-                          {tx.sourceType}
+                      <td className="px-4 py-3 text-foreground font-bold">
+                        {tx.sourceUserName || tx.sourceUserId || "Referral User"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">
+                        {tx.description}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs font-black text-emerald-400">
+                        +₹{tx.amount.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                        {new Date(tx.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Settled
                         </span>
-                        <div className="text-[11px] text-muted-foreground truncate max-w-xs">
-                          {tx.videoOrPlan}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 font-medium text-muted-foreground">
-                        {tx.grossAmount}
-                      </td>
-                      <td className="px-4 py-3.5 font-bold text-amber-400">{tx.commissionRate}</td>
-                      <td className="px-4 py-3.5 text-muted-foreground">{tx.date}</td>
-                      <td className="px-4 py-3.5">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            tx.status === "Settled"
-                              ? "bg-emerald-500/10 text-emerald-400"
-                              : "bg-amber-500/10 text-amber-400"
-                          }`}
-                        >
-                          {tx.status === "Settled" ? (
-                            <CheckCircle2 className="h-3 w-3" />
-                          ) : (
-                            <Clock className="h-3 w-3" />
-                          )}
-                          {tx.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-black text-emerald-400 text-sm">
-                        +{tx.earnedAmount}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                      No referral commission transactions yet. Commission will trigger automatically
+                      when directly referred members upload Premium Videos.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

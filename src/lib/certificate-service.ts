@@ -5,79 +5,201 @@ import { toast } from "sonner";
 
 export interface CreatorRankInfo {
   id: string;
+  level: number;
+  levelLabel: string;
   name: string;
+  awardName: string;
   minSubscribers: number;
+  formattedSubscribers: string;
   badge: string;
   accentColor: string;
   tierLevel: string;
   description: string;
 }
 
+/**
+ * EXACT 10-LEVEL CREATOR RANK & REWARDS STRUCTURE
+ * LEVEL 1: 1,000 Subscribers — Starter Creator Award
+ * LEVEL 2: 10,000 Subscribers — Rising Star Award
+ * LEVEL 3: 50,000 Subscribers — Silver Creator Award
+ * LEVEL 4: 100,000 Subscribers — Gold Creator Award
+ * LEVEL 5: 500,000 Subscribers — Platinum Creator Award
+ * LEVEL 6: 1,000,000 (1M) Subscribers — Diamond Master Award
+ * LEVEL 7: 5,000,000 (5M) Subscribers — Ruby Elite Award
+ * LEVEL 8: 10,000,000 (10M) Subscribers — Crown Legend Award
+ * LEVEL 9: 50,000,000 (50M) Subscribers — Titan Creator Award
+ * LEVEL 10: 100,000,000 (100M) Subscribers — Supreme Titan Award
+ */
 export const CREATOR_RANKS: CreatorRankInfo[] = [
   {
-    id: "bronze",
-    name: "Bronze Creator",
+    id: "level-1",
+    level: 1,
+    levelLabel: "LEVEL 1",
+    name: "Starter Creator Award",
+    awardName: "Starter Creator Award",
     minSubscribers: 1000,
-    badge: "🥉",
-    accentColor: "from-amber-700 to-amber-900 border-amber-600",
-    tierLevel: "Tier 1",
-    description: "Achieved 1,000+ verified channel subscribers and video monetization unlock.",
+    formattedSubscribers: "1,000",
+    badge: "🌱",
+    accentColor: "from-emerald-500 to-teal-700 border-emerald-500",
+    tierLevel: "Level 1",
+    description:
+      "Achieved 1,000 verified channel subscribers and basic creator monetization accreditation.",
   },
   {
-    id: "silver",
-    name: "Silver Creator",
+    id: "level-2",
+    level: 2,
+    levelLabel: "LEVEL 2",
+    name: "Rising Star Award",
+    awardName: "Rising Star Award",
     minSubscribers: 10000,
-    badge: "🥈",
-    accentColor: "from-slate-300 to-slate-500 border-slate-300",
-    tierLevel: "Tier 2",
-    description: "Surpassed 10,000+ loyal subscribers with verified creator badge accreditation.",
+    formattedSubscribers: "10,000",
+    badge: "⭐",
+    accentColor: "from-cyan-500 to-blue-600 border-cyan-400",
+    tierLevel: "Level 2",
+    description:
+      "Surpassed 10,000 verified subscribers with accelerating viewer engagement and community loyalty.",
   },
   {
-    id: "gold",
-    name: "Gold Creator",
+    id: "level-3",
+    level: 3,
+    levelLabel: "LEVEL 3",
+    name: "Silver Creator Award",
+    awardName: "Silver Creator Award",
     minSubscribers: 50000,
-    badge: "🥇",
-    accentColor: "from-amber-300 via-yellow-500 to-amber-600 border-yellow-400",
-    tierLevel: "Tier 3",
-    description: "Exceptional 50,000+ community benchmark with prioritized stream syndication.",
+    formattedSubscribers: "50,000",
+    badge: "🥈",
+    accentColor: "from-slate-400 to-zinc-600 border-slate-300",
+    tierLevel: "Level 3",
+    description:
+      "Conferred for reaching 50,000 community members with distinguished video syndication standards.",
   },
   {
-    id: "platinum",
-    name: "Platinum Creator",
+    id: "level-4",
+    level: 4,
+    levelLabel: "LEVEL 4",
+    name: "Gold Creator Award",
+    awardName: "Gold Creator Award",
     minSubscribers: 100000,
+    formattedSubscribers: "100,000",
+    badge: "🥇",
+    accentColor: "from-amber-400 via-yellow-500 to-amber-600 border-amber-400",
+    tierLevel: "Level 4",
+    description:
+      "Celebrates the 100,000 subscriber milestone with prioritized algorithmic feed distribution.",
+  },
+  {
+    id: "level-5",
+    level: 5,
+    levelLabel: "LEVEL 5",
+    name: "Platinum Creator Award",
+    awardName: "Platinum Creator Award",
+    minSubscribers: 500000,
+    formattedSubscribers: "500,000",
     badge: "💎",
-    accentColor: "from-cyan-300 via-sky-400 to-blue-600 border-cyan-400",
-    tierLevel: "Tier 4",
-    description: "Elite 100,000+ subscriber status with Level 4 Downline revenue share.",
+    accentColor: "from-sky-400 via-indigo-500 to-purple-600 border-sky-400",
+    tierLevel: "Level 5",
+    description:
+      "Half a million community footprint with verified creator badge accreditation and brand partnerships.",
   },
   {
-    id: "diamond",
-    name: "Diamond Creator",
-    minSubscribers: 125000,
+    id: "level-6",
+    level: 6,
+    levelLabel: "LEVEL 6",
+    name: "Diamond Master Award",
+    awardName: "Diamond Master Award",
+    minSubscribers: 1000000,
+    formattedSubscribers: "1,000,000 (1M)",
+    badge: "💠",
+    accentColor: "from-blue-400 via-violet-500 to-fuchsia-600 border-violet-400",
+    tierLevel: "Level 6",
+    description:
+      "Historic 1,000,000 subscriber benchmark with premier creator status and global revenue pool dividends.",
+  },
+  {
+    id: "level-7",
+    level: 7,
+    levelLabel: "LEVEL 7",
+    name: "Ruby Elite Award",
+    awardName: "Ruby Elite Award",
+    minSubscribers: 5000000,
+    formattedSubscribers: "5,000,000 (5M)",
+    badge: "♦️",
+    accentColor: "from-rose-500 via-red-600 to-rose-700 border-rose-400",
+    tierLevel: "Level 7",
+    description:
+      "Exceptional 5,000,000 subscriber achievement representing top-echelon global creator influence.",
+  },
+  {
+    id: "level-8",
+    level: 8,
+    levelLabel: "LEVEL 8",
+    name: "Crown Legend Award",
+    awardName: "Crown Legend Award",
+    minSubscribers: 10000000,
+    formattedSubscribers: "10,000,000 (10M)",
     badge: "👑",
-    accentColor: "from-fuchsia-400 via-rose-500 to-amber-400 border-rose-400",
-    tierLevel: "Tier 5",
-    description: "Master Class 125,000+ subscriber milestone with global revenue pool dividends.",
+    accentColor: "from-amber-500 via-yellow-400 to-amber-600 border-yellow-300",
+    tierLevel: "Level 8",
+    description:
+      "Legendary 10,000,000 subscriber milestone with lifetime honorary creator privileges and leadership advisory.",
   },
   {
-    id: "ambassador",
-    name: "Ambassador Creator",
-    minSubscribers: 250000,
+    id: "level-9",
+    level: 9,
+    levelLabel: "LEVEL 9",
+    name: "Titan Creator Award",
+    awardName: "Titan Creator Award",
+    minSubscribers: 50000000,
+    formattedSubscribers: "50,000,000 (50M)",
+    badge: "⚡",
+    accentColor: "from-orange-500 via-amber-500 to-red-600 border-orange-400",
+    tierLevel: "Level 9",
+    description:
+      "Monumental 50,000,000 global community scale reshaping digital media culture worldwide.",
+  },
+  {
+    id: "level-10",
+    level: 10,
+    levelLabel: "LEVEL 10",
+    name: "Supreme Titan Award",
+    awardName: "Supreme Titan Award",
+    minSubscribers: 100000000,
+    formattedSubscribers: "100,000,000 (100M)",
     badge: "🌟",
-    accentColor: "from-yellow-400 via-amber-500 to-red-600 border-yellow-400",
-    tierLevel: "Tier 6 (Supreme)",
-    description: "Supreme FaceTube Creator Network Ambassador with executive board consultation.",
+    accentColor: "from-yellow-300 via-amber-500 to-purple-700 border-yellow-300",
+    tierLevel: "Level 10 (Highest)",
+    description:
+      "The pinnacle of FaceTube achievement: 100,000,000 subscribers, honored with the Supreme Titan Creator Trophy.",
   },
 ];
 
-export function getRankDetails(rankName?: string): CreatorRankInfo {
-  if (!rankName) return CREATOR_RANKS[4]; // Default to Diamond
+export function getRankDetails(rankNameOrId?: string): CreatorRankInfo {
+  if (!rankNameOrId) return CREATOR_RANKS[3]; // Default to Gold (Level 4)
+  const query = rankNameOrId.toLowerCase().trim();
   const found = CREATOR_RANKS.find(
     (r) =>
-      r.name.toLowerCase().includes(rankName.toLowerCase()) ||
-      r.id.toLowerCase() === rankName.toLowerCase(),
+      r.id.toLowerCase() === query ||
+      r.name.toLowerCase().includes(query) ||
+      r.awardName.toLowerCase().includes(query) ||
+      r.levelLabel.toLowerCase() === query ||
+      `level ${r.level}` === query,
   );
-  return found || CREATOR_RANKS[4];
+  return found || CREATOR_RANKS[3];
+}
+
+/**
+ * Calculates current rank strictly from user's actual subscriber count
+ */
+export function calculateRankFromSubscribers(subscribers: number): CreatorRankInfo {
+  const count = typeof subscribers === "number" && !isNaN(subscribers) ? subscribers : 0;
+  // Iterate from highest level (10) down to level 1
+  for (let i = CREATOR_RANKS.length - 1; i >= 0; i--) {
+    if (count >= CREATOR_RANKS[i].minSubscribers) {
+      return CREATOR_RANKS[i];
+    }
+  }
+  // If below Level 1 threshold, return Level 1 as the current target/first milestone
+  return CREATOR_RANKS[0];
 }
 
 export function generateAutoCertificateId(userId: string, rankName: string): string {
@@ -97,11 +219,15 @@ export function generateAutoCertificateId(userId: string, rankName: string): str
   return `FT-CERT-${year}-${rankCode}-${hash}`;
 }
 
+/**
+ * High-Resolution Single A4 Portrait PDF Capture
+ * Strictly fits on ONE single A4 page with clean Light/White background
+ */
 export async function captureCertificatePdf(
   element: HTMLElement,
   options?: { filename?: string; userId?: string },
 ): Promise<{ pdf: jsPDF; base64: string; blob: Blob; download: () => void }> {
-  // Ensure DOM and fonts are fully settled
+  // Ensure DOM and fonts are ready
   if (typeof document !== "undefined" && document.fonts?.ready) {
     try {
       await document.fonts.ready;
@@ -114,15 +240,14 @@ export async function captureCertificatePdf(
   let naturalWidth = element.offsetWidth || 960;
   let naturalHeight = element.offsetHeight || 640;
 
-  // 1. Primary Engine: html-to-image (toPng) with 300 DPI quality (pixelRatio: 3.125)
-  // Handles modern CSS variables, gradients, and SVG without stylesheet parsing crashes
+  // 1. Primary Engine: html-to-image (toPng) with clean white background & 300 DPI
   try {
     imgData = await Promise.race([
       toPng(element, {
         quality: 1.0,
         pixelRatio: 3.125, // 300 DPI high resolution
-        backgroundColor: "#0b0c13",
-        skipFonts: true, // Prevents external font fetch blockage in preview iframes
+        backgroundColor: "#ffffff",
+        skipFonts: true,
         cacheBust: true,
       }),
       new Promise<string>((_, reject) =>
@@ -133,14 +258,14 @@ export async function captureCertificatePdf(
     console.warn("Primary html-to-image capture failed, trying html2canvas fallback:", primaryErr);
   }
 
-  // 2. Secondary Engine: html2canvas fallback
+  // 2. Secondary Engine: html2canvas fallback with light/white background
   if (!imgData) {
     try {
       const canvas = await html2canvas(element, {
         scale: 3, // 300 DPI quality
         useCORS: true,
         allowTaint: true,
-        backgroundColor: "#0b0c11",
+        backgroundColor: "#ffffff",
         logging: false,
         windowWidth: element.scrollWidth,
       });
@@ -153,7 +278,7 @@ export async function captureCertificatePdf(
     }
   }
 
-  // Compute exact image dimensions
+  // Measure exact rendered aspect ratio
   if (typeof Image !== "undefined" && imgData) {
     try {
       const img = new Image();
@@ -173,7 +298,7 @@ export async function captureCertificatePdf(
     }
   }
 
-  // 3. High-Resolution A4 Portrait PDF (210mm x 297mm)
+  // 3. High-Resolution Single A4 Portrait PDF (210mm x 297mm)
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -184,14 +309,15 @@ export async function captureCertificatePdf(
   const pageWidth = pdf.internal.pageSize.getWidth(); // 210 mm
   const pageHeight = pdf.internal.pageSize.getHeight(); // 297 mm
 
-  // Fill entire A4 Portrait sheet with certificate dark palette (#0b0c13) to remove white margins & blank space
-  pdf.setFillColor(11, 12, 19); // #0b0c13
+  // Fill entire sheet with clean pure white background (#ffffff)
+  pdf.setFillColor(255, 255, 255);
   pdf.rect(0, 0, pageWidth, pageHeight, "F");
 
-  // Margin calculation to ensure crisp placement without clipping
-  const marginX = 10;
-  const maxContentWidth = pageWidth - marginX * 2; // 190 mm
-  const maxContentHeight = pageHeight - 24; // 273 mm
+  // Single page fit margins (guarantees fitting entirely on 1 page without extra pages)
+  const marginX = 8;
+  const marginY = 12;
+  const maxContentWidth = pageWidth - marginX * 2; // 194 mm
+  const maxContentHeight = pageHeight - marginY * 2; // 273 mm
 
   const aspectRatio = naturalHeight / naturalWidth;
   let renderWidth = maxContentWidth;
@@ -202,7 +328,7 @@ export async function captureCertificatePdf(
     renderWidth = renderHeight / aspectRatio;
   }
 
-  // Center horizontally and vertically on the single A4 Portrait page
+  // Center horizontally and vertically on the single page
   const posX = (pageWidth - renderWidth) / 2;
   const posY = (pageHeight - renderHeight) / 2;
 
@@ -211,18 +337,15 @@ export async function captureCertificatePdf(
   const pdfBase64 = pdf.output("datauristring");
   const blob = pdf.output("blob");
 
-  // Requested format: Facetube_Certificate_FT######.pdf
   const defaultUserId = options?.userId || "FT483921";
   const formattedUserId = defaultUserId.startsWith("FT") ? defaultUserId : `FT${defaultUserId}`;
   const filename = options?.filename || `Facetube_Certificate_${formattedUserId}.pdf`;
 
   const download = () => {
     try {
-      // Primary: standard jsPDF save
       pdf.save(filename);
     } catch (saveErr) {
-      console.warn("pdf.save fallback to programmatic anchor download:", saveErr);
-      // Secondary: HTML5 blob anchor click
+      console.warn("pdf.save fallback:", saveErr);
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
@@ -246,13 +369,14 @@ export async function captureCertificatePdf(
   };
 }
 
-export function printCertificateElement(element: HTMLElement) {
-  // 1. Collect all active stylesheets
+/**
+ * Print Certificate cleanly on ONE single A4 page with white background
+ */
+export function printCertificateElement(element: HTMLElement): void {
   const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
     .map((el) => el.outerHTML)
     .join("\n");
 
-  // 2. Prepare hidden iframe for in-place printing (works across desktop and mobile browsers)
   let printIframe = document.getElementById(
     "facetube-cert-print-frame",
   ) as HTMLIFrameElement | null;
@@ -277,7 +401,6 @@ export function printCertificateElement(element: HTMLElement) {
     return;
   }
 
-  // Generate self-contained print page strictly configured for ONE A4 Portrait page
   printDoc.open();
   printDoc.write(`
     <!DOCTYPE html>
@@ -285,7 +408,7 @@ export function printCertificateElement(element: HTMLElement) {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>FaceTube Digital Certificate</title>
+        <title>FaceTube Official Digital Certificate</title>
         ${styles}
         <style>
           @page {
@@ -303,62 +426,44 @@ export function printCertificateElement(element: HTMLElement) {
             width: 210mm !important;
             height: 297mm !important;
             max-height: 297mm !important;
-            background-color: #0b0c11 !important;
-            background: #0b0c11 !important;
+            background-color: #ffffff !important;
+            background: #ffffff !important;
+            color: #0f172a !important;
             overflow: hidden !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            page-break-before: avoid !important;
             page-break-after: avoid !important;
-            break-before: avoid !important;
             break-after: avoid !important;
           }
           .cert-print-page {
             width: 210mm !important;
             height: 297mm !important;
             max-height: 297mm !important;
-            padding: 10mm !important;
+            padding: 8mm !important;
             margin: 0 auto !important;
             box-sizing: border-box !important;
-            background-color: #0b0c11 !important;
-            background: #0b0c11 !important;
+            background-color: #ffffff !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
             overflow: hidden !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            page-break-after: avoid !important;
-            break-after: avoid !important;
           }
           #facetube-digital-certificate {
-            width: 190mm !important;
-            max-width: 190mm !important;
-            min-width: 190mm !important;
+            width: 194mm !important;
+            max-width: 194mm !important;
+            min-width: 194mm !important;
             margin: 0 auto !important;
             box-shadow: none !important;
+            background-color: #ffffff !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            page-break-before: avoid !important;
-            page-break-after: avoid !important;
-            break-before: avoid !important;
-            break-after: avoid !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
-          }
-          .cert-metric-grid {
-            display: grid !important;
-            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-            gap: 12px !important;
-          }
-          .cert-footer-row {
-            display: flex !important;
-            flex-direction: row !important;
-            align-items: center !important;
-            justify-content: space-between !important;
           }
         </style>
       </head>
@@ -371,7 +476,6 @@ export function printCertificateElement(element: HTMLElement) {
   `);
   printDoc.close();
 
-  // Allow fonts & styles to settle, then invoke print
   setTimeout(() => {
     try {
       printIframe?.contentWindow?.focus();
@@ -408,9 +512,6 @@ export async function sendCertificateEmailApi(payload: {
   }
 }
 
-/**
- * Automatically triggers the certificate email when a new rank is achieved
- */
 export async function checkAndSendRankMilestoneEmail(params: {
   userName: string;
   userId: string;
@@ -426,7 +527,7 @@ export async function checkAndSendRankMilestoneEmail(params: {
   const alreadySent = localStorage.getItem(storageKey);
 
   if (alreadySent && !params.force) {
-    return false; // Already notified for this rank milestone
+    return false;
   }
 
   let pdfBase64: string | undefined;

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   UserPlus,
   Copy,
@@ -15,119 +15,33 @@ import {
   Phone,
   MessageCircle,
   ShieldCheck,
+  Network,
+  Video,
+  Zap,
 } from "lucide-react";
+import { toast } from "sonner";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
 import { useAuth } from "@/lib/auth-context";
 import { Switch } from "@/components/ui/switch";
+import {
+  getReferralDashboardData,
+  type ReferralDashboardData,
+  type ReferralMemberSummary,
+} from "@/lib/referral-service";
 
 export const Route = createFileRoute("/referral-members")({
   head: () => ({
     meta: [
-      { title: "Referral Members — FaceTube" },
+      { title: "Referral & Team Members — FaceTube" },
       {
         name: "description",
         content:
-          "View your direct referral members, invite link, and referral commission history on FaceTube.",
+          "Track Direct Referrals, Team Members, and ₹1 Direct Commission per Premium Video uploaded on FaceTube.",
       },
     ],
   }),
   component: ReferralMembersPage,
 });
-
-interface ReferralMember {
-  id: string;
-  userId: string;
-  name: string;
-  email: string;
-  mobile: string;
-  joinedAt: string;
-  status: "Active" | "Pending";
-  tier: string;
-  earnings: string;
-  videosCount: number;
-  access: "Granted" | "Restricted";
-}
-
-const mockReferrals: ReferralMember[] = [
-  {
-    id: "ref-1",
-    userId: "FT928412",
-    name: "Alex Rivera",
-    email: "alex.rivera@example.com",
-    mobile: "+1 555-014-8392",
-    joinedAt: "Today, 11:20 AM",
-    status: "Active",
-    tier: "Creator Pro",
-    earnings: "$184.50",
-    videosCount: 14,
-    access: "Granted",
-  },
-  {
-    id: "ref-2",
-    userId: "FT810492",
-    name: "Samantha Chen",
-    email: "sam.chen@example.com",
-    mobile: "+1 555-018-9201",
-    joinedAt: "Yesterday",
-    status: "Active",
-    tier: "Creator",
-    earnings: "$92.00",
-    videosCount: 8,
-    access: "Granted",
-  },
-  {
-    id: "ref-3",
-    userId: "FT748190",
-    name: "Marcus Vance",
-    email: "m.vance@example.com",
-    mobile: "+1 555-017-4819",
-    joinedAt: "3 days ago",
-    status: "Active",
-    tier: "Creator Pro",
-    earnings: "$310.80",
-    videosCount: 29,
-    access: "Granted",
-  },
-  {
-    id: "ref-4",
-    userId: "FT619024",
-    name: "Elena Rostova",
-    email: "elena.r@example.com",
-    mobile: "+1 555-016-1902",
-    joinedAt: "5 days ago",
-    status: "Active",
-    tier: "Creator",
-    earnings: "$64.20",
-    videosCount: 5,
-    access: "Granted",
-  },
-  {
-    id: "ref-5",
-    userId: "FT582019",
-    name: "Devon Brooks",
-    email: "d.brooks@example.com",
-    mobile: "+1 555-015-8201",
-    joinedAt: "1 week ago",
-    status: "Pending",
-    tier: "Free",
-    earnings: "$0.00",
-    videosCount: 1,
-    access: "Restricted",
-  },
-  {
-    id: "ref-6",
-    userId: "FT419820",
-    name: "Priya Sharma",
-    email: "priya.s@example.com",
-    mobile: "+91 98765 43210",
-    joinedAt: "2 weeks ago",
-    status: "Active",
-    tier: "Creator Pro",
-    earnings: "$428.00",
-    videosCount: 42,
-    access: "Granted",
-  },
-];
 
 function getTelUrl(mobile: string): string {
   const hasPlus = mobile.trim().startsWith("+");
@@ -141,29 +55,53 @@ function getWaUrl(mobile: string): string {
 }
 
 function ReferralMembersPage() {
-  const { profile } = useAuth();
+  const { profile, dbUser, user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [copied, setCopied] = useState(false);
-  const [members, setMembers] = useState<ReferralMember[]>(mockReferrals);
+  const [copiedCode, setCopiedCode] = useState(false);
 
-  const referralCode = profile?.user_id || "FT610200";
-  const referralLink = `https://facetube.app/register?ref=${referralCode}`;
+  const userId = profile?.user_id || dbUser?.user_id || user?.email?.split("@")[0] || "FT483921";
+
+  const [data, setData] = useState<ReferralDashboardData>({
+    directReferralsCount: 5,
+    teamMembersCount: 24,
+    referralIncome: 14.0,
+    referralCode: userId,
+    referralNumber: profile?.mobile || dbUser?.mobile || "+1 555-014-8392",
+    referralLink: `https://facetube.app/register?ref=${userId}`,
+    members: [],
+  });
+
+  useEffect(() => {
+    getReferralDashboardData(userId).then((res) => {
+      setData(res);
+    });
+  }, [userId]);
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(referralLink);
+    navigator.clipboard.writeText(data.referralLink);
     setCopied(true);
+    toast.success("Referral Link copied to clipboard!");
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const toggleAccess = (memberId: string) => {
-    setMembers((prev) =>
-      prev.map((m) =>
-        m.id === memberId ? { ...m, access: m.access === "Granted" ? "Restricted" : "Granted" } : m,
-      ),
-    );
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(data.referralCode);
+    setCopiedCode(true);
+    toast.success("Referral Code copied!");
+    setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  const filteredMembers = members.filter(
+  const toggleAccess = (memberId: string) => {
+    setData((prev) => ({
+      ...prev,
+      members: prev.members.map((m) =>
+        m.id === memberId ? { ...m, access: m.access === "Granted" ? "Restricted" : "Granted" } : m,
+      ),
+    }));
+  };
+
+  const filteredMembers = data.members.filter(
     (m) =>
       m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       m.userId.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -182,98 +120,168 @@ function ReferralMembersPage() {
             </div>
             <div>
               <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
-                Referral Members
+                Referral & Team Members
               </h1>
               <p className="text-sm text-muted-foreground">
-                Track and manage creators who registered using your direct referral link
+                Earn ₹1 Direct Commission for every Premium Video uploaded by directly referred
+                creators
               </p>
             </div>
           </div>
 
-          <Link
-            to="/direct-referral-income"
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-secondary/80 px-4 py-2 text-xs font-bold text-foreground transition hover:bg-secondary active:scale-95"
-          >
-            <DollarSign className="h-4 w-4 text-emerald-400" />
-            View Referral Earnings
-            <ArrowUpRight className="h-3.5 w-3.5 opacity-60" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/direct-referral-income"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-secondary/80 px-4 py-2 text-xs font-bold text-foreground transition hover:bg-secondary active:scale-95"
+            >
+              <DollarSign className="h-4 w-4 text-emerald-400" />
+              Referral Income Ledger
+              <ArrowUpRight className="h-3.5 w-3.5 opacity-60" />
+            </Link>
+          </div>
         </div>
 
-        {/* Invite Link Card */}
-        <div className="rounded-2xl border border-brand/30 bg-gradient-to-br from-brand/10 via-card to-card p-5 sm:p-6 shadow-sm">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-md bg-brand/20 px-2 py-0.5 text-[11px] font-bold text-brand uppercase tracking-wider">
-                  Your Referral Link
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Code: <strong className="text-foreground">{referralCode}</strong>
-                </span>
+        {/* ------------------------------------------------------------------ */}
+        {/* REQUIREMENT 6: TOP REFERRAL INFORMATION CARD                       */}
+        {/* Shows:                                                             */}
+        {/* - Direct Referral                                                  */}
+        {/* - Team Members                                                     */}
+        {/* - Referral Income / Direct Commission                              */}
+        {/* - Referral Link                                                    */}
+        {/* - Referral Number                                                  */}
+        {/* - Referral Code                                                    */}
+        {/* ------------------------------------------------------------------ */}
+        <div className="rounded-3xl border border-brand/40 bg-gradient-to-br from-brand/10 via-card to-card p-6 shadow-card space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 border-b border-border/70 pb-6">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/15 px-3 py-1 text-xs font-bold text-brand">
+                <Network className="h-3.5 w-3.5" />
+                Referral Program Overview
               </div>
-              <p className="text-sm font-semibold text-foreground">
-                Share your link to earn 10% direct commissions on all member ad revenue &
-                subscriptions.
+              <h2 className="text-xl sm:text-2xl font-black text-foreground">
+                Invite Creators & Earn Passive Income
+              </h2>
+              <p className="text-xs text-muted-foreground max-w-xl">
+                Free Video uploads earn ₹0 referral income. When your direct referral uploads a{" "}
+                <strong>Premium Video</strong>, you automatically receive{" "}
+                <strong>₹1 per Premium Video</strong> as Direct Commission!
               </p>
             </div>
 
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <div className="flex-1 md:w-80 rounded-xl border border-border bg-background/80 px-3 py-2 text-xs text-muted-foreground truncate font-mono select-all">
-                {referralLink}
+            {/* Referral Credentials: Link, Code & Number */}
+            <div className="space-y-3 w-full lg:w-auto min-w-[320px]">
+              {/* Referral Link */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Referral Link:
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={data.referralLink}
+                    className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs font-mono text-muted-foreground select-all focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition shadow-sm shrink-0 ${
+                      copied
+                        ? "bg-emerald-600 text-white"
+                        : "bg-brand text-white hover:bg-brand-dark"
+                    }`}
+                  >
+                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copied ? "Copied" : "Copy Link"}
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={handleCopyLink}
-                className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition shadow-sm shrink-0 ${
-                  copied ? "bg-emerald-600 text-white" : "bg-brand text-white hover:bg-brand-dark"
-                }`}
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-3.5 w-3.5" />
-                    Copied!
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3.5 w-3.5" />
-                    Copy Link
-                  </>
-                )}
-              </button>
+
+              {/* Referral Code & Referral Number */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl border border-border bg-background/80 p-2.5">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Referral Code
+                  </span>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="font-mono text-sm font-black text-foreground">
+                      {data.referralCode}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyCode}
+                      className="text-muted-foreground hover:text-foreground"
+                      title="Copy Code"
+                    >
+                      {copiedCode ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border bg-background/80 p-2.5">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Referral Number
+                  </span>
+                  <div className="font-mono text-xs font-bold text-foreground mt-1 truncate">
+                    {data.referralNumber}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 4 Stats Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {/* 1. Direct Referral */}
+            <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-sm">
+              <span className="text-xs text-muted-foreground font-medium block">
+                Direct Referral
+              </span>
+              <p className="text-2xl font-black text-foreground">{data.directReferralsCount}</p>
+              <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                <TrendingUp className="h-3 w-3" /> Personally referred
+              </p>
+            </div>
+
+            {/* 2. Team Members (Requirement 6: MUST use 'Team Members' label) */}
+            <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4 space-y-1 shadow-sm">
+              <span className="text-xs font-bold text-blue-400 block">Team Members</span>
+              <p className="text-2xl font-black text-blue-300">{data.teamMembersCount}</p>
+              <p className="text-[11px] text-muted-foreground">Full network downline</p>
+            </div>
+
+            {/* 3. Referral Income / Direct Commission */}
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-1 shadow-sm">
+              <span className="text-xs font-bold text-amber-400 block">
+                Referral Income / Direct Commission
+              </span>
+              <p className="text-2xl font-black text-amber-300">
+                ₹{data.referralIncome.toFixed(2)}
+              </p>
+              <p className="text-[11px] text-amber-400/80 font-mono">₹1 per Premium Video</p>
+            </div>
+
+            {/* 4. Business Rule Reminder */}
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-1 shadow-sm">
+              <span className="text-xs font-bold text-emerald-400 block">Income Rule</span>
+              <div className="text-xs font-medium text-foreground space-y-0.5 pt-0.5">
+                <div>
+                  • Free Video: <strong className="text-muted-foreground">₹0</strong>
+                </div>
+                <div>
+                  • Premium Video: <strong className="text-emerald-400">₹1.00</strong>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground">Instant wallet credit</p>
             </div>
           </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <p className="text-xs text-muted-foreground font-medium">Direct Referrals</p>
-            <p className="text-2xl font-black text-foreground">24</p>
-            <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" /> +4 this week
-            </p>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <p className="text-xs text-muted-foreground font-medium">Active Members</p>
-            <p className="text-2xl font-black text-emerald-400">21</p>
-            <p className="text-[11px] text-muted-foreground">87.5% active rate</p>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <p className="text-xs text-muted-foreground font-medium">Total Direct Income</p>
-            <p className="text-2xl font-black text-amber-400">$1,079.50</p>
-            <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" /> 10% direct rate
-            </p>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <p className="text-xs text-muted-foreground font-medium">Videos Uploaded</p>
-            <p className="text-2xl font-black text-foreground">186</p>
-            <p className="text-[11px] text-muted-foreground">Across all referrals</p>
-          </div>
-        </div>
-
-        {/* Search & Filter */}
+        {/* Search Bar */}
         <div className="flex items-center justify-between gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -286,11 +294,14 @@ function ReferralMembersPage() {
             />
           </div>
           <span className="text-xs text-muted-foreground">
-            Showing <strong>{filteredMembers.length}</strong> members
+            Showing <strong>{filteredMembers.length}</strong> direct members
           </span>
         </div>
 
-        {/* Members Table */}
+        {/* ------------------------------------------------------------------ */}
+        {/* REQUIREMENT 7 & 11: MEMBERS & UPLOADED VIDEOS TABLE                */}
+        {/* Displays Free vs Premium uploads and ₹1 commission per Premium vid */}
+        {/* ------------------------------------------------------------------ */}
         <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-card">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -301,10 +312,10 @@ function ReferralMembersPage() {
                   <th className="px-4 py-3 whitespace-nowrap">User ID</th>
                   <th className="px-4 py-3 whitespace-nowrap">Mobile Number</th>
                   <th className="px-4 py-3 whitespace-nowrap">Joined</th>
-                  <th className="px-4 py-3 whitespace-nowrap">Status</th>
-                  <th className="px-4 py-3 whitespace-nowrap">Videos</th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap">Commission Earned</th>
-                  <th className="px-4 py-3 whitespace-nowrap">Access</th>
+                  <th className="px-4 py-3 text-center whitespace-nowrap">Free Videos (₹0)</th>
+                  <th className="px-4 py-3 text-center whitespace-nowrap">Premium Videos (₹1)</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Direct Commission</th>
+                  <th className="px-4 py-3 text-center whitespace-nowrap">Access</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -315,10 +326,10 @@ function ReferralMembersPage() {
                       {index + 1}
                     </td>
 
-                    {/* Member */}
+                    {/* Member Name & Email */}
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-3">
-                        <div className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 font-bold text-brand">
+                        <div className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 font-bold text-brand shrink-0">
                           {member.name.charAt(0)}
                         </div>
                         <div>
@@ -329,11 +340,11 @@ function ReferralMembersPage() {
                     </td>
 
                     {/* User ID */}
-                    <td className="px-4 py-3.5 font-mono text-[11px] font-bold text-rose-400">
+                    <td className="px-4 py-3.5 font-mono text-xs font-bold text-rose-400 whitespace-nowrap">
                       {member.userId}
                     </td>
 
-                    {/* Mobile Number with Call & WhatsApp */}
+                    {/* Mobile with Click to Call & WhatsApp */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs font-medium text-foreground">
@@ -343,8 +354,7 @@ function ReferralMembersPage() {
                           <a
                             href={getTelUrl(member.mobile)}
                             className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-secondary/60 text-foreground transition hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400 active:scale-95"
-                            title={`Call ${member.name} (${member.mobile})`}
-                            aria-label={`Call ${member.name}`}
+                            title={`Call ${member.name}`}
                           >
                             <Phone className="h-3.5 w-3.5" />
                           </a>
@@ -354,7 +364,6 @@ function ReferralMembersPage() {
                             rel="noopener noreferrer"
                             className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-secondary/60 text-emerald-400 transition hover:border-emerald-500/40 hover:bg-emerald-500/15 hover:text-emerald-300 active:scale-95"
                             title={`WhatsApp chat with ${member.name}`}
-                            aria-label={`WhatsApp chat with ${member.name}`}
                           >
                             <MessageCircle className="h-3.5 w-3.5" />
                           </a>
@@ -367,64 +376,37 @@ function ReferralMembersPage() {
                       {member.joinedAt}
                     </td>
 
-                    {/* Status */}
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          member.status === "Active"
-                            ? "bg-emerald-500/10 text-emerald-400"
-                            : "bg-amber-500/10 text-amber-400"
+                    {/* Free Videos Uploaded */}
+                    <td className="px-4 py-3.5 text-center font-mono text-xs font-semibold text-sky-400 whitespace-nowrap">
+                      {member.freeVideosCount}
+                    </td>
+
+                    {/* Premium Videos Uploaded */}
+                    <td className="px-4 py-3.5 text-center font-mono text-xs font-bold text-amber-400 whitespace-nowrap">
+                      {member.premiumVideosCount}
+                    </td>
+
+                    {/* Direct Commission Earned */}
+                    <td className="px-4 py-3.5 text-right font-mono text-xs font-black text-emerald-400 whitespace-nowrap">
+                      ₹{member.directCommissionEarned.toFixed(2)}
+                    </td>
+
+                    {/* Access Toggle */}
+                    <td className="px-4 py-3.5 text-center whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => toggleAccess(member.id)}
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                          member.access === "Granted"
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                            : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
                         }`}
                       >
-                        {member.status === "Active" ? (
-                          <CheckCircle2 className="h-3 w-3" />
-                        ) : (
-                          <Clock className="h-3 w-3" />
-                        )}
-                        {member.status}
-                      </span>
-                    </td>
-
-                    {/* Videos */}
-                    <td className="px-4 py-3.5 font-semibold text-foreground">
-                      {member.videosCount}
-                    </td>
-
-                    {/* Commission Earned */}
-                    <td className="px-4 py-3.5 text-right font-bold text-emerald-400 whitespace-nowrap font-mono text-xs sm:text-sm">
-                      {member.earnings}
-                    </td>
-
-                    {/* Access (immediately after Commission Earned) */}
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={member.access === "Granted"}
-                          onCheckedChange={() => toggleAccess(member.id)}
-                          aria-label={`Toggle access for ${member.name}`}
-                          className="data-[state=checked]:bg-emerald-600"
-                        />
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            member.access === "Granted"
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                              : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                          }`}
-                        >
-                          <ShieldCheck className="h-3 w-3" />
-                          {member.access}
-                        </span>
-                      </div>
+                        {member.access === "Granted" ? "Active" : "Restricted"}
+                      </button>
                     </td>
                   </tr>
                 ))}
-                {filteredMembers.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
-                      No referral members found matching &quot;{searchTerm}&quot;.
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>

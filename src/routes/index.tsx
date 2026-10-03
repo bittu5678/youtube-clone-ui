@@ -6,10 +6,25 @@ import { Navbar } from "@/components/videohub/Navbar";
 import { Sidebar } from "@/components/videohub/Sidebar";
 import { Hero } from "@/components/videohub/Hero";
 import { VideoCard } from "@/components/videohub/VideoCard";
+import { ImageCard } from "@/components/videohub/ImageCard";
 import { ShortsShelf } from "@/components/videohub/ShortsShelf";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { Footer } from "@/components/videohub/Footer";
-import { allVideos, categories, creators, recent, recommended, trending } from "@/data/videos";
+import {
+  allVideos,
+  categories,
+  creators,
+  recent,
+  recommended,
+  trending,
+  type Video,
+} from "@/data/videos";
+import {
+  fetchUploadedImages,
+  interleaveFeedWithImages,
+  IMAGE_FEED_INTERVAL,
+  type UploadedImage,
+} from "@/lib/image-service";
 
 export const Route = createFileRoute("/")({
   validateSearch: (search: Record<string, unknown>): { q?: string } => ({
@@ -63,12 +78,24 @@ function Index() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState("All");
   const [query, setQuery] = useState(searchParams.q || "");
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
 
   useEffect(() => {
     if (searchParams.q !== undefined) {
       setQuery(searchParams.q);
     }
   }, [searchParams.q]);
+
+  // Load uploaded images from storage/database
+  useEffect(() => {
+    fetchUploadedImages()
+      .then((imgs) => {
+        if (imgs && imgs.length > 0) {
+          setUploadedImages(imgs);
+        }
+      })
+      .catch((err) => console.error("Error loading feed images:", err));
+  }, []);
 
   const isFiltering = query.trim().length > 0 || activeCategory !== "All";
 
@@ -90,6 +117,23 @@ function Index() {
     });
   }, [query, activeCategory]);
 
+  // Requirement 2: Interleave feed with images after every 5 videos
+  const interleavedRecommended = useMemo(() => {
+    return interleaveFeedWithImages(recommended, uploadedImages, IMAGE_FEED_INTERVAL);
+  }, [uploadedImages]);
+
+  const interleavedTrending = useMemo(() => {
+    return interleaveFeedWithImages(trending, uploadedImages, IMAGE_FEED_INTERVAL);
+  }, [uploadedImages]);
+
+  const interleavedRecent = useMemo(() => {
+    return interleaveFeedWithImages(recent, uploadedImages, IMAGE_FEED_INTERVAL);
+  }, [uploadedImages]);
+
+  const interleavedFiltered = useMemo(() => {
+    return interleaveFeedWithImages(results, uploadedImages, IMAGE_FEED_INTERVAL);
+  }, [results, uploadedImages]);
+
   return (
     <div className="min-h-screen bg-background font-sans text-foreground">
       <Navbar
@@ -105,7 +149,7 @@ function Index() {
         <Sidebar open={railOpen} drawerOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
 
         <main className="min-w-0 flex-1 pb-24 lg:pb-10">
-          {/* Category chips */}
+          {/* Category chips with the 11 updated categories */}
           <div className="sticky top-16 z-30 border-b border-border bg-background/90 backdrop-blur-md">
             <div className="px-4 pt-3 md:hidden">
               <div className="flex h-10 items-center rounded-full border border-border bg-secondary/60 px-4 focus-within:border-brand/50">
@@ -149,28 +193,40 @@ function Index() {
                     query.trim() && activeCategory !== "All" ? ` in ${activeCategory}` : ""
                   }`}
                 />
-                {results.length > 0 ? (
+                {interleavedFiltered.length > 0 ? (
                   <>
                     <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                      {results.slice(0, 6).map((v) => (
-                        <VideoCard key={v.id} video={v} />
-                      ))}
+                      {interleavedFiltered
+                        .slice(0, 6)
+                        .map((item) =>
+                          item.type === "video" ? (
+                            <VideoCard key={item.data.id} video={item.data} />
+                          ) : (
+                            <ImageCard key={item.data.id} image={item.data} />
+                          ),
+                        )}
                     </div>
 
                     <ShortsShelf />
 
-                    {results.length > 6 && (
-                      <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                        {results.slice(6).map((v) => (
-                          <VideoCard key={v.id} video={v} />
-                        ))}
+                    {interleavedFiltered.length > 6 && (
+                      <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 mt-8">
+                        {interleavedFiltered
+                          .slice(6)
+                          .map((item) =>
+                            item.type === "video" ? (
+                              <VideoCard key={item.data.id} video={item.data} />
+                            ) : (
+                              <ImageCard key={item.data.id} image={item.data} />
+                            ),
+                          )}
                       </div>
                     )}
                   </>
                 ) : (
                   <div className="grid place-items-center rounded-2xl border border-dashed border-border py-20 text-center">
                     <SearchX className="h-10 w-10 text-muted-foreground" />
-                    <p className="mt-4 text-base font-semibold">No videos match your filters</p>
+                    <p className="mt-4 text-base font-semibold">No content matches your filters</p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       Try a different keyword or category.
                     </p>
@@ -191,6 +247,7 @@ function Index() {
               <>
                 <Hero />
 
+                {/* Section 1: Recommended for you (with 1 image after 5 videos) */}
                 <section className="mt-12">
                   <SectionHeading
                     icon={Sparkles}
@@ -198,15 +255,20 @@ function Index() {
                     subtitle="Picked from channels you watch"
                   />
                   <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                    {recommended.map((v) => (
-                      <VideoCard key={v.id} video={v} />
-                    ))}
+                    {interleavedRecommended.map((item) =>
+                      item.type === "video" ? (
+                        <VideoCard key={item.data.id} video={item.data} />
+                      ) : (
+                        <ImageCard key={item.data.id} image={item.data} />
+                      ),
+                    )}
                   </div>
                 </section>
 
                 {/* YouTube-style Horizontal Shorts Carousel Section */}
                 <ShortsShelf />
 
+                {/* Section 2: Trending now (with 1 image after 5 videos) */}
                 <section className="mt-14">
                   <SectionHeading
                     icon={Flame}
@@ -214,9 +276,13 @@ function Index() {
                     subtitle="What everyone is watching today"
                   />
                   <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                    {trending.map((v) => (
-                      <VideoCard key={v.id} video={v} />
-                    ))}
+                    {interleavedTrending.map((item) =>
+                      item.type === "video" ? (
+                        <VideoCard key={item.data.id} video={item.data} />
+                      ) : (
+                        <ImageCard key={item.data.id} image={item.data} />
+                      ),
+                    )}
                   </div>
                 </section>
 
@@ -247,6 +313,7 @@ function Index() {
                   </div>
                 </section>
 
+                {/* Section 3: Recently uploaded (with 1 image after 5 videos) */}
                 <section className="mt-14">
                   <SectionHeading
                     icon={Clock3}
@@ -254,14 +321,19 @@ function Index() {
                     subtitle="Fresh from your subscriptions"
                   />
                   <div className="grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                    {recent.map((v) => (
-                      <VideoCard key={v.id} video={v} />
-                    ))}
+                    {interleavedRecent.map((item) =>
+                      item.type === "video" ? (
+                        <VideoCard key={item.data.id} video={item.data} />
+                      ) : (
+                        <ImageCard key={item.data.id} image={item.data} />
+                      ),
+                    )}
                   </div>
                 </section>
               </>
             )}
 
+            {/* Preserved FaceTube Footer */}
             <Footer />
           </div>
         </main>

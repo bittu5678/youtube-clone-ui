@@ -107,14 +107,14 @@ const AD_PLANS: AdPlan[] = [
     name: "Yearly Enterprise",
     durationLabel: "Yearly (365 Days)",
     days: 365,
-    price: 3000,
-    dailyRate: "₹8.21/day",
+    price: 30000,
+    dailyRate: "₹82.19/day",
     impressions: "1,800,000+ views",
     features: [
       "365 Days Non-Stop Global Reach",
       "Verified Brand Partner spotlight",
       "Dedicated account manager support",
-      "Direct Referrer earns ₹300 (10%)",
+      "Direct Referrer earns ₹3,000 (10%)",
     ],
     isBestValue: true,
   },
@@ -255,8 +255,8 @@ function AdsPromotionsPage() {
     return d.toISOString().split("T")[0];
   };
 
-  // Activate Promotion Submission
-  const handleActivatePromotion = () => {
+  // Activate Promotion Submission with Razorpay Payment Gateway
+  const handleActivatePromotion = async () => {
     if (!campaignTitle.trim()) {
       toast.error("Please enter an Advertisement Campaign Title.");
       return;
@@ -264,44 +264,70 @@ function AdsPromotionsPage() {
 
     setIsActivating(true);
 
-    setTimeout(() => {
-      const now = new Date();
-      const startDate = now.toISOString().split("T")[0];
-      const expiryDate = calculateExpiryDate(selectedPlan.days);
-      const commission = Math.round(selectedPlan.price * 0.1);
-
-      const newCampaign: ActiveCampaign = {
-        id: `camp-${Date.now().toString().slice(-4)}`,
-        title: campaignTitle,
-        videoUrl: videoPreviewUrl,
-        destinationUrl: destinationUrl || "https://facetube.app",
-        category,
+    try {
+      const { initiateAdsPromotionPayment } = await import("@/lib/razorpay-service");
+      await initiateAdsPromotionPayment({
+        userId: profile?.user_id || dbUser?.user_id || "FT483921",
+        userName,
+        userEmail: user?.email || undefined,
+        userMobile: profile?.mobile || dbUser?.mobile || undefined,
+        videoId: `camp-vid-${Date.now()}`,
+        planId: selectedPlan.id as "plan-7-days" | "plan-15-days" | "plan-monthly" | "plan-yearly",
         planName: selectedPlan.name,
-        durationLabel: selectedPlan.durationLabel,
+        durationDays: selectedPlan.days,
         price: selectedPlan.price,
-        referrerCommission: commission,
-        startDate,
-        expiryDate,
-        status: "Active",
-        impressions: 120,
-        clicks: 8,
-        ctr: "6.67%",
-      };
+        directReferrerId: sponsorId,
+        onSuccess: (res: unknown) => {
+          const now = new Date();
+          const startDate = now.toISOString().split("T")[0];
+          const expiryDate = calculateExpiryDate(selectedPlan.days);
+          const commission = Math.round(selectedPlan.price * 0.1);
+          const paymentResult = res as { paymentId?: string } | undefined;
 
-      setCampaigns((prev) => [newCampaign, ...prev]);
-      setIsActivating(false);
+          const newCampaign: ActiveCampaign = {
+            id: `camp-${Date.now().toString().slice(-4)}`,
+            title: campaignTitle,
+            videoUrl: videoPreviewUrl,
+            destinationUrl: destinationUrl || "https://facetube.app",
+            category,
+            planName: selectedPlan.name,
+            durationLabel: selectedPlan.durationLabel,
+            price: selectedPlan.price,
+            referrerCommission: commission,
+            startDate,
+            expiryDate,
+            status: "Active",
+            impressions: 120,
+            clicks: 8,
+            ctr: "6.67%",
+          };
 
-      toast.success(`🎉 Promotion Activated Successfully for ₹${selectedPlan.price}!`, {
-        description: `Direct Referrer (${sponsorName} - ${sponsorId}) received ₹${commission} (10%) instant commission. Active until ${expiryDate}.`,
-        duration: 7000,
+          setCampaigns((prev) => [newCampaign, ...prev]);
+          setIsActivating(false);
+
+          toast.success(`🎉 Payment Verified! Promotion Activated for ₹${selectedPlan.price}!`, {
+            description: `Payment ID: ${paymentResult?.paymentId || "Verified"}. Direct Referrer (${sponsorName} - ${sponsorId}) received ₹${commission} (10%) instant commission. Active until ${expiryDate}.`,
+            duration: 7000,
+          });
+
+          const statusSection = document.getElementById("active-promotions-section");
+          if (statusSection) {
+            statusSection.scrollIntoView({ behavior: "smooth" });
+          }
+        },
+        onFailure: (err) => {
+          setIsActivating(false);
+          toast.error(err || "Payment failed. Promotion was not activated.");
+        },
+        onCancel: () => {
+          setIsActivating(false);
+          toast.info("Payment cancelled. Promotion was not activated.");
+        },
       });
-
-      // Scroll smoothly to the active status section
-      const statusSection = document.getElementById("active-promotions-section");
-      if (statusSection) {
-        statusSection.scrollIntoView({ behavior: "smooth" });
-      }
-    }, 1200);
+    } catch (err: unknown) {
+      setIsActivating(false);
+      toast.error("Failed to connect with payment gateway.");
+    }
   };
 
   // Toggle Campaign status

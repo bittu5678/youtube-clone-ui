@@ -19,24 +19,28 @@ export type Video = {
   description: string;
 };
 
-export const categories = [
-  "All",
-  "Music",
+export const VIDEO_CATEGORIES = [
+  "Motivational",
+  "Comedy",
+  "Blog",
+  "Movie",
+  "Entertainment",
+  "Cooking",
+  "Finance",
+  "Share Market",
+  "Business",
+  "Crypto",
   "Coding",
-  "AI",
-  "JavaScript",
-  "React",
-  "Gaming",
-  "News",
-  "Study",
-  "Design",
-  "Podcasts",
-];
+] as const;
+
+export type VideoCategory = (typeof VIDEO_CATEGORIES)[number];
+
+export const categories = ["All", ...VIDEO_CATEGORIES];
 
 export const recommended: Video[] = [
   {
     id: "v1",
-    category: "React",
+    category: "Coding",
     description:
       "A full walkthrough of building a production-grade React dashboard: routing, data fetching, charts, and a design system that scales.",
     title: "Build a Production-Ready React Dashboard in One Sitting",
@@ -50,10 +54,10 @@ export const recommended: Video[] = [
   },
   {
     id: "v2",
-    category: "AI",
+    category: "Motivational",
     description:
-      "A visual, math-light explainer of gradient descent, backpropagation and why neural networks generalise at all.",
-    title: "How Neural Networks Actually Learn — Visual Explainer",
+      "The mindset shift and discipline needed to reach elite performance and master complex skills in 2026.",
+    title: "How to Build Relentless Focus & Mental Stamina",
     channel: "Deep Signal",
     initials: "DS",
     views: "1.4M views",
@@ -64,10 +68,10 @@ export const recommended: Video[] = [
   },
   {
     id: "v3",
-    category: "Music",
+    category: "Entertainment",
     description:
-      "Watch a complete lo-fi track come together from a single piano loop — sampling, drums, mixing and mastering in real time.",
-    title: "Lo-Fi Studio Session: Making a Track from Scratch",
+      "Watch a complete cinematic soundtrack come together from a single melody loop — sampling, drums, mixing and mastering.",
+    title: "Cinematic Sound Studio Session: Making a Score from Scratch",
     channel: "Redroom Audio",
     initials: "RA",
     views: "306K views",
@@ -78,10 +82,10 @@ export const recommended: Video[] = [
   },
   {
     id: "v4",
-    category: "Gaming",
+    category: "Comedy",
     description:
-      "High-pressure ranked gameplay with commentary, plus a full tour of the streaming setup and peripherals.",
-    title: "Ranked Grind: Clutch Plays and Setup Tour",
+      "Hilarious sketches and real-world reactions to modern developer problems and startup culture.",
+    title: "Tech Startup Standup: Hilarious Realities of Modern Work",
     channel: "NovaPlays",
     initials: "NP",
     views: "2.1M views",
@@ -92,10 +96,10 @@ export const recommended: Video[] = [
   },
   {
     id: "v5",
-    category: "Design",
+    category: "Business",
     description:
-      "How to turn a chaotic Figma file into a documented, token-driven design system your engineers will actually use.",
-    title: "Design Systems: From Messy Figma to Shipped Product",
+      "How to scale an enterprise brand, optimize creator economics, and build enduring distribution moats.",
+    title: "Creator Economy 2026: Scaling from Zero to Enterprise",
     channel: "Studio Grid",
     initials: "SG",
     views: "97K views",
@@ -106,10 +110,10 @@ export const recommended: Video[] = [
   },
   {
     id: "v6",
-    category: "Podcasts",
+    category: "Finance",
     description:
-      "A long-form conversation about platforms, payouts and what sustainable creative work looks like in 2026.",
-    title: "The Creator Economy in 2026 — Full Podcast Episode",
+      "Comprehensive breakdown of wealth compounding, index funds, cash flow management and early retirement planning.",
+    title: "Smart Financial Freedom Blueprint: Compounding & Cash Flow",
     channel: "Signal & Noise",
     initials: "SN",
     views: "512K views",
@@ -120,10 +124,10 @@ export const recommended: Video[] = [
   },
   {
     id: "v7",
-    category: "JavaScript",
+    category: "Share Market",
     description:
-      "Generics, discriminated unions, satisfies and the type-level tricks senior engineers reach for every day.",
-    title: "TypeScript Patterns Every Senior Engineer Uses",
+      "Intraday price action, swing trading strategies, order book liquidity and risk mitigation rules.",
+    title: "Mastering the Share Market: Technical Analysis & Risk Management",
     channel: "CodeCanvas",
     initials: "CC",
     views: "428K views",
@@ -134,10 +138,10 @@ export const recommended: Video[] = [
   },
   {
     id: "v8",
-    category: "AI",
+    category: "Crypto",
     description:
-      "Why prompt tinkering is fading and structured context engineering is taking over production AI systems.",
-    title: "Prompt Engineering Is Dead — Here's What Replaced It",
+      "DeFi primitives, liquidity pools, cross-chain bridges and decentralized infrastructure explained.",
+    title: "Web3 & Crypto Architecture: What Every Builder Needs to Know",
     channel: "Deep Signal",
     initials: "DS",
     views: "1.1M views",

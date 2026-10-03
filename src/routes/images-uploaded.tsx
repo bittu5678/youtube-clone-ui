@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Image as ImageIcon,
   Plus,
@@ -9,75 +9,49 @@ import {
   CheckCircle2,
   Calendar,
   Layers,
+  RefreshCw,
 } from "lucide-react";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
+import { useAuth } from "@/lib/auth-context";
+import { fetchUploadedImages, type UploadedImage } from "@/lib/image-service";
 
 export const Route = createFileRoute("/images-uploaded")({
   head: () => ({
     meta: [
-      { title: "Images Uploaded — Your Videos — FaceTube" },
+      { title: "Images Uploaded — FaceTube Media Library" },
       {
         name: "description",
         content:
-          "Manage your uploaded image assets, custom video thumbnails, channel banners, and community posts on FaceTube.",
+          "Manage your uploaded image assets, custom video thumbnails, channel banners, and community photo posts on FaceTube.",
       },
     ],
   }),
   component: ImagesUploadedPage,
 });
 
-const mockImages = [
-  {
-    id: "img-1",
-    title: "React Masterclass 4K Thumbnail",
-    type: "Thumbnail (16:9)",
-    size: "1.4 MB",
-    uploaded: "Sep 18, 2026",
-    url: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&auto=format&fit=crop&q=80",
-  },
-  {
-    id: "img-2",
-    title: "Cyberpunk Night City Cover Art",
-    type: "Thumbnail (16:9)",
-    size: "2.1 MB",
-    uploaded: "Sep 16, 2026",
-    url: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80",
-  },
-  {
-    id: "img-3",
-    title: "FaceTube Channel Banner 2026",
-    type: "Channel Banner",
-    size: "3.8 MB",
-    uploaded: "Sep 12, 2026",
-    url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
-  },
-  {
-    id: "img-4",
-    title: "Studio Microphone Promo Graphic",
-    type: "Community Post",
-    size: "890 KB",
-    uploaded: "Sep 09, 2026",
-    url: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=600&auto=format&fit=crop&q=80",
-  },
-  {
-    id: "img-5",
-    title: "Podcast Guest Announcement",
-    type: "Community Post",
-    size: "1.1 MB",
-    uploaded: "Sep 05, 2026",
-    url: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&auto=format&fit=crop&q=80",
-  },
-  {
-    id: "img-6",
-    title: "Diamond Creator Milestone Badge",
-    type: "Sticker / Icon",
-    size: "320 KB",
-    uploaded: "Aug 29, 2026",
-    url: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80",
-  },
-];
+export function ImagesUploadedPage() {
+  const { user, profile, dbUser } = useAuth();
+  const userId = profile?.user_id || dbUser?.user_id || user?.email?.split("@")[0] || "FT483921";
 
-function ImagesUploadedPage() {
+  const [images, setImages] = useState<UploadedImage[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadImages = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchUploadedImages();
+      setImages(data);
+    } catch (e) {
+      console.error("Failed to load images:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadImages();
+  }, []);
+
   return (
     <VideoHubLayout>
       <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">
@@ -92,70 +66,89 @@ function ImagesUploadedPage() {
                 Images Uploaded
               </h1>
               <p className="text-sm text-muted-foreground">
-                Media library for custom video thumbnails, community photo posts, and channel brand
-                assets
+                Media library for custom video thumbnails, channel graphics, and photo posts.
+                Displays every 5 videos in feed.
               </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-brand px-4 py-2 text-xs font-bold text-white shadow-lift transition hover:bg-brand-dark active:scale-95"
-          >
-            <Plus className="h-4 w-4" />
-            Upload New Image
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={loadImages}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/80 px-3 py-1.5 text-xs font-bold text-foreground transition hover:bg-secondary"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin text-brand" : ""}`} />
+              Refresh
+            </button>
+            <Link
+              to="/upload"
+              search={{ mode: "image" }}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-teal-600 px-4 py-2 text-xs font-bold text-white shadow-lift transition hover:bg-teal-500 active:scale-95"
+            >
+              <Plus className="h-4 w-4" />
+              Upload Image
+            </Link>
+          </div>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Total Images Uploaded</span>
-            <p className="text-2xl font-black text-teal-400">32</p>
-            <p className="text-[11px] text-muted-foreground">Thumbnails & graphics</p>
+            <p className="text-2xl font-black text-teal-400">{images.length}</p>
+            <p className="text-[11px] text-muted-foreground">JPG, PNG, WEBP formats</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Storage Used</span>
-            <p className="text-2xl font-black text-foreground">84.2 MB</p>
-            <p className="text-[11px] text-muted-foreground">Of 10 GB cloud quota</p>
+            <span className="text-xs text-muted-foreground font-medium">Feed Insertion</span>
+            <p className="text-2xl font-black text-foreground">1 per 5 Videos</p>
+            <p className="text-[11px] text-teal-400 font-semibold">Configurable threshold active</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Thumbnails Applied</span>
-            <p className="text-2xl font-black text-foreground">22 Videos</p>
-            <p className="text-[11px] text-emerald-400 font-semibold">100% active coverage</p>
+            <span className="text-xs text-muted-foreground font-medium">Supported Formats</span>
+            <p className="text-2xl font-black text-foreground">3 Types</p>
+            <p className="text-[11px] text-muted-foreground">JPG / JPEG, PNG, WEBP</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Asset CDN</span>
-            <p className="text-2xl font-black text-emerald-400">Active</p>
-            <p className="text-[11px] text-muted-foreground">Edge cached globally</p>
+            <span className="text-xs text-muted-foreground font-medium">Asset Status</span>
+            <p className="text-2xl font-black text-emerald-400">Live &amp; Synced</p>
+            <p className="text-[11px] text-muted-foreground">Available across stream feeds</p>
           </div>
         </div>
 
         {/* Gallery Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-          {mockImages.map((img) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {images.map((img) => (
             <div
               key={img.id}
-              className="group overflow-hidden rounded-2xl border border-border bg-card shadow-card transition duration-200 hover:-translate-y-1 hover:shadow-lift"
+              className="group overflow-hidden rounded-2xl border border-border bg-card shadow-card transition duration-200 hover:-translate-y-1 hover:shadow-lift flex flex-col justify-between"
             >
               <div className="relative aspect-video w-full overflow-hidden bg-secondary">
                 <img
-                  src={img.url}
+                  src={img.imageUrl}
                   alt={img.title}
                   className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                   referrerPolicy="no-referrer"
                 />
-                <span className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1 py-0.5 text-[9px] font-mono text-white">
-                  {img.size}
+                <span className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[9px] font-mono text-white">
+                  {img.fileSize}
+                </span>
+                <span className="absolute top-1.5 left-1.5 rounded bg-teal-600/90 px-1.5 py-0.5 text-[9px] font-bold text-white uppercase">
+                  {img.format}
                 </span>
               </div>
-              <div className="p-3 space-y-1">
-                <h4 className="truncate text-xs font-bold text-foreground leading-snug group-hover:text-brand transition-colors">
+              <div className="p-3.5 space-y-1">
+                <h4 className="truncate text-xs font-bold text-foreground leading-snug group-hover:text-teal-400 transition-colors">
                   {img.title}
                 </h4>
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                  <span className="truncate">{img.type}</span>
-                  <span>{img.uploaded.split(",")[0]}</span>
+                {img.description && (
+                  <p className="text-[11px] text-muted-foreground line-clamp-1">
+                    {img.description}
+                  </p>
+                )}
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/50">
+                  <span className="font-semibold text-teal-400">{img.category || "Community"}</span>
+                  <span>{new Date(img.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
             </div>

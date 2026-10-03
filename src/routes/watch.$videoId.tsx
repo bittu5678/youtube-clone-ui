@@ -11,15 +11,21 @@ import {
   Maximize2,
   Settings,
   Send,
-  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Navbar } from "@/components/videohub/Navbar";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { VideoCard } from "@/components/videohub/VideoCard";
+import { ImageCard } from "@/components/videohub/ImageCard";
 import { allVideos, findVideo } from "@/data/videos";
 import { useAuth } from "@/lib/auth-context";
+import {
+  fetchUploadedImages,
+  interleaveFeedWithImages,
+  IMAGE_FEED_INTERVAL,
+  type UploadedImage,
+} from "@/lib/image-service";
 
 export const Route = createFileRoute("/watch/$videoId")({
   loader: ({ params }) => {
@@ -94,6 +100,17 @@ function WatchPage() {
   ]);
 
   const related = allVideos.filter((v) => v.id !== video.id).slice(0, 8);
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+
+  useEffect(() => {
+    fetchUploadedImages()
+      .then((imgs) => {
+        if (imgs && imgs.length > 0) setUploadedImages(imgs);
+      })
+      .catch((err) => console.error("Error loading images for related feed:", err));
+  }, []);
+
+  const interleavedRelated = interleaveFeedWithImages(related, uploadedImages, IMAGE_FEED_INTERVAL);
 
   const handleToggleLike = () => {
     setLiked((v) => !v);
@@ -356,11 +373,15 @@ function WatchPage() {
         </div>
 
         <aside className="min-w-0">
-          <h2 className="mb-4 text-base font-bold">Related videos</h2>
+          <h2 className="mb-4 text-base font-bold">Related content</h2>
           <div className="grid grid-cols-1 gap-x-5 gap-y-7 sm:grid-cols-2 lg:grid-cols-1">
-            {related.map((v) => (
-              <VideoCard key={v.id} video={v} />
-            ))}
+            {interleavedRelated.map((item) =>
+              item.type === "video" ? (
+                <VideoCard key={item.data.id} video={item.data} />
+              ) : (
+                <ImageCard key={item.data.id} image={item.data} />
+              ),
+            )}
           </div>
         </aside>
       </main>

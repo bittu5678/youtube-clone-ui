@@ -132,11 +132,17 @@ function TeamIncomePage() {
             <p className="text-[11px] text-muted-foreground">Combined ad & sales volume</p>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Current Creator Rank</span>
-            <p className="text-2xl font-black text-amber-400">Diamond Tier</p>
-            <p className="text-[11px] text-muted-foreground">Unlocks up to Level 5</p>
-          </div>
+          <Link
+            to="/my-certificate"
+            className="rounded-2xl border border-amber-500/30 bg-card p-4 space-y-1 shadow-card hover:border-amber-500/60 transition group"
+          >
+            <span className="text-xs text-muted-foreground font-medium flex items-center justify-between">
+              <span>Current Creator Rank</span>
+              <Award className="h-3.5 w-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+            </span>
+            <p className="text-xl font-black text-amber-400">Gold Creator Award</p>
+            <p className="text-[11px] text-muted-foreground">Level 4 · 100K+ Subscribers</p>
+          </Link>
 
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Next Milestone</span>
