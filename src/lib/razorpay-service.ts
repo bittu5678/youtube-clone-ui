@@ -84,7 +84,7 @@ export interface InitiatePremiumVideoPaymentParams {
   videoType?: VideoType;
   contentType: ContentType; // "short" | "long"
   directReferrerId?: string | null;
-  onSuccess: (paymentIdOrVideo: any) => void;
+  onSuccess: (paymentIdOrVideo: unknown) => void;
   onFailure: (errorMsg: string) => void;
   onCancel?: () => void;
 }

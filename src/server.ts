@@ -191,9 +191,8 @@ export default {
       // Query Persistent Premium Transactions & Sequence
       if (url.pathname === "/api/payment/transactions" && request.method === "GET") {
         try {
-          const { getPersistentTransactions, getPersistentPremiumTxNumber } = await import(
-            "./server/payments"
-          );
+          const { getPersistentTransactions, getPersistentPremiumTxNumber } =
+            await import("./server/payments");
           const [lastTxNumber, transactions] = await Promise.all([
             getPersistentPremiumTxNumber(),
             getPersistentTransactions(),

@@ -343,7 +343,6 @@ export async function distributePremiumVideoIncome(params: PremiumDistributionPa
   const txSeqLabel = params.txNumber ? `#${params.txNumber}` : "";
 
   let referralTransaction: LedgerTransaction | undefined;
-  let adminTransaction: LedgerTransaction | undefined;
   let specialAuditTransaction: LedgerTransaction | undefined;
   const globalTransactions: LedgerTransaction[] = [];
 
@@ -391,8 +390,8 @@ export async function distributePremiumVideoIncome(params: PremiumDistributionPa
 
   // 2. Admin Allocation
   // Special: ₹4 Admin | Normal: ₹1 Admin
-  const adminAmount = isSpecial ? 4.0 : params.adminAmount ?? 1.0;
-  adminTransaction = {
+  const adminAmount = isSpecial ? 4.0 : (params.adminAmount ?? 1.0);
+  const adminTransaction: LedgerTransaction = {
     id: `adm-tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     transactionId: `TX_ADM_${params.paymentId}`,
     userId: "ADMIN",
