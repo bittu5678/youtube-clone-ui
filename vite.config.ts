@@ -21,9 +21,9 @@ if (process.argv.includes("build") && !process.argv.includes("development")) {
   process.env["NODE_ENV"] = "production";
 }
 
-function apiDevPlugin(): Plugin {
+function welcomeEmailDevPlugin(): Plugin {
   return {
-    name: "api-dev-server",
+    name: "welcome-email-dev-server",
     configureServer(server) {
       server.middlewares.use("/api/send-welcome-email", async (req, res) => {
         if (req.method === "GET") {
@@ -106,168 +106,6 @@ function apiDevPlugin(): Plugin {
           }
         });
       });
-
-      server.middlewares.use("/api/payment/create-order", async (req, res) => {
-        if (req.method !== "POST") {
-          res.statusCode = 405;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ error: "Method Not Allowed" }));
-          return;
-        }
-        let body = "";
-        req.on("data", (chunk) => {
-          body += chunk;
-        });
-        req.on("end", async () => {
-          try {
-            const payload = JSON.parse(body || "{}");
-            const { createServerPaymentOrder } = await import("./src/server/payments");
-            const result = createServerPaymentOrder(payload);
-            res.setHeader("Content-Type", "application/json");
-            res.statusCode = 200;
-            res.end(JSON.stringify(result));
-          } catch (err: unknown) {
-            console.error("[Payment Order Dev Server Error]", err);
-            res.setHeader("Content-Type", "application/json");
-            res.statusCode = 500;
-            res.end(JSON.stringify({ error: "Failed to create payment order" }));
-          }
-        });
-      });
-
-      server.middlewares.use("/api/payment/verify", async (req, res) => {
-        if (req.method !== "POST") {
-          res.statusCode = 405;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ error: "Method Not Allowed" }));
-          return;
-        }
-        let body = "";
-        req.on("data", (chunk) => {
-          body += chunk;
-        });
-        req.on("end", async () => {
-          try {
-            const payload = JSON.parse(body || "{}");
-            const { verifyServerPayment } = await import("./src/server/payments");
-            const result = await verifyServerPayment(
-              payload,
-              ["FT483921", "FT900431"],
-              payload.referrerUserId || null,
-            );
-            res.setHeader("Content-Type", "application/json");
-            res.statusCode = 200;
-            res.end(JSON.stringify(result));
-          } catch (err: unknown) {
-            console.error("[Payment Verify Dev Server Error]", err);
-            res.setHeader("Content-Type", "application/json");
-            res.statusCode = 500;
-            res.end(JSON.stringify({ verified: false, error: "Payment verification failed" }));
-          }
-        });
-      });
-
-      server.middlewares.use("/api/payment/transactions", async (req, res) => {
-        if (req.method !== "GET") {
-          res.statusCode = 405;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ error: "Method Not Allowed" }));
-          return;
-        }
-        try {
-          const { getPersistentTransactions, getPersistentPremiumTxNumber } =
-            await import("./src/server/payments");
-          const [lastTxNumber, transactions] = await Promise.all([
-            getPersistentPremiumTxNumber(),
-            getPersistentTransactions(),
-          ]);
-          res.setHeader("Content-Type", "application/json");
-          res.statusCode = 200;
-          res.end(
-            JSON.stringify({
-              status: "ok",
-              lastTxNumber,
-              totalTransactions: transactions.length,
-              transactions,
-            }),
-          );
-        } catch (err: unknown) {
-          console.error("[Transactions Dev Server Error]", err);
-          res.setHeader("Content-Type", "application/json");
-          res.statusCode = 500;
-          res.end(JSON.stringify({ status: "error", error: "Failed to load transactions" }));
-        }
-      });
-
-      server.middlewares.use("/api/wallet/withdraw", async (req, res) => {
-        if (req.method !== "POST") {
-          res.statusCode = 405;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ error: "Method Not Allowed" }));
-          return;
-        }
-        let body = "";
-        req.on("data", (chunk) => {
-          body += chunk;
-        });
-        req.on("end", async () => {
-          try {
-            const payload = JSON.parse(body || "{}");
-            const amount = Number(payload.amount);
-            const userId = String(payload.userId || "")
-              .trim()
-              .toUpperCase();
-
-            if (!userId) {
-              res.statusCode = 400;
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ success: false, error: "User identity required" }));
-              return;
-            }
-
-            if (isNaN(amount) || amount < 1000) {
-              res.statusCode = 400;
-              res.setHeader("Content-Type", "application/json");
-              res.end(
-                JSON.stringify({
-                  success: false,
-                  error:
-                    "Minimum withdrawal amount is ₹1,000. You cannot withdraw less than ₹1,000.",
-                }),
-              );
-              return;
-            }
-
-            if (amount > 10000) {
-              res.statusCode = 400;
-              res.setHeader("Content-Type", "application/json");
-              res.end(
-                JSON.stringify({
-                  success: false,
-                  error:
-                    "Maximum daily withdrawal limit is ₹10,000. You cannot withdraw more than ₹10,000 per day.",
-                }),
-              );
-              return;
-            }
-
-            res.statusCode = 200;
-            res.setHeader("Content-Type", "application/json");
-            res.end(
-              JSON.stringify({
-                success: true,
-                message: `Withdrawal request for ₹${amount.toLocaleString("en-IN")} validated and approved.`,
-                amount,
-                userId,
-              }),
-            );
-          } catch (_e) {
-            res.statusCode = 500;
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ success: false, error: "Withdrawal validation failed" }));
-          }
-        });
-      });
     },
   };
 }
@@ -287,6 +125,6 @@ export default defineConfig({
       port: 3000,
       strictPort: true,
     },
-    plugins: [apiDevPlugin()],
+    plugins: [welcomeEmailDevPlugin()],
   },
 });
