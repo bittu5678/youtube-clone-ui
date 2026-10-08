@@ -1,4 +1,19 @@
-import type { User } from "@supabase/supabase-js";
+export interface User {
+  id: string;
+  email?: string;
+  user_metadata?: {
+    name?: string;
+    full_name?: string;
+    username?: string;
+    mobile?: string;
+    user_id?: string;
+    avatar_url?: string;
+    [key: string]: any;
+  };
+  app_metadata?: Record<string, any>;
+  aud?: string;
+  created_at?: string;
+}
 
 export type RoleType = "admin" | "user";
 

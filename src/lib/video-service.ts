@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { api } from "./api";
 
 export type VideoType = "free" | "premium";
 export type ContentType = "short" | "long";
@@ -238,44 +238,35 @@ export function saveStoredVideos(videos: UploadedVideo[]): void {
  * Fetches all videos or user-specific uploaded videos
  */
 export async function fetchUploadedVideos(userId?: string): Promise<UploadedVideo[]> {
-  if (isSupabaseConfigured && supabase) {
-    try {
-      let query = supabase
-        .from("uploaded_videos")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (userId) {
-        query = query.eq("user_id", userId);
-      }
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        return data.map((d) => ({
-          id: d.id,
-          userId: d.user_id,
-          creatorName: d.creator_name || "Creator",
-          title: d.title,
-          description: d.description || "",
-          videoUrl: d.video_url || "",
-          thumbnailUrl: d.thumbnail_url || "",
-          videoType: (d.video_type || "free") as VideoType,
-          contentType: (d.content_type || "long") as ContentType,
-          category: d.category || "General",
-          duration: d.duration || "0:00",
-          views: d.views || 0,
-          likes: d.likes || 0,
-          paymentStatus: (d.payment_status || "not_required") as VideoPaymentStatus,
-          paymentId: d.payment_id,
-          paymentAmount: Number(d.payment_amount) || 0,
-          isPromoted: Boolean(d.is_promoted),
-          promotionPlan: d.promotion_plan,
-          promotionExpiresAt: d.promotion_expires_at,
-          createdAt: d.created_at,
-          updatedAt: d.updated_at || d.created_at,
-        }));
-      }
-    } catch {
-      // fallback to local
+  try {
+    const res = await api.videos.list({ userId });
+    if (res && res.videos && res.videos.length > 0) {
+      return res.videos.map((d: any) => ({
+        id: d.id,
+        userId: d.user_id || d.userId,
+        creatorName: d.creator_name || d.creatorName || "Creator",
+        title: d.title,
+        description: d.description || "",
+        videoUrl: d.video_url || d.videoUrl || "",
+        thumbnailUrl: d.thumbnail_url || d.thumbnailUrl || "",
+        videoType: (d.video_type || d.videoType || "free") as VideoType,
+        contentType: (d.content_type || d.contentType || "long") as ContentType,
+        category: d.category || "General",
+        duration: d.duration || "0:00",
+        views: Number(d.views) || 0,
+        likes: Number(d.likes) || 0,
+        paymentStatus: (d.payment_status || d.paymentStatus || "not_required") as VideoPaymentStatus,
+        paymentId: d.payment_id || d.paymentId,
+        paymentAmount: Number(d.payment_amount || d.paymentAmount) || 0,
+        isPromoted: Boolean(d.is_promoted ?? d.isPromoted),
+        promotionPlan: d.promotion_plan || d.promotionPlan,
+        promotionExpiresAt: d.promotion_expires_at || d.promotionExpiresAt,
+        createdAt: d.created_at || d.createdAt,
+        updatedAt: d.updated_at || d.updatedAt || d.created_at || d.createdAt,
+      }));
     }
+  } catch (_e) {
+    // fallback to local cache
   }
 
   const all = getStoredVideos();
@@ -381,31 +372,26 @@ export async function recordNewVideoUpload(params: {
     updatedAt: new Date().toISOString(),
   };
 
-  if (isSupabaseConfigured && supabase) {
-    try {
-      await supabase.from("uploaded_videos").insert({
-        id: newVideo.id,
-        user_id: newVideo.userId,
-        creator_name: newVideo.creatorName,
-        title: newVideo.title,
-        description: newVideo.description,
-        video_url: newVideo.videoUrl,
-        thumbnail_url: newVideo.thumbnailUrl,
-        video_type: newVideo.videoType,
-        content_type: newVideo.contentType,
-        category: newVideo.category,
-        duration: newVideo.duration,
-        views: 0,
-        likes: 0,
-        payment_status: newVideo.paymentStatus,
-        payment_id: newVideo.paymentId,
-        payment_amount: newVideo.paymentAmount,
-        is_promoted: false,
-        created_at: newVideo.createdAt,
-      });
-    } catch {
-      // fallback
-    }
+  try {
+    await api.videos.create({
+      id: newVideo.id,
+      user_id: newVideo.userId,
+      creator_name: newVideo.creatorName,
+      title: newVideo.title,
+      description: newVideo.description,
+      video_url: newVideo.videoUrl,
+      thumbnail_url: newVideo.thumbnailUrl,
+      video_type: newVideo.videoType,
+      content_type: newVideo.contentType,
+      category: newVideo.category,
+      duration: newVideo.duration,
+      payment_status: newVideo.paymentStatus,
+      payment_id: newVideo.paymentId,
+      payment_amount: newVideo.paymentAmount,
+      is_promoted: false,
+    });
+  } catch (_e) {
+    // fallback to local storage
   }
 
   const all = getStoredVideos();
@@ -442,20 +428,15 @@ export async function markVideoPromoted(params: {
     saveStoredVideos(all);
   }
 
-  if (isSupabaseConfigured && supabase) {
-    try {
-      await supabase
-        .from("uploaded_videos")
-        .update({
-          is_promoted: true,
-          promotion_plan: params.planId,
-          promotion_expires_at: expiresAt,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", params.videoId);
-    } catch {
-      // ignore
-    }
+  try {
+    await api.videos.promote({
+      videoId: params.videoId,
+      planId: params.planId,
+      durationDays: params.durationDays,
+      paymentId: params.paymentId,
+    });
+  } catch (_e) {
+    // fallback
   }
 
   return true;

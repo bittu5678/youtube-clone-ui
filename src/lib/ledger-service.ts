@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { api } from "./api";
 import { getStoredVideos } from "./video-service";
 
 export type IncomeType =
@@ -165,30 +165,24 @@ export function saveStoredWallets(wallets: Record<string, UserWallet>): void {
 export async function getUserWallet(userId: string): Promise<UserWallet> {
   const norm = userId.trim().toUpperCase();
 
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("wallet_balances")
-        .select("*")
-        .eq("user_id", norm)
-        .maybeSingle();
-
-      if (!error && data) {
-        return {
-          userId: data.user_id,
-          balance: Number(data.balance) || 0,
-          totalEarned: Number(data.total_earned) || 0,
-          totalWithdrawn: Number(data.total_withdrawn) || 0,
-          referralIncome: Number(data.referral_income) || 0,
-          globalIncome: Number(data.global_income) || 0,
-          adsenseIncome: Number(data.adsense_income) || 0,
-          affiliateIncome: Number(data.affiliate_income) || 0,
-          updatedAt: data.updated_at,
-        };
-      }
-    } catch {
-      // fallback
+  try {
+    const res = await api.wallet.getBalance(norm);
+    if (res && res.wallet) {
+      const data = res.wallet;
+      return {
+        userId: data.user_id || data.userId || norm,
+        balance: Number(data.balance) || 0,
+        totalEarned: Number(data.total_earned || data.totalEarned) || 0,
+        totalWithdrawn: Number(data.total_withdrawn || data.totalWithdrawn) || 0,
+        referralIncome: Number(data.referral_income || data.referralIncome) || 0,
+        globalIncome: Number(data.global_income || data.globalIncome) || 0,
+        adsenseIncome: Number(data.adsense_income || data.adsenseIncome) || 0,
+        affiliateIncome: Number(data.affiliate_income || data.affiliateIncome) || 0,
+        updatedAt: data.updated_at || data.updatedAt || new Date().toISOString(),
+      };
     }
+  } catch (_e) {
+    // fallback to local cache
   }
 
   const wallets = getStoredWallets();
@@ -217,35 +211,26 @@ export async function getUserWallet(userId: string): Promise<UserWallet> {
  * Gets ledger transactions for a user
  */
 export async function getUserLedger(userId?: string): Promise<LedgerTransaction[]> {
-  if (isSupabaseConfigured && supabase) {
-    try {
-      let query = supabase
-        .from("income_ledger")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (userId) {
-        query = query.eq("user_id", userId.trim().toUpperCase());
-      }
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        return data.map((d) => ({
-          id: d.id,
-          transactionId: d.transaction_id,
-          userId: d.user_id,
-          sourceUserId: d.source_user_id,
-          sourceUserName: d.source_user_name,
-          videoId: d.video_id,
-          incomeType: d.income_type as IncomeType,
-          amount: Number(d.amount) || 0,
-          status: d.status || "settled",
-          specialTag: d.special_tag,
-          description: d.description || "",
-          createdAt: d.created_at,
-        }));
-      }
-    } catch {
-      // fallback
+  try {
+    const res = await api.wallet.getTransactions(userId);
+    if (res && res.transactions && res.transactions.length > 0) {
+      return res.transactions.map((d: any) => ({
+        id: d.id,
+        transactionId: d.transaction_id || d.transactionId,
+        userId: d.user_id || d.userId,
+        sourceUserId: d.source_user_id || d.sourceUserId,
+        sourceUserName: d.source_user_name || d.sourceUserName,
+        videoId: d.video_id || d.videoId,
+        incomeType: (d.income_type || d.incomeType) as IncomeType,
+        amount: Number(d.amount) || 0,
+        status: d.status || "settled",
+        specialTag: d.special_tag || d.specialTag,
+        description: d.description || "",
+        createdAt: d.created_at || d.createdAt,
+      }));
     }
+  } catch (_e) {
+    // fallback to local cache
   }
 
   const all = getStoredLedger();
@@ -486,78 +471,6 @@ export async function distributePremiumVideoIncome(params: PremiumDistributionPa
   saveStoredLedger(ledger);
   saveStoredWallets(wallets);
 
-  // Sync with Supabase if configured in production
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const dbEntries: Array<Record<string, unknown>> = [];
-      if (referralTransaction) {
-        dbEntries.push({
-          transaction_id: referralTransaction.transactionId,
-          user_id: referralTransaction.userId,
-          source_user_id: referralTransaction.sourceUserId,
-          source_user_name: referralTransaction.sourceUserName,
-          video_id: referralTransaction.videoId,
-          income_type: referralTransaction.incomeType,
-          amount: referralTransaction.amount,
-          status: referralTransaction.status,
-          description: referralTransaction.description,
-        });
-      }
-      if (adminTransaction) {
-        dbEntries.push({
-          transaction_id: adminTransaction.transactionId,
-          user_id: adminTransaction.userId,
-          source_user_id: adminTransaction.sourceUserId,
-          source_user_name: adminTransaction.sourceUserName,
-          video_id: adminTransaction.videoId,
-          income_type: adminTransaction.incomeType,
-          amount: adminTransaction.amount,
-          status: adminTransaction.status,
-          special_tag: adminTransaction.specialTag,
-          description: adminTransaction.description,
-        });
-      }
-      if (specialAuditTransaction) {
-        dbEntries.push({
-          transaction_id: specialAuditTransaction.transactionId,
-          user_id: specialAuditTransaction.userId,
-          source_user_id: specialAuditTransaction.sourceUserId,
-          source_user_name: specialAuditTransaction.sourceUserName,
-          video_id: specialAuditTransaction.videoId,
-          income_type: specialAuditTransaction.incomeType,
-          amount: specialAuditTransaction.amount,
-          status: specialAuditTransaction.status,
-          special_tag: specialAuditTransaction.specialTag,
-          description: specialAuditTransaction.description,
-        });
-      }
-      for (const g of globalTransactions) {
-        dbEntries.push({
-          transaction_id: g.transactionId,
-          user_id: g.userId,
-          source_user_id: g.sourceUserId,
-          source_user_name: g.sourceUserName,
-          video_id: g.videoId,
-          income_type: g.incomeType,
-          amount: g.amount,
-          status: g.status,
-          description: g.description,
-        });
-      }
-
-      if (dbEntries.length > 0) {
-        await supabase
-          .from("income_ledger")
-          .insert(dbEntries)
-          .then((res) => {
-            if (res.error) console.warn("Supabase income_ledger insert note:", res.error.message);
-          });
-      }
-    } catch (dbErr) {
-      console.warn("Non-fatal Supabase sync note:", dbErr);
-    }
-  }
-
   return {
     referralTransaction,
     adminTransaction,
@@ -694,7 +607,7 @@ export async function processWithdrawal(
 
   const ledger = getStoredLedger();
   const wallets = getStoredWallets();
-  const wallet = wallets[norm] || (await getUserWallet(norm));
+  let wallet = wallets[norm] || (await getUserWallet(norm));
 
   const txId = `TX_WD_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   const destinationDesc = bankDetails?.upiId
@@ -723,31 +636,51 @@ export async function processWithdrawal(
   saveStoredLedger(ledger);
   saveStoredWallets(wallets);
 
-  // If Supabase configured
-  if (isSupabaseConfigured && supabase) {
-    try {
-      await supabase.from("income_ledger").insert({
-        transaction_id: txId,
-        user_id: norm,
-        income_type: "withdrawal",
-        amount: -amount,
-        status: "settled",
-        description: tx.description,
-        created_at: tx.createdAt,
-      });
-
-      await supabase.from("wallet_balances").upsert(
-        {
-          user_id: norm,
-          balance: wallet.balance,
-          total_withdrawn: wallet.totalWithdrawn,
-          updated_at: wallet.updatedAt,
-        },
-        { onConflict: "user_id" },
-      );
-    } catch (e) {
-      console.warn("Supabase record withdrawal error:", e);
+  // Record in PHP MySQL API if backend is connected
+  try {
+    const res = await api.wallet.withdraw({
+      userId: norm,
+      amount,
+      bankDetails: bankDetails
+        ? {
+            accountHolder: bankDetails.accountHolderName,
+            accountNumber: bankDetails.accountNumber,
+            ifscCode: bankDetails.ifscCode,
+            upiId: bankDetails.upiId,
+            bankName: bankDetails.bankName,
+          }
+        : undefined,
+    });
+    if (res && res.updatedWallet) {
+      wallet = {
+        userId: norm,
+        balance: Number(res.updatedWallet.balance) || 0,
+        totalEarned:
+          Number(res.updatedWallet.total_earned || res.updatedWallet.totalEarned) ||
+          wallet.totalEarned,
+        totalWithdrawn:
+          Number(res.updatedWallet.total_withdrawn || res.updatedWallet.totalWithdrawn) ||
+          wallet.totalWithdrawn,
+        referralIncome:
+          Number(res.updatedWallet.referral_income || res.updatedWallet.referralIncome) ||
+          wallet.referralIncome,
+        globalIncome:
+          Number(res.updatedWallet.global_income || res.updatedWallet.globalIncome) ||
+          wallet.globalIncome,
+        adsenseIncome:
+          Number(res.updatedWallet.adsense_income || res.updatedWallet.adsenseIncome) ||
+          wallet.adsenseIncome,
+        affiliateIncome:
+          Number(res.updatedWallet.affiliate_income || res.updatedWallet.affiliateIncome) ||
+          wallet.affiliateIncome,
+        updatedAt:
+          res.updatedWallet.updated_at || res.updatedWallet.updatedAt || new Date().toISOString(),
+      };
+      wallets[norm] = wallet;
+      saveStoredWallets(wallets);
     }
+  } catch (e) {
+    console.warn("API withdraw note:", e);
   }
 
   return { success: true, transaction: tx, updatedWallet: wallet };

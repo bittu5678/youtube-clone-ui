@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { api } from "./api";
 import type { DbUser, SignUpParams } from "@/types/auth";
 import { getUniqueFTUserId, normalizeFTUserId, isValidFTUserId } from "./user-id";
 import { hashPassword } from "./password";
@@ -6,7 +6,7 @@ import { sendWelcomeEmail } from "./email-service";
 
 export const LOCAL_STORAGE_DB_USERS_KEY = "facetube_db_users_v2";
 
-// Default Seed Users (Matches the Supabase schema.sql seed)
+// Default Seed Users (Matches the Hostinger MySQL schema.sql seed)
 export const INITIAL_SEED_USERS: DbUser[] = [
   {
     id: "a0000000-0000-0000-0000-000000000001",
@@ -14,7 +14,6 @@ export const INITIAL_SEED_USERS: DbUser[] = [
     name: "FaceTube Administrator",
     mobile: "+1 555-019-2834",
     email: "admin@facetube.com",
-    // SHA-256 hash for 'password123'
     password_hash: "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
     referral_code: "FTVIP",
     created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -45,7 +44,7 @@ export const INITIAL_SEED_USERS: DbUser[] = [
 ];
 
 /**
- * Reads local cached/mock database users from localStorage
+ * Reads local cached database users from localStorage
  */
 export function getLocalDbUsers(): DbUser[] {
   try {
@@ -69,25 +68,18 @@ export function saveLocalDbUsers(users: DbUser[]): void {
 }
 
 /**
- * Checks whether an FT User ID already exists in either Supabase or local DB
+ * Checks whether an FT User ID already exists in MySQL or local cache
  */
 export async function checkUserIdExists(candidateUserId: string): Promise<boolean> {
   const normalized = normalizeFTUserId(candidateUserId);
 
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("user_id")
-        .eq("user_id", normalized)
-        .maybeSingle();
-
-      if (!error && data) {
-        return true;
-      }
-    } catch {
-      // fallback to local check
+  try {
+    const res = await api.users.getProfile(normalized);
+    if (res && res.profile) {
+      return true;
     }
+  } catch {
+    // fallback to local check
   }
 
   const localUsers = getLocalDbUsers();
@@ -100,20 +92,13 @@ export async function checkUserIdExists(candidateUserId: string): Promise<boolea
 export async function checkEmailExists(email: string): Promise<boolean> {
   const normalized = email.trim().toLowerCase();
 
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("email")
-        .ilike("email", normalized)
-        .maybeSingle();
-
-      if (!error && data) {
-        return true;
-      }
-    } catch {
-      // fallback to local check
+  try {
+    const res = await api.users.getProfile(normalized);
+    if (res && res.profile) {
+      return true;
     }
+  } catch {
+    // fallback to local check
   }
 
   const localUsers = getLocalDbUsers();
@@ -121,9 +106,7 @@ export async function checkEmailExists(email: string): Promise<boolean> {
 }
 
 /**
- * Creates a new user record in the 'users' database table
- * Generates a unique FT User ID (FT + 6 digits), hashes the password, saves to DB,
- * and triggers the Welcome Email.
+ * Creates a new user record in the MySQL 'users' database table via PHP API
  */
 export async function registerUserInDatabase({
   name,
@@ -131,81 +114,88 @@ export async function registerUserInDatabase({
   email,
   password,
   referralCode,
-}: SignUpParams): Promise<{ user: DbUser; userId: string }> {
+}: SignUpParams): Promise<{
+  user: DbUser;
+  userId: string;
+  emailDelivery?: {
+    success: boolean;
+    provider?: "resend" | "smtp" | "none";
+    error?: string;
+    messageId?: string;
+  };
+}> {
   const trimmedName = name.trim();
   const trimmedMobile = mobile.trim();
   const normalizedEmail = email.trim().toLowerCase();
 
-  // 1. Check duplicate email in users table
-  const emailTaken = await checkEmailExists(normalizedEmail);
-  if (emailTaken) {
-    throw new Error(`The email "${normalizedEmail}" is already registered. Please sign in.`);
-  }
+  let generatedUserId = "";
+  let newUser: DbUser | null = null;
 
-  // 2. Generate unique FT User ID (Rules: Prefix FT + 6 random digits, never duplicate)
-  const generatedUserId = await getUniqueFTUserId(checkUserIdExists);
+  // 1. Call PHP MySQL backend register API
+  try {
+    const apiRes = await api.auth.register({
+      name: trimmedName,
+      mobile: trimmedMobile,
+      email: normalizedEmail,
+      password,
+      referralCode: referralCode?.trim() || undefined,
+    });
 
-  // 3. Hash password using SHA-256
-  const passwordHash = await hashPassword(password);
-
-  // 4. Construct the DbUser object
-  const newId =
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : "u_" + Math.random().toString(36).slice(2, 10);
-
-  const newUser: DbUser = {
-    id: newId,
-    user_id: generatedUserId,
-    name: trimmedName,
-    mobile: trimmedMobile,
-    email: normalizedEmail,
-    password_hash: passwordHash,
-    referral_code: referralCode?.trim() || null,
-    created_at: new Date().toISOString(),
-    role: "user",
-  };
-
-  // 5. Save to Supabase PostgreSQL 'users' table if configured
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .insert({
-          id: newUser.id,
-          user_id: newUser.user_id,
-          name: newUser.name,
-          mobile: newUser.mobile,
-          email: newUser.email,
-          password_hash: newUser.password_hash,
-          referral_code: newUser.referral_code,
-          created_at: newUser.created_at,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.warn("Supabase insert into users failed, falling back to local DB cache:", error);
-      } else if (data) {
-        newUser.id = data.id;
-        newUser.user_id = data.user_id;
-      }
-    } catch (dbErr) {
-      console.warn("Error calling Supabase users table:", dbErr);
+    if (apiRes && apiRes.user) {
+      newUser = {
+        id: apiRes.user.id,
+        user_id: apiRes.user.user_id,
+        name: apiRes.user.name,
+        mobile: apiRes.user.mobile,
+        email: apiRes.user.email,
+        password_hash: "SECURED_BY_PHP_BCRYPT",
+        referral_code: apiRes.user.referral_code || null,
+        created_at: apiRes.user.created_at || new Date().toISOString(),
+        role: apiRes.user.role || "user",
+      };
+      generatedUserId = apiRes.user.user_id;
     }
+  } catch (apiErr) {
+    console.warn("PHP Register API call note:", apiErr);
   }
 
-  // 6. Always persist to local DB cache as well for offline resilience & fast demo loading
-  const localList = getLocalDbUsers();
-  saveLocalDbUsers([newUser, ...localList]);
+  // 2. Fallback local generation if offline or initial dev boot
+  if (!newUser) {
+    const emailTaken = await checkEmailExists(normalizedEmail);
+    if (emailTaken) {
+      throw new Error(`The email "${normalizedEmail}" is already registered. Please sign in.`);
+    }
 
-  // 7. Send Welcome Email (only after the user is successfully saved in the database)
-  // Subject: Welcome to Facetube
-  // Email contains: User Name, User ID, Registered Email, Password, Login Link
+    generatedUserId = await getUniqueFTUserId(checkUserIdExists);
+    const passwordHash = await hashPassword(password);
+    const newId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : "u_" + Math.random().toString(36).slice(2, 10);
+
+    newUser = {
+      id: newId,
+      user_id: generatedUserId,
+      name: trimmedName,
+      mobile: trimmedMobile,
+      email: normalizedEmail,
+      password_hash: passwordHash,
+      referral_code: referralCode?.trim() || null,
+      created_at: new Date().toISOString(),
+      role: "user",
+    };
+  }
+
+  // 3. Persist to local cache for fast offline resilience
+  const localList = getLocalDbUsers();
+  saveLocalDbUsers([newUser, ...localList.filter((u) => u.id !== newUser!.id)]);
+
+  // 4. Send Welcome Email
   let emailDelivery = {
     success: false,
     provider: "none" as "resend" | "smtp" | "none",
     error: "Email delivery failed",
+    messageId: undefined as string | undefined,
   };
 
   try {
@@ -214,7 +204,7 @@ export async function registerUserInDatabase({
       email: normalizedEmail,
       userId: generatedUserId,
       password: password,
-      loginLink: "https://youtube-clone-ui-8qmb.vercel.app/login",
+      loginLink: "https://facetube.online/login",
     });
     emailDelivery = {
       success: res.success,
@@ -224,11 +214,11 @@ export async function registerUserInDatabase({
     };
   } catch (emailErr: unknown) {
     const msg = emailErr instanceof Error ? emailErr.message : String(emailErr);
-    console.error("Failed to send welcome email:", msg);
     emailDelivery = {
       success: false,
       provider: "none",
       error: `Email delivery failed: ${msg}`,
+      messageId: undefined,
     };
   }
 
@@ -236,39 +226,36 @@ export async function registerUserInDatabase({
 }
 
 /**
- * Searches for a user in the database by either:
- * - User ID (e.g. FT123456 or ft123456)
+ * Searches for a user in MySQL / local cache by either:
+ * - User ID (e.g. FT123456)
  * - OR Email (e.g. user@facetube.com)
  */
 export async function findUserByIdentifier(identifier: string): Promise<DbUser | null> {
   if (!identifier) return null;
   const raw = identifier.trim();
-  const isEmail = raw.includes("@");
-  const isFT = isValidFTUserId(raw);
 
-  // 1. Try Supabase
-  if (isSupabaseConfigured && supabase) {
-    try {
-      let query = supabase.from("users").select("*");
-      if (isEmail) {
-        query = query.ilike("email", raw.toLowerCase());
-      } else if (isFT) {
-        query = query.eq("user_id", raw.toUpperCase());
-      } else {
-        // Could be either, try user_id or email
-        query = query.or(`user_id.eq.${raw.toUpperCase()},email.ilike.${raw.toLowerCase()}`);
-      }
-
-      const { data, error } = await query.maybeSingle();
-      if (!error && data) {
-        return data as DbUser;
-      }
-    } catch (e) {
-      console.warn("Supabase lookup error:", e);
+  // 1. Try PHP API
+  try {
+    const res = await api.users.getProfile(raw);
+    if (res && res.profile) {
+      const p = res.profile;
+      return {
+        id: p.id,
+        user_id: p.user_id,
+        name: p.name,
+        mobile: p.mobile,
+        email: p.email,
+        password_hash: p.password_hash || "SECURED_BY_PHP_BCRYPT",
+        referral_code: p.referral_code,
+        created_at: p.created_at,
+        role: p.role,
+      };
     }
+  } catch (e) {
+    // fallback to local cache
   }
 
-  // 2. Try Local DB storage
+  // 2. Try Local DB cache
   const localUsers = getLocalDbUsers();
   const searchUpper = raw.toUpperCase();
   const searchLower = raw.toLowerCase();

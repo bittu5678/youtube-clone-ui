@@ -1,3 +1,4 @@
+import { api } from "./api";
 import { getLocalDbUsers } from "./user-service";
 import { getStoredVideos } from "./video-service";
 import { getUserLedger } from "./ledger-service";
@@ -35,6 +36,39 @@ export async function getReferralDashboardData(
   currentUserId: string,
 ): Promise<ReferralDashboardData> {
   const normId = currentUserId.trim().toUpperCase();
+
+  try {
+    const res = await api.referrals.getDashboard(normId);
+    if (res && res.dashboard) {
+      const d = res.dashboard;
+      return {
+        directReferralsCount: Number(d.directReferralsCount) || 0,
+        teamMembersCount: Number(d.teamMembersCount) || 0,
+        referralIncome: Number(d.referralIncome) || 0,
+        referralCode: d.referralCode || normId,
+        referralNumber: d.referralNumber || normId,
+        referralLink: d.referralLink || `https://facetube.online/register?ref=${normId}`,
+        members: (d.members || []).map((m: any) => ({
+          id: m.id,
+          userId: m.userId || m.user_id,
+          name: m.name,
+          email: m.email,
+          mobile: m.mobile,
+          joinedAt: m.joinedAt || m.created_at || "Recent",
+          status: m.status || "Active",
+          tier: m.tier || "Creator Pro",
+          freeVideosCount: Number(m.freeVideosCount) || 0,
+          premiumVideosCount: Number(m.premiumVideosCount) || 0,
+          totalVideosCount: Number(m.totalVideosCount) || 0,
+          directCommissionEarned: Number(m.directCommissionEarned) || 0,
+          access: m.access || "Granted",
+        })),
+      };
+    }
+  } catch (_e) {
+    // fallback to local calculation
+  }
+
   const dbUsers = getLocalDbUsers();
   const allVideos = getStoredVideos();
   const ledger = await getUserLedger(normId);

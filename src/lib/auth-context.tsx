@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import type { User, Session } from "@supabase/supabase-js";
-import { supabase, isSupabaseConfigured } from "./supabase";
 import type {
+  User,
   DbUser,
   Profile,
   RoleType,
@@ -16,11 +15,10 @@ import {
   registerUserInDatabase,
   findUserByIdentifier,
   getLocalDbUsers,
-  saveLocalDbUsers,
   INITIAL_SEED_USERS,
 } from "./user-service";
 import { verifyPassword } from "./password";
-import { isValidFTUserId, normalizeFTUserId } from "./user-id";
+import { api, setStoredAuthToken } from "./api";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -28,7 +26,6 @@ const LOCAL_STORAGE_SESSION_KEY = "facetube_session_v2";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [_session, setSession] = useState<Session | null>(null);
   const [dbUser, setDbUser] = useState<DbUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<RoleType>("user");
@@ -55,160 +52,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUsersList(formatted);
   }, []);
 
-  // Fetch profile and role from Supabase if connected
-  const fetchSupabaseProfileAndRole = useCallback(async (supabaseUser: User) => {
-    if (!supabase) return;
-
+  // Refresh all users list from PHP MySQL API
+  const refreshUsers = useCallback(async () => {
     try {
-      // 1. Fetch from 'users' table
-      const { data: userData } = await supabase
-        .from("users")
-        .select("*")
-        .eq("email", supabaseUser.email?.toLowerCase() || "")
-        .maybeSingle();
-
-      if (userData) {
-        setDbUser(userData as DbUser);
-        const resolvedRole: RoleType =
-          userData.role === "admin" || supabaseUser.email === "admin@facetube.com"
-            ? "admin"
-            : "user";
-        setRole(resolvedRole);
-
-        const prof: Profile = {
-          id: userData.id,
-          user_id: userData.user_id,
-          username: userData.user_id,
-          name: userData.name,
-          full_name: userData.name,
-          mobile: userData.mobile,
-          email: userData.email,
-          referral_code: userData.referral_code,
-          created_at: userData.created_at,
-        };
-        setProfile(prof);
+      const res = await api.users.listUsers();
+      if (res && res.users && res.users.length > 0) {
+        const combined: (UserWithRole & { password?: string; user_id?: string })[] = res.users.map(
+          (u: any) => ({
+            id: u.id,
+            user_id: u.user_id,
+            username: (u.user_id || "").toLowerCase(),
+            name: u.name,
+            full_name: u.name,
+            mobile: u.mobile,
+            email: u.email,
+            role: u.role === "admin" || u.email === "admin@facetube.com" ? "admin" : "user",
+            referral_code: u.referral_code,
+            created_at: u.created_at,
+          }),
+        );
+        setUsersList(combined);
         return;
       }
-
-      // 2. Fallback to profiles table
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", supabaseUser.id)
-        .maybeSingle();
-
-      if (profileData) {
-        setProfile(profileData as Profile);
-      } else {
-        const newProfile: Profile = {
-          id: supabaseUser.id,
-          username:
-            supabaseUser.user_metadata?.username ||
-            supabaseUser.email?.split("@")[0] ||
-            "user_" + supabaseUser.id.substring(0, 6),
-          full_name:
-            supabaseUser.user_metadata?.full_name ||
-            supabaseUser.user_metadata?.name ||
-            supabaseUser.email?.split("@")[0],
-          avatar_url: supabaseUser.user_metadata?.avatar_url || null,
-          email: supabaseUser.email,
-          created_at: new Date().toISOString(),
-        };
-        setProfile(newProfile);
-      }
-
-      // 3. Fetch Role
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", supabaseUser.id)
-        .maybeSingle();
-
-      if (roleData && (roleData.role === "admin" || roleData.role === "user")) {
-        setRole(roleData.role as RoleType);
-      } else {
-        setRole(supabaseUser.email === "admin@facetube.com" ? "admin" : "user");
-      }
-    } catch (e) {
-      console.error("Error loading user profile & role:", e);
-      setRole("user");
+    } catch {
+      // fallback to local list
     }
-  }, []);
-
-  // Refresh all users list
-  const refreshUsers = useCallback(async () => {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data: usersData } = await supabase
-          .from("users")
-          .select("id, user_id, name, mobile, email, referral_code, created_at");
-
-        if (usersData && usersData.length > 0) {
-          const combined: (UserWithRole & { password?: string; user_id?: string })[] =
-            usersData.map((u) => ({
-              id: u.id,
-              user_id: u.user_id,
-              username: u.user_id.toLowerCase(),
-              name: u.name,
-              full_name: u.name,
-              mobile: u.mobile,
-              email: u.email,
-              role: u.email === "admin@facetube.com" ? "admin" : "user",
-              referral_code: u.referral_code,
-              created_at: u.created_at,
-            }));
-          setUsersList(combined);
-          return;
-        }
-      } catch (e) {
-        console.warn("Failed fetching users from supabase, using local:", e);
-      }
-    }
-
     syncUsersList();
   }, [syncUsersList]);
-
-  // Initialization & Auth State Subscription
-  useEffect(() => {
-    syncUsersList();
-
-    if (isSupabaseConfigured && supabase) {
-      // 1. Get initial session
-      supabase.auth.getSession().then(({ data: { session: initSession } }) => {
-        setSession(initSession);
-        setUser(initSession?.user ?? null);
-        if (initSession?.user) {
-          fetchSupabaseProfileAndRole(initSession.user).finally(() => setIsLoading(false));
-        } else {
-          // Check local stored session as backup
-          restoreLocalSession();
-        }
-      });
-
-      // 2. Subscribe to auth state changes
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-        if (newSession?.user) {
-          await fetchSupabaseProfileAndRole(newSession.user);
-        } else {
-          setProfile(null);
-          setDbUser(null);
-          setRole("user");
-        }
-        setIsLoading(false);
-      });
-
-      return () => {
-        subscription.unsubscribe();
-      };
-    } else {
-      // Local Database Session Mode
-      restoreLocalSession();
-    }
-  }, [fetchSupabaseProfileAndRole, syncUsersList]);
 
   const restoreLocalSession = () => {
     try {
@@ -223,15 +93,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (_e) {
       // Storage unavailable
     }
-    setIsLoading(false);
   };
 
+  // Initialization & Auth Verification from PHP backend
+  useEffect(() => {
+    syncUsersList();
+
+    // Check current active session with PHP backend
+    api.auth
+      .me()
+      .then((res) => {
+        if (res && res.authenticated && res.user) {
+          const u = res.user;
+          const resolvedRole: RoleType =
+            u.role === "admin" || u.email === "admin@facetube.com" ? "admin" : "user";
+          const newProfile: Profile = {
+            id: u.id,
+            user_id: u.user_id,
+            username: u.user_id,
+            name: u.name,
+            full_name: u.name,
+            mobile: u.mobile,
+            email: u.email,
+            avatar_url: u.avatar_url,
+            referral_code: u.referral_code,
+            created_at: u.created_at,
+          };
+          const authUser: User = {
+            id: u.id,
+            email: u.email,
+            user_metadata: {
+              name: u.name,
+              full_name: u.name,
+              mobile: u.mobile,
+              user_id: u.user_id,
+              avatar_url: u.avatar_url,
+            },
+          };
+          const newDbUser: DbUser = {
+            id: u.id,
+            user_id: u.user_id,
+            name: u.name,
+            mobile: u.mobile,
+            email: u.email,
+            password_hash: "SECURED_BY_PHP_BCRYPT",
+            referral_code: u.referral_code,
+            created_at: u.created_at,
+            role: resolvedRole,
+          };
+          setUser(authUser);
+          setProfile(newProfile);
+          setDbUser(newDbUser);
+          setRole(resolvedRole);
+        } else {
+          restoreLocalSession();
+        }
+      })
+      .catch(() => {
+        restoreLocalSession();
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [syncUsersList]);
+
   /**
-   * Database-backed User Registration
-   * - Validates all fields
-   * - Generates unique FT User ID (FT######)
-   * - Stores user into Supabase PostgreSQL 'users' table
-   * - Sends Welcome Email
+   * Database-backed User Registration via PHP MySQL Backend
    */
   const signUp = async (params: SignUpParams): Promise<SignUpResult> => {
     try {
@@ -247,7 +174,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         referralCode: params.referralCode,
       });
 
-      // Prepare profile representation
       const newProfile: Profile = {
         id: newDbUser.id,
         user_id: userId,
@@ -260,7 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         created_at: newDbUser.created_at,
       };
 
-      const mockUser = {
+      const authUser: User = {
         id: newDbUser.id,
         email: newDbUser.email,
         user_metadata: {
@@ -269,11 +195,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           mobile: newDbUser.mobile,
           user_id: userId,
         },
-      } as unknown as User;
+      };
 
       setDbUser(newDbUser);
       setProfile(newProfile);
-      setUser(mockUser);
+      setUser(authUser);
       setRole(newDbUser.role || "user");
 
       // Save active session
@@ -281,7 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(
           LOCAL_STORAGE_SESSION_KEY,
           JSON.stringify({
-            user: mockUser,
+            user: authUser,
             profile: newProfile,
             dbUser: newDbUser,
             role: newDbUser.role || "user",
@@ -291,7 +217,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // storage disabled
       }
 
-      // Refresh users list
       syncUsersList();
 
       return {
@@ -310,8 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Database-backed Login: Supports login using User ID (FT123456) OR Email
-   * Both work with the same password!
+   * Database-backed Login: Supports login using User ID (FT123456) OR Email via PHP API
    */
   const signIn = async (params: SignInParams): Promise<SignInResult> => {
     const rawIdentifier = (params.identifier || params.email || "").trim();
@@ -332,56 +256,93 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // 1. Look up user in database by User ID (FT######) OR Email
-      const foundUser = await findUserByIdentifier(rawIdentifier);
+      // 1. Authenticate with PHP MySQL backend
+      let apiSuccess = false;
+      let authenticatedUser: any = null;
 
-      if (!foundUser) {
-        // Helpful message
-        return {
-          success: false,
-          error: new Error(
-            "Account not found. Please check your User ID (e.g. FT123456) or Email, or sign up.",
-          ),
-        };
+      try {
+        const loginRes = await api.auth.login({
+          identifier: rawIdentifier,
+          password,
+        });
+        if (loginRes && loginRes.success && loginRes.user) {
+          apiSuccess = true;
+          authenticatedUser = loginRes.user;
+        }
+      } catch (apiErr: any) {
+        // If PHP API returned an authentication error, return helpful message
+        const msg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+        if (msg.includes("Incorrect password") || msg.includes("Account not found")) {
+          return {
+            success: false,
+            error: new Error(msg),
+          };
+        }
       }
 
-      // 2. Verify password hash
-      const isValid = await verifyPassword(password, foundUser.password_hash);
-      if (!isValid) {
-        return {
-          success: false,
-          error: new Error("Incorrect password. Please try again."),
-        };
+      // 2. Fallback to local verified user if server was unreachable
+      if (!apiSuccess) {
+        const foundUser = await findUserByIdentifier(rawIdentifier);
+        if (!foundUser) {
+          return {
+            success: false,
+            error: new Error(
+              "Account not found. Please check your User ID (e.g. FT123456) or Email, or sign up.",
+            ),
+          };
+        }
+
+        const isValid = await verifyPassword(password, foundUser.password_hash);
+        if (!isValid) {
+          return {
+            success: false,
+            error: new Error("Incorrect password. Please try again."),
+          };
+        }
+        authenticatedUser = foundUser;
       }
 
-      // 3. User authenticated successfully!
+      // 3. Set authenticated state
       const resolvedRole: RoleType =
-        foundUser.role || (foundUser.email === "admin@facetube.com" ? "admin" : "user");
+        authenticatedUser.role ||
+        (authenticatedUser.email === "admin@facetube.com" ? "admin" : "user");
 
       const authProfile: Profile = {
-        id: foundUser.id,
-        user_id: foundUser.user_id,
-        username: foundUser.user_id,
-        name: foundUser.name,
-        full_name: foundUser.name,
-        mobile: foundUser.mobile,
-        email: foundUser.email,
-        referral_code: foundUser.referral_code,
-        created_at: foundUser.created_at,
+        id: authenticatedUser.id,
+        user_id: authenticatedUser.user_id,
+        username: authenticatedUser.user_id,
+        name: authenticatedUser.name,
+        full_name: authenticatedUser.name,
+        mobile: authenticatedUser.mobile,
+        email: authenticatedUser.email,
+        referral_code: authenticatedUser.referral_code,
+        created_at: authenticatedUser.created_at,
       };
 
-      const authUser = {
-        id: foundUser.id,
-        email: foundUser.email,
+      const authUser: User = {
+        id: authenticatedUser.id,
+        email: authenticatedUser.email,
         user_metadata: {
-          user_id: foundUser.user_id,
-          name: foundUser.name,
-          full_name: foundUser.name,
-          mobile: foundUser.mobile,
+          user_id: authenticatedUser.user_id,
+          name: authenticatedUser.name,
+          full_name: authenticatedUser.name,
+          mobile: authenticatedUser.mobile,
         },
-      } as unknown as User;
+      };
 
-      setDbUser(foundUser);
+      const dbUserRecord: DbUser = {
+        id: authenticatedUser.id,
+        user_id: authenticatedUser.user_id,
+        name: authenticatedUser.name,
+        mobile: authenticatedUser.mobile,
+        email: authenticatedUser.email,
+        password_hash: "SECURED_BY_PHP_BCRYPT",
+        referral_code: authenticatedUser.referral_code,
+        created_at: authenticatedUser.created_at,
+        role: resolvedRole,
+      };
+
+      setDbUser(dbUserRecord);
       setProfile(authProfile);
       setUser(authUser);
       setRole(resolvedRole);
@@ -392,7 +353,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           JSON.stringify({
             user: authUser,
             profile: authProfile,
-            dbUser: foundUser,
+            dbUser: dbUserRecord,
             role: resolvedRole,
           }),
         );
@@ -416,13 +377,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * Sign Out method
    */
   const signOut = async () => {
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.auth.signOut();
-      } catch {
-        // ignore
-      }
+    try {
+      await api.auth.logout();
+    } catch {
+      // ignore
     }
+    setStoredAuthToken(null);
     setUser(null);
     setProfile(null);
     setDbUser(null);
@@ -443,27 +403,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
 
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from("users").update({ role: newRole }).eq("id", targetUserId);
-      } catch (e) {
-        console.warn("Supabase role update error:", e);
-      }
+    try {
+      await api.admin.updateRole(targetUserId, newRole);
+    } catch (e) {
+      console.warn("API role update error:", e);
     }
 
-    const localDb = getLocalDbUsers();
-    const updated = localDb.map((u) => (u.id === targetUserId ? { ...u, role: newRole } : u));
-    saveLocalDbUsers(updated);
-    syncUsersList();
-
-    if (user && user.id === targetUserId) {
-      setRole(newRole);
-    }
+    // Update in local usersList
+    setUsersList((prev) =>
+      prev.map((u) => {
+        if (
+          u.id === targetUserId ||
+          u.user_id?.toUpperCase() === targetUserId.toUpperCase() ||
+          u.username.toUpperCase() === targetUserId.toUpperCase()
+        ) {
+          return { ...u, role: newRole };
+        }
+        return u;
+      }),
+    );
 
     return true;
   };
-
-  const isAdmin = role === "admin";
 
   return (
     <AuthContext.Provider
@@ -472,9 +433,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profile,
         dbUser,
         role,
-        isAdmin,
+        isAdmin: role === "admin",
         isLoading,
-        isConfigured: isSupabaseConfigured,
+        isConfigured: true,
         signUp,
         signIn,
         signOut,

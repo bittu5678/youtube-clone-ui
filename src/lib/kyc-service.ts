@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { api } from "./api";
 import type { PersonalKyc, PersonalKycFormData, BankKyc, BankKycFormData } from "@/types/kyc";
 
 const LOCAL_STORAGE_PERSONAL_KYC_PREFIX = "facetube_kyc_personal_";
@@ -89,39 +89,32 @@ export async function getPersonalKyc(
 ): Promise<PersonalKyc> {
   const normId = userId.trim().toUpperCase();
 
-  // 1. Try Supabase if configured
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("personal_kyc")
-        .select("*")
-        .eq("user_id", normId)
-        .maybeSingle();
-
-      if (!error && data) {
-        const kyc: PersonalKyc = {
-          id: data.id,
-          userId: data.user_id,
-          fullName: data.full_name,
-          mobile: data.mobile,
-          dob: data.dob || "",
-          address: data.address || "",
-          city: data.city || "",
-          state: data.state || "",
-          pincode: data.pincode || "",
-          nomineeName: data.nominee_name || "",
-          nomineeRelation: data.nominee_relation || "",
-          nomineeMobile: data.nominee_mobile || "",
-          status: data.status || "Submitted",
-          updatedAt: data.updated_at,
-        };
-        // Also update local cache
-        saveLocalPersonalKyc(kyc);
-        return kyc;
-      }
-    } catch (e) {
-      console.warn("Supabase personal_kyc query failed, using local storage:", e);
+  // 1. Fetch from PHP MySQL API
+  try {
+    const res = await api.kyc.getPersonal(normId);
+    if (res && res.kyc) {
+      const data = res.kyc;
+      const kyc: PersonalKyc = {
+        id: data.id,
+        userId: data.user_id || data.userId,
+        fullName: data.full_name || data.fullName,
+        mobile: data.mobile,
+        dob: data.dob || "",
+        address: data.address || "",
+        city: data.city || "",
+        state: data.state || "",
+        pincode: data.pincode || "",
+        nomineeName: data.nominee_name || data.nomineeName || "",
+        nomineeRelation: data.nominee_relation || data.nomineeRelation || "",
+        nomineeMobile: data.nominee_mobile || data.nomineeMobile || "",
+        status: data.status || "Submitted",
+        updatedAt: data.updated_at || data.updatedAt,
+      };
+      saveLocalPersonalKyc(kyc);
+      return kyc;
     }
+  } catch (e) {
+    // fallback to local storage
   }
 
   // 2. Read from LocalStorage
@@ -169,34 +162,24 @@ export async function savePersonalKyc(
     updatedAt: now,
   };
 
-  // 1. Try Supabase
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { error } = await supabase.from("personal_kyc").upsert(
-        {
-          user_id: normId,
-          full_name: record.fullName,
-          mobile: record.mobile,
-          dob: record.dob,
-          address: record.address,
-          city: record.city,
-          state: record.state,
-          pincode: record.pincode,
-          nominee_name: record.nomineeName,
-          nominee_relation: record.nomineeRelation,
-          nominee_mobile: record.nomineeMobile,
-          status: record.status,
-          updated_at: now,
-        },
-        { onConflict: "user_id" },
-      );
-
-      if (error) {
-        console.warn("Supabase upsert personal_kyc failed:", error.message);
-      }
-    } catch (e) {
-      console.warn("Supabase call failed:", e);
-    }
+  // 1. Persist to PHP MySQL API
+  try {
+    await api.kyc.savePersonal({
+      user_id: normId,
+      full_name: record.fullName,
+      mobile: record.mobile,
+      dob: record.dob,
+      address: record.address,
+      city: record.city,
+      state: record.state,
+      pincode: record.pincode,
+      nominee_name: record.nomineeName,
+      nominee_relation: record.nomineeRelation,
+      nominee_mobile: record.nomineeMobile,
+      status: record.status,
+    });
+  } catch (e) {
+    console.warn("API savePersonal fallback:", e);
   }
 
   // 2. Always persist locally
@@ -214,36 +197,30 @@ export async function getBankKyc(
 ): Promise<BankKyc> {
   const normId = userId.trim().toUpperCase();
 
-  // 1. Try Supabase if configured
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("bank_kyc")
-        .select("*")
-        .eq("user_id", normId)
-        .maybeSingle();
-
-      if (!error && data) {
-        const kyc: BankKyc = {
-          id: data.id,
-          userId: data.user_id,
-          accountHolderName: data.account_holder_name,
-          bankName: data.bank_name,
-          accountNumber: data.account_number,
-          ifscCode: data.ifsc_code,
-          branchName: data.branch_name || "",
-          accountType: data.account_type === "Current" ? "Current" : "Saving",
-          upiId: data.upi_id || "",
-          upiQrCodeUrl: data.upi_qr_code || undefined,
-          status: data.status || "Submitted",
-          updatedAt: data.updated_at,
-        };
-        saveLocalBankKyc(kyc);
-        return kyc;
-      }
-    } catch (e) {
-      console.warn("Supabase bank_kyc query failed, using local storage:", e);
+  // 1. Fetch from PHP MySQL API
+  try {
+    const res = await api.kyc.getBank(normId);
+    if (res && res.kyc) {
+      const data = res.kyc;
+      const kyc: BankKyc = {
+        id: data.id,
+        userId: data.user_id || data.userId,
+        accountHolderName: data.account_holder_name || data.accountHolderName,
+        bankName: data.bank_name || data.bankName,
+        accountNumber: data.account_number || data.accountNumber,
+        ifscCode: data.ifsc_code || data.ifscCode,
+        branchName: data.branch_name || data.branchName || "",
+        accountType: (data.account_type || data.accountType) === "Current" ? "Current" : "Saving",
+        upiId: data.upi_id || data.upiId || "",
+        upiQrCodeUrl: data.upi_qr_code || data.upiQrCodeUrl || undefined,
+        status: data.status || "Submitted",
+        updatedAt: data.updated_at || data.updatedAt,
+      };
+      saveLocalBankKyc(kyc);
+      return kyc;
     }
+  } catch (e) {
+    // fallback to local storage
   }
 
   // 2. Read from LocalStorage
@@ -289,32 +266,22 @@ export async function saveBankKyc(
     updatedAt: now,
   };
 
-  // 1. Try Supabase
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { error } = await supabase.from("bank_kyc").upsert(
-        {
-          user_id: normId,
-          account_holder_name: record.accountHolderName,
-          bank_name: record.bankName,
-          account_number: record.accountNumber,
-          ifsc_code: record.ifscCode.toUpperCase(),
-          branch_name: record.branchName,
-          account_type: record.accountType,
-          upi_id: record.upiId,
-          upi_qr_code: record.upiQrCodeUrl || null,
-          status: record.status,
-          updated_at: now,
-        },
-        { onConflict: "user_id" },
-      );
-
-      if (error) {
-        console.warn("Supabase upsert bank_kyc failed:", error.message);
-      }
-    } catch (e) {
-      console.warn("Supabase call failed:", e);
-    }
+  // 1. Persist to PHP MySQL API
+  try {
+    await api.kyc.saveBank({
+      user_id: normId,
+      account_holder_name: record.accountHolderName,
+      bank_name: record.bankName,
+      account_number: record.accountNumber,
+      ifsc_code: record.ifscCode.toUpperCase(),
+      branch_name: record.branchName,
+      account_type: record.accountType,
+      upi_id: record.upiId,
+      upi_qr_code: record.upiQrCodeUrl || null,
+      status: record.status,
+    });
+  } catch (e) {
+    console.warn("API saveBank fallback:", e);
   }
 
   // 2. Always persist locally

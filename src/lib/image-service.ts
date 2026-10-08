@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { api } from "./api";
 
 export interface UploadedImage {
   id: string;
@@ -112,37 +112,26 @@ export function saveStoredImages(images: UploadedImage[]): void {
 }
 
 export async function fetchUploadedImages(userId?: string): Promise<UploadedImage[]> {
-  if (isSupabaseConfigured && supabase) {
-    try {
-      let query = supabase
-        .from("uploaded_images")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (userId) {
-        query = query.eq("user_id", userId.trim().toUpperCase());
-      }
-
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        return data.map((item) => ({
-          id: item.id,
-          userId: item.user_id,
-          creatorName: item.creator_name,
-          title: item.title,
-          description: item.description || "",
-          imageUrl: item.image_url,
-          format: item.format || "jpg",
-          fileSize: item.file_size || "1.0 MB",
-          category: item.category || "Entertainment",
-          views: Number(item.views) || 0,
-          likes: Number(item.likes) || 0,
-          createdAt: item.created_at,
-        }));
-      }
-    } catch {
-      // fallback to local storage
+  try {
+    const res = await api.images.list({ userId });
+    if (res && res.images && res.images.length > 0) {
+      return res.images.map((item: any) => ({
+        id: item.id,
+        userId: item.user_id || item.userId,
+        creatorName: item.creator_name || item.creatorName,
+        title: item.title,
+        description: item.description || "",
+        imageUrl: item.image_url || item.imageUrl,
+        format: item.format || "jpg",
+        fileSize: item.file_size || item.fileSize || "1.0 MB",
+        category: item.category || "Entertainment",
+        views: Number(item.views) || 0,
+        likes: Number(item.likes) || 0,
+        createdAt: item.created_at || item.createdAt,
+      }));
     }
+  } catch (_e) {
+    // fallback to local storage
   }
 
   const all = getStoredImages();
@@ -182,26 +171,21 @@ export async function recordNewImageUpload(data: {
     createdAt: now,
   };
 
-  // 1. Try Supabase
-  if (isSupabaseConfigured && supabase) {
-    try {
-      await supabase.from("uploaded_images").insert({
-        id,
-        user_id: normUserId,
-        creator_name: newImage.creatorName,
-        title: newImage.title,
-        description: newImage.description,
-        image_url: newImage.imageUrl,
-        format: newImage.format,
-        file_size: newImage.fileSize,
-        category: newImage.category,
-        views: 0,
-        likes: 0,
-        created_at: now,
-      });
-    } catch (e) {
-      console.warn("Supabase recordNewImageUpload fallback:", e);
-    }
+  // 1. Persist to PHP MySQL API
+  try {
+    await api.images.create({
+      id,
+      user_id: normUserId,
+      creator_name: newImage.creatorName,
+      title: newImage.title,
+      description: newImage.description,
+      image_url: newImage.imageUrl,
+      format: newImage.format,
+      file_size: newImage.fileSize,
+      category: newImage.category,
+    });
+  } catch (e) {
+    console.warn("API recordNewImageUpload fallback:", e);
   }
 
   // 2. Local storage

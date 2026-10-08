@@ -391,11 +391,8 @@ ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;`;
               </button>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              All tables (<code className="text-foreground">profiles</code>,{" "}
-              <code className="text-foreground">user_roles</code>) and Row Level Security policies
-              have been generated in{" "}
-              <code className="text-foreground">/supabase/migrations/20260901_init_schema.sql</code>
-              .
+              Production MySQL database schema ready for Hostinger phpMyAdmin is available in{" "}
+              <code className="text-foreground">database/schema.sql</code>.
             </p>
             <pre className="mt-4 overflow-x-auto rounded-xl bg-black/80 p-4 text-[11px] leading-relaxed text-white/90">
               <code>{sqlMigrationCode}</code>

@@ -1,3 +1,4 @@
+import { api } from "./api";
 import { distributePremiumVideoIncome, getUserWallet } from "./ledger-service";
 import {
   recordNewVideoUpload,
@@ -105,19 +106,7 @@ export async function initiatePremiumVideoPayment(
     params.videoId || `vid-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
   try {
-    // 1. Create Order via server route
-    const res = await fetch("/api/payment/create-order", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        purpose: "premium_video_upload",
-        userId: effectiveUserId,
-        userName: effectiveUserName,
-        videoId: effectiveVideoId,
-        contentType: params.contentType,
-      }),
-    });
-
+    // 1. Create Order via PHP REST API
     let orderData: {
       orderId: string;
       amount: number;
@@ -126,9 +115,22 @@ export async function initiatePremiumVideoPayment(
       keyId: string;
     };
 
-    if (res.ok) {
-      orderData = await res.json();
-    } else {
+    try {
+      const res = await api.payments.createOrder({
+        purpose: "premium_video_upload",
+        userId: effectiveUserId,
+        userName: effectiveUserName,
+        videoId: effectiveVideoId,
+        contentType: params.contentType,
+      });
+      orderData = {
+        orderId: res.orderId,
+        amount: res.amount,
+        amountInSubunits: res.amountInSubunits || Math.round(res.amount * 100),
+        currency: res.currency,
+        keyId: res.keyId,
+      };
+    } catch (_e) {
       // Fallback order generation for client resilience
       orderData = {
         orderId: `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -148,22 +150,7 @@ export async function initiatePremiumVideoPayment(
       signature?: string,
     ) => {
       try {
-        // Server-side verification with atomic persistent sequence allocation
-        const verifyRes = await fetch("/api/payment/verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            orderId,
-            paymentId,
-            signature: signature || "mock_signature_bypass",
-            userId: effectiveUserId,
-            userName: effectiveUserName,
-            videoId: effectiveVideoId,
-            purpose: "premium_video_upload",
-            referrerUserId: params.directReferrerId,
-          }),
-        });
-
+        // Server-side verification with atomic persistent sequence allocation in PHP MySQL
         let verifyResult: {
           verified: boolean;
           txNumber?: number;
@@ -179,8 +166,26 @@ export async function initiatePremiumVideoPayment(
           };
         } = { verified: true };
 
-        if (verifyRes.ok) {
-          verifyResult = await verifyRes.json();
+        try {
+          const res = await api.payments.verify({
+            orderId,
+            paymentId,
+            signature: signature || "mock_signature_bypass",
+            userId: effectiveUserId,
+            userName: effectiveUserName,
+            videoId: effectiveVideoId,
+            purpose: "premium_video_upload",
+            referrerUserId: params.directReferrerId,
+          });
+          verifyResult = {
+            verified: res.verified,
+            txNumber: res.txNumber,
+            isSpecialTransaction: res.isSpecialTransaction,
+            specialTag: res.specialTag,
+            distribution: res.distribution,
+          };
+        } catch (_e) {
+          // Fallback
         }
 
         if (!verifyResult.verified) {
@@ -285,18 +290,6 @@ export async function initiateAdsPromotionPayment(params: {
   onCancel?: () => void;
 }): Promise<void> {
   try {
-    const res = await fetch("/api/payment/create-order", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        purpose: "ads_promotion",
-        userId: params.userId,
-        userName: params.userName,
-        videoId: params.videoId,
-        planId: params.planId,
-      }),
-    });
-
     let orderData: {
       orderId: string;
       amount: number;
@@ -305,9 +298,22 @@ export async function initiateAdsPromotionPayment(params: {
       keyId: string;
     };
 
-    if (res.ok) {
-      orderData = await res.json();
-    } else {
+    try {
+      const res = await api.payments.createOrder({
+        purpose: "ads_promotion",
+        userId: params.userId,
+        userName: params.userName,
+        videoId: params.videoId,
+        planId: params.planId,
+      });
+      orderData = {
+        orderId: res.orderId,
+        amount: res.amount,
+        amountInSubunits: res.amountInSubunits || Math.round(res.amount * 100),
+        currency: res.currency,
+        keyId: res.keyId,
+      };
+    } catch (_e) {
       orderData = {
         orderId: `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         amount: params.price,
@@ -321,23 +327,19 @@ export async function initiateAdsPromotionPayment(params: {
 
     const handleAdsCompletion = async (paymentId: string, orderId: string, signature?: string) => {
       try {
-        const verifyRes = await fetch("/api/payment/verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        let verifyResult: { verified: boolean } = { verified: true };
+        try {
+          const res = await api.payments.verify({
             orderId,
             paymentId,
             signature: signature || "mock_signature_bypass",
             userId: params.userId,
             purpose: "ads_promotion",
             referrerUserId: params.directReferrerId,
-            metadata: { planId: params.planId },
-          }),
-        });
-
-        let verifyResult = { verified: true };
-        if (verifyRes.ok) {
-          verifyResult = await verifyRes.json();
+          });
+          verifyResult = { verified: res.verified };
+        } catch (_e) {
+          // Fallback
         }
 
         if (!verifyResult.verified) {
