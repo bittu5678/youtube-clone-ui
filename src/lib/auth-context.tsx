@@ -146,11 +146,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setDbUser(newDbUser);
           setRole(resolvedRole);
         } else {
-          restoreLocalSession();
+          // Clear any unverified cached session
+          setUser(null);
+          setProfile(null);
+          setDbUser(null);
+          setRole(null);
+          try {
+            localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
+          } catch (_e) {
+            // Ignore storage removal errors
+          }
         }
       })
       .catch(() => {
-        restoreLocalSession();
+        setUser(null);
+        setProfile(null);
+        setDbUser(null);
+        setRole(null);
+        try {
+          localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
+        } catch (_e) {
+          // Ignore storage removal errors
+        }
       })
       .finally(() => {
         setIsLoading(false);
@@ -256,51 +273,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // 1. Authenticate with PHP MySQL backend
-      let apiSuccess = false;
-      let authenticatedUser: any = null;
-
+      // 1. Authenticate with Hostinger PHP MySQL backend
+      let loginRes;
       try {
-        const loginRes = await api.auth.login({
+        loginRes = await api.auth.login({
           identifier: rawIdentifier,
           password,
         });
-        if (loginRes && loginRes.success && loginRes.user) {
-          apiSuccess = true;
-          authenticatedUser = loginRes.user;
-        }
-      } catch (apiErr: any) {
-        // If PHP API returned an authentication error, return helpful message
-        const msg = apiErr instanceof Error ? apiErr.message : String(apiErr);
-        if (msg.includes("Incorrect password") || msg.includes("Account not found")) {
-          return {
-            success: false,
-            error: new Error(msg),
-          };
-        }
+      } catch (apiErr: unknown) {
+        const msg =
+          apiErr instanceof Error
+            ? apiErr.message
+            : "Database authentication error. Please verify your connection.";
+        return {
+          success: false,
+          error: new Error(msg),
+        };
       }
 
-      // 2. Fallback to local verified user if server was unreachable
-      if (!apiSuccess) {
-        const foundUser = await findUserByIdentifier(rawIdentifier);
-        if (!foundUser) {
-          return {
-            success: false,
-            error: new Error(
-              "Account not found. Please check your User ID (e.g. FT123456) or Email, or sign up.",
-            ),
-          };
-        }
-
-        const isValid = await verifyPassword(password, foundUser.password_hash);
-        if (!isValid) {
-          return {
-            success: false,
-            error: new Error("Incorrect password. Please try again."),
-          };
-        }
-        authenticatedUser = foundUser;
+      if (!loginRes || !loginRes.success || !loginRes.user) {
+        return {
+          success: false,
+          error: new Error(
+            loginRes?.message ||
+              "Authentication failed. Please verify your User ID or Email and password.",
+          ),
+        };
       }
+
+      const authenticatedUser = loginRes.user;
 
       // 3. Set authenticated state
       const resolvedRole: RoleType =

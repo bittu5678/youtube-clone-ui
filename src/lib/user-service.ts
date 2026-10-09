@@ -68,7 +68,7 @@ export function saveLocalDbUsers(users: DbUser[]): void {
 }
 
 /**
- * Checks whether an FT User ID already exists in MySQL or local cache
+ * Checks whether an FT User ID already exists in MySQL
  */
 export async function checkUserIdExists(candidateUserId: string): Promise<boolean> {
   const normalized = normalizeFTUserId(candidateUserId);
@@ -79,11 +79,10 @@ export async function checkUserIdExists(candidateUserId: string): Promise<boolea
       return true;
     }
   } catch {
-    // fallback to local check
+    return false;
   }
 
-  const localUsers = getLocalDbUsers();
-  return localUsers.some((u) => u.user_id.toUpperCase() === normalized.toUpperCase());
+  return false;
 }
 
 /**
@@ -98,11 +97,10 @@ export async function checkEmailExists(email: string): Promise<boolean> {
       return true;
     }
   } catch {
-    // fallback to local check
+    return false;
   }
 
-  const localUsers = getLocalDbUsers();
-  return localUsers.some((u) => u.email.trim().toLowerCase() === normalized);
+  return false;
 }
 
 /**
@@ -131,66 +129,60 @@ export async function registerUserInDatabase({
   let generatedUserId = "";
   let newUser: DbUser | null = null;
 
-  // 1. Call PHP MySQL backend register API
+  // 1. Call Hostinger PHP MySQL backend register API directly
+  let apiRes: {
+    success: boolean;
+    token?: string;
+    user?: any;
+    userId?: string;
+    message?: string;
+    emailDelivery?: {
+      success: boolean;
+      provider?: "resend" | "smtp" | "none";
+      error?: string;
+      messageId?: string;
+    };
+    error?: string;
+  };
+
   try {
-    const apiRes = await api.auth.register({
+    apiRes = await api.auth.register({
       name: trimmedName,
       mobile: trimmedMobile,
       email: normalizedEmail,
       password,
       referralCode: referralCode?.trim() || undefined,
     });
-
-    if (apiRes && apiRes.user) {
-      newUser = {
-        id: apiRes.user.id,
-        user_id: apiRes.user.user_id,
-        name: apiRes.user.name,
-        mobile: apiRes.user.mobile,
-        email: apiRes.user.email,
-        password_hash: "SECURED_BY_PHP_BCRYPT",
-        referral_code: apiRes.user.referral_code || null,
-        created_at: apiRes.user.created_at || new Date().toISOString(),
-        role: apiRes.user.role || "user",
-      };
-      generatedUserId = apiRes.user.user_id;
-    }
-  } catch (apiErr) {
-    console.warn("PHP Register API call note:", apiErr);
+  } catch (apiErr: unknown) {
+    const errorMsg =
+      apiErr instanceof Error
+        ? apiErr.message
+        : "Failed to connect to the database. Registration could not be completed.";
+    throw new Error(errorMsg);
   }
 
-  // 2. Fallback local generation if offline or initial dev boot
-  if (!newUser) {
-    const emailTaken = await checkEmailExists(normalizedEmail);
-    if (emailTaken) {
-      throw new Error(`The email "${normalizedEmail}" is already registered. Please sign in.`);
-    }
-
-    generatedUserId = await getUniqueFTUserId(checkUserIdExists);
-    const passwordHash = await hashPassword(password);
-    const newId =
-      typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : "u_" + Math.random().toString(36).slice(2, 10);
-
-    newUser = {
-      id: newId,
-      user_id: generatedUserId,
-      name: trimmedName,
-      mobile: trimmedMobile,
-      email: normalizedEmail,
-      password_hash: passwordHash,
-      referral_code: referralCode?.trim() || null,
-      created_at: new Date().toISOString(),
-      role: "user",
-    };
+  if (!apiRes || !apiRes.user) {
+    const errorMsg =
+      apiRes?.message ||
+      apiRes?.error ||
+      "Database registration failed: User record could not be created in MySQL.";
+    throw new Error(errorMsg);
   }
 
-  // 3. Persist to local cache for fast offline resilience
-  const localList = getLocalDbUsers();
-  saveLocalDbUsers([newUser, ...localList.filter((u) => u.id !== newUser!.id)]);
+  newUser = {
+    id: apiRes.user.id,
+    user_id: apiRes.user.user_id,
+    name: apiRes.user.name,
+    mobile: apiRes.user.mobile,
+    email: apiRes.user.email,
+    password_hash: "SECURED_BY_PHP_BCRYPT",
+    referral_code: apiRes.user.referral_code || null,
+    created_at: apiRes.user.created_at || new Date().toISOString(),
+    role: apiRes.user.role || "user",
+  };
+  generatedUserId = apiRes.user.user_id;
 
-  // 4. Send Welcome Email
+  // 2. Determine Welcome Email Delivery status
   let emailDelivery = {
     success: false,
     provider: "none" as "resend" | "smtp" | "none",
@@ -198,43 +190,57 @@ export async function registerUserInDatabase({
     messageId: undefined as string | undefined,
   };
 
-  try {
-    const res = await sendWelcomeEmail({
-      name: trimmedName,
-      email: normalizedEmail,
-      userId: generatedUserId,
-      password: password,
-      loginLink: "https://facetube.online/login",
-    });
+  if (apiRes.emailDelivery) {
     emailDelivery = {
-      success: res.success,
-      provider: res.provider || "none",
-      error: res.error,
-      messageId: res.messageId,
+      success: apiRes.emailDelivery.success,
+      provider: apiRes.emailDelivery.provider || "none",
+      error: apiRes.emailDelivery.error,
+      messageId: apiRes.emailDelivery.messageId,
     };
-  } catch (emailErr: unknown) {
-    const msg = emailErr instanceof Error ? emailErr.message : String(emailErr);
-    emailDelivery = {
-      success: false,
-      provider: "none",
-      error: `Email delivery failed: ${msg}`,
-      messageId: undefined,
-    };
+  } else {
+    // If backend did not dispatch email inline, trigger via email service
+    try {
+      const loginLink =
+        (typeof window !== "undefined" && window.location.origin
+          ? window.location.origin
+          : "https://facetube.online") + "/login";
+
+      const res = await sendWelcomeEmail({
+        name: trimmedName,
+        email: normalizedEmail,
+        userId: generatedUserId,
+        password: password,
+        loginLink,
+      });
+      emailDelivery = {
+        success: res.success,
+        provider: res.provider || "none",
+        error: res.error,
+        messageId: res.messageId,
+      };
+    } catch (emailErr: unknown) {
+      const msg = emailErr instanceof Error ? emailErr.message : String(emailErr);
+      emailDelivery = {
+        success: false,
+        provider: "none",
+        error: `Email delivery failed: ${msg}`,
+        messageId: undefined,
+      };
+    }
   }
 
   return { user: newUser, userId: generatedUserId, emailDelivery };
 }
 
 /**
- * Searches for a user in MySQL / local cache by either:
- * - User ID (e.g. FT123456)
+ * Searches for a user in MySQL by either:
+ * - User ID (e.g. FT102857)
  * - OR Email (e.g. user@facetube.com)
  */
 export async function findUserByIdentifier(identifier: string): Promise<DbUser | null> {
   if (!identifier) return null;
   const raw = identifier.trim();
 
-  // 1. Try PHP API
   try {
     const res = await api.users.getProfile(raw);
     if (res && res.profile) {
@@ -251,21 +257,9 @@ export async function findUserByIdentifier(identifier: string): Promise<DbUser |
         role: p.role,
       };
     }
-  } catch (e) {
-    // fallback to local cache
+  } catch (_e) {
+    return null;
   }
 
-  // 2. Try Local DB cache
-  const localUsers = getLocalDbUsers();
-  const searchUpper = raw.toUpperCase();
-  const searchLower = raw.toLowerCase();
-
-  const match = localUsers.find(
-    (u) =>
-      u.user_id.toUpperCase() === searchUpper ||
-      u.email.toLowerCase() === searchLower ||
-      (u.name && u.name.toLowerCase() === searchLower),
-  );
-
-  return match || null;
+  return null;
 }

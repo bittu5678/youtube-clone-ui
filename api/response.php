@@ -1,111 +1,87 @@
 <?php
 /**
- * FaceTube - Common HTTP Response, CORS, and Authentication Middleware
+ * FaceTube - Universal JSON Response & Helper Functions
+ * Standardized response envelope, CORS handling, and Bearer token parsing
  */
 
+// Enable CORS for web, mobile apps, and APK access
 function handleCors() {
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
     header("Access-Control-Allow-Origin: {$origin}");
-    header('Access-Control-Allow-Credentials: true');
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Auth-Token');
-    header('Vary: Origin');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept');
+    header('Access-Control-Allow-Credentials: true');
+    header('Access-Control-Max-Age: 86400');
 
-    if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
         http_response_code(204);
         exit;
     }
 }
 
-function jsonResponse($data, int $statusCode = 200) {
+handleCors();
+
+function jsonResponse($data, $statusCode = 200) {
     http_response_code($statusCode);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 
-function getRequestPayload(): array {
-    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
-    if (stripos($contentType, 'application/json') !== false) {
-        $raw = file_get_contents('php://input');
+function getRequestPayload() {
+    $raw = file_get_contents('php://input');
+    if (!empty($raw)) {
         $json = json_decode($raw, true);
-        return is_array($json) ? $json : [];
+        if (json_last_error() === JSON_ERROR_NONE && is_array($json)) {
+            return $json;
+        }
     }
-    return is_array($_POST) ? $_POST : [];
+    return $_POST ?: [];
 }
 
-function getAuthToken(): ?string {
-    $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
-    if ($authHeader && preg_match('/Bearer\s+(\S+)/i', $authHeader, $matches)) {
-        return $matches[1];
+function getBearerToken() {
+    $headers = null;
+    if (isset($_SERVER['Authorization'])) {
+        $headers = trim($_SERVER['Authorization']);
+    } elseif (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+        $headers = trim($_SERVER['HTTP_AUTHORIZATION']);
+    } elseif (function_exists('apache_request_headers')) {
+        $requestHeaders = apache_request_headers();
+        $requestHeaders = array_combine(
+            array_map('ucwords', array_keys($requestHeaders)),
+            array_values($requestHeaders)
+        );
+        if (isset($requestHeaders['Authorization'])) {
+            $headers = trim($requestHeaders['Authorization']);
+        }
     }
-    if (!empty($_SERVER['HTTP_X_AUTH_TOKEN'])) {
-        return $_SERVER['HTTP_X_AUTH_TOKEN'];
+
+    if (!empty($headers)) {
+        if (preg_match('/Bearer\s(\S+)/i', $headers, $matches)) {
+            return $matches[1];
+        }
     }
-    if (!empty($_COOKIE['facetube_token'])) {
-        return $_COOKIE['facetube_token'];
-    }
+
     return null;
 }
 
-function getAuthUser(PDO $pdo): ?array {
-    $token = getAuthToken();
+function getAuthUser($pdo) {
+    $token = getBearerToken();
     if (!$token) {
         return null;
     }
 
-    $stmt = $pdo->prepare('
-        SELECT u.id, u.user_id, u.name, u.mobile, u.email, u.role, u.referral_code, u.avatar_url, u.created_at
-        FROM sessions s
-        JOIN users u ON u.id = s.user_id
-        WHERE s.token = ? AND s.expires_at > NOW()
-        LIMIT 1
-    ');
-    $stmt->execute([$token]);
-    $user = $stmt->fetch();
-    return $user ?: null;
-}
-
-function requireAuthUser(PDO $pdo): array {
-    $user = getAuthUser($pdo);
-    if (!$user) {
-        jsonResponse([
-            'success' => false,
-            'error' => 'Authentication required. Please log in.'
-        ], 401);
+    try {
+        $stmt = $pdo->prepare('
+            SELECT u.id, u.user_id, u.name, u.mobile, u.email, u.role, u.referral_code, u.avatar_url, u.created_at
+            FROM sessions s
+            INNER JOIN users u ON s.user_id = u.id
+            WHERE s.token = ? AND s.expires_at > NOW()
+            LIMIT 1
+        ');
+        $stmt->execute([$token]);
+        return $stmt->fetch() ?: null;
+    } catch (Exception $e) {
+        return null;
     }
-    return $user;
 }
-
-function requireAdminUser(PDO $pdo): array {
-    $user = requireAuthUser($pdo);
-    if (($user['role'] ?? '') !== 'admin') {
-        jsonResponse([
-            'success' => false,
-            'error' => 'Forbidden: Administrator access required.'
-        ], 403);
-    }
-    return $user;
-}
-
-function generateUuid(): string {
-    $data = random_bytes(16);
-    $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
-    $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
-    return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
-}
-
-function generateFTUserId(PDO $pdo): string {
-    for ($i = 0; $i < 20; $i++) {
-        $candidate = 'FT' . str_pad((string)random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
-        $stmt = $pdo->prepare('SELECT id FROM users WHERE user_id = ? LIMIT 1');
-        $stmt->execute([$candidate]);
-        if (!$stmt->fetch()) {
-            return $candidate;
-        }
-    }
-    return 'FT' . str_pad((string)random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
-}
-
-// Automatically apply CORS on any file including response.php
-handleCors();

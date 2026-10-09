@@ -21,88 +21,61 @@ if (process.argv.includes("build") && !process.argv.includes("development")) {
   process.env["NODE_ENV"] = "production";
 }
 
-function welcomeEmailDevPlugin(): Plugin {
+function facetubeApiDevPlugin(): Plugin {
   return {
-    name: "welcome-email-dev-server",
+    name: "facetube-api-dev-server",
     configureServer(server) {
-      server.middlewares.use("/api/send-welcome-email", async (req, res) => {
-        if (req.method === "GET") {
-          try {
-            const { resolveSmtpConfig } = await import("./src/server/email");
-            const conf = resolveSmtpConfig();
-            res.setHeader("Content-Type", "application/json");
-            res.statusCode = 200;
-            res.end(
-              JSON.stringify({
-                status: "ok",
-                smtpConfigured: conf.configured,
-                host: conf.host,
-                port: conf.port,
-                secure: conf.secure,
-                source: conf.source,
-                sender: conf.from,
-                user: conf.user ? `${conf.user.slice(0, 3)}***@***` : "NOT_SET",
-              }),
-            );
-            return;
-          } catch (_e) {
-            res.statusCode = 200;
-            res.end(JSON.stringify({ status: "ok" }));
-            return;
-          }
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url || !req.url.startsWith("/api")) {
+          return next();
         }
 
-        if (req.method !== "POST") {
-          res.statusCode = 405;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ success: false, error: "Method Not Allowed" }));
-          return;
-        }
-        let body = "";
+        const chunks: Buffer[] = [];
         req.on("data", (chunk) => {
-          body += chunk;
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         });
-        req.on("end", async () => {
-          try {
-            const payload = JSON.parse(body || "{}");
-            const { sendWelcomeEmailServer } = await import("./src/server/email");
-            const result = await sendWelcomeEmailServer(payload);
-            res.setHeader("Content-Type", "application/json");
-            res.statusCode = result.success ? 200 : 500;
-            res.end(JSON.stringify(result));
-          } catch (err: unknown) {
-            console.error("[Email Dev Server Error]", err);
-            res.setHeader("Content-Type", "application/json");
-            res.statusCode = 500;
-            res.end(JSON.stringify({ success: false, error: "Email delivery failed" }));
-          }
-        });
-      });
 
-      server.middlewares.use("/api/send-certificate-email", async (req, res) => {
-        if (req.method !== "POST") {
-          res.statusCode = 405;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ success: false, error: "Method Not Allowed" }));
-          return;
-        }
-        let body = "";
-        req.on("data", (chunk) => {
-          body += chunk;
-        });
         req.on("end", async () => {
           try {
-            const payload = JSON.parse(body || "{}");
-            const { sendCertificateEmailServer } = await import("./src/server/email");
-            const result = await sendCertificateEmailServer(payload);
-            res.setHeader("Content-Type", "application/json");
-            res.statusCode = result.success ? 200 : 500;
-            res.end(JSON.stringify(result));
-          } catch (err: unknown) {
-            console.error("[Certificate Email Dev Server Error]", err);
-            res.setHeader("Content-Type", "application/json");
+            const bodyBuffer = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
+            const fullUrl = new URL(req.url!, `http://${req.headers.host || "localhost:3000"}`);
+            const headers = new Headers();
+            for (const [key, value] of Object.entries(req.headers)) {
+              if (value) {
+                if (Array.isArray(value)) {
+                  value.forEach((v) => headers.append(key, v));
+                } else {
+                  headers.set(key, value);
+                }
+              }
+            }
+
+            const webReq = new Request(fullUrl.toString(), {
+              method: req.method,
+              headers,
+              body:
+                req.method !== "GET" && req.method !== "HEAD" && bodyBuffer && bodyBuffer.length > 0
+                  ? bodyBuffer
+                  : undefined,
+            });
+
+            const { handleApiRequest } = await import("./src/server/api-handler");
+            const response = await handleApiRequest(webReq);
+            if (response) {
+              res.statusCode = response.status;
+              response.headers.forEach((val, key) => {
+                res.setHeader(key, val);
+              });
+              const arrayBuf = await response.arrayBuffer();
+              res.end(Buffer.from(arrayBuf));
+              return;
+            }
+            next();
+          } catch (err) {
+            console.error("[API Dev Server Error]", err);
             res.statusCode = 500;
-            res.end(JSON.stringify({ success: false, error: "Email delivery failed" }));
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "Internal Server Error in API Dev Handler" }));
           }
         });
       });
@@ -126,6 +99,6 @@ export default defineConfig({
       strictPort: true,
       allowedHosts: true,
     },
-    plugins: [welcomeEmailDevPlugin()],
+    plugins: [facetubeApiDevPlugin()],
   },
 });

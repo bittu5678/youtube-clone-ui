@@ -767,21 +767,7 @@ function AuthPage() {
             )}
 
             {/* Welcome Email Trigger Notice */}
-            {emailDeliveryStatus?.success === false ? (
-              <div className="mt-4 flex items-center justify-between rounded-xl border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-xs text-destructive">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span className="font-semibold">Email delivery failed</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowEmailModal(true)}
-                  className="font-bold underline hover:opacity-80"
-                >
-                  View Details
-                </button>
-              </div>
-            ) : (
+            {emailDeliveryStatus?.success === true ? (
               <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 text-xs text-emerald-600 dark:text-emerald-400">
                 <div className="flex items-center gap-2">
                   <Inbox className="h-4 w-4 shrink-0" />
@@ -793,6 +779,22 @@ function AuthPage() {
                   className="font-bold underline hover:text-emerald-700 dark:hover:text-emerald-300"
                 >
                   View Email
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 flex items-center justify-between rounded-xl border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-xs text-destructive">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span className="font-semibold">
+                    {emailDeliveryStatus?.error || "Email delivery failed"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowEmailModal(true)}
+                  className="font-bold underline hover:opacity-80"
+                >
+                  View Details
                 </button>
               </div>
             )}

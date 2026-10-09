@@ -1,6 +1,23 @@
 {
-  "lastTxNumber": 10,
+  "lastTxNumber": 11,
   "transactions": [
+    {
+      "txNumber": 11,
+      "paymentId": "pay_test_998877",
+      "orderId": "order_1791530501467_brvkrre",
+      "videoId": "vid_1791530532813",
+      "userId": "FT483921",
+      "userName": "FaceTube Creator",
+      "referrerId": "FT102857",
+      "amount": 6,
+      "transactionType": "premium_upload",
+      "isSpecial": true,
+      "specialTag": "SPECIAL_GLOBAL_RULE",
+      "referralCommission": 1,
+      "adminAllocation": 4,
+      "globalPoolAllocation": 0,
+      "createdAt": "2026-10-09T07:22:12.813Z"
+    },
     {
       "txNumber": 1,
       "paymentId": "pay_seed_hist_1001",

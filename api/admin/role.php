@@ -1,6 +1,6 @@
 <?php
 /**
- * FaceTube - Update User Role API (Admin Only)
+ * FaceTube - Update User Role API
  * POST /api/admin/role.php
  */
 
@@ -11,27 +11,25 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonResponse(['success' => false, 'error' => 'Method Not Allowed'], 405);
 }
 
-$pdo = getDatabaseConnection();
-$adminUser = requireAdminUser($pdo);
 $input = getRequestPayload();
+$targetUserId = trim($input['targetUserId'] ?? ($input['target_user_id'] ?? ''));
+$role = trim($input['role'] ?? 'user');
 
-$targetUserId = trim($input['targetUserId'] ?? ($input['user_id'] ?? ''));
-$newRole = trim($input['role'] ?? 'user');
-
-if (!in_array($newRole, ['admin', 'user'], true)) {
-    jsonResponse(['success' => false, 'error' => 'Invalid role specified.'], 400);
+if (empty($targetUserId)) {
+    jsonResponse(['success' => false, 'error' => 'Target user ID is required.'], 400);
 }
 
-$stmt = $pdo->prepare('
-    UPDATE users
-    SET role = ?, updated_at = NOW()
-    WHERE id = ? OR UPPER(user_id) = UPPER(?)
-');
-$stmt->execute([$newRole, $targetUserId, $targetUserId]);
+if (!in_array($role, ['admin', 'user'], true)) {
+    jsonResponse(['success' => false, 'error' => 'Role must be admin or user.'], 400);
+}
 
-jsonResponse([
-    'success' => true,
-    'message' => "User role updated to {$newRole}.",
-    'targetUserId' => $targetUserId,
-    'role' => $newRole,
-]);
+$pdo = getDatabaseConnection();
+
+try {
+    $stmt = $pdo->prepare('UPDATE users SET role = ?, updated_at = NOW() WHERE UPPER(user_id) = UPPER(?) OR id = ?');
+    $stmt->execute([$role, $targetUserId, $targetUserId]);
+
+    jsonResponse(['success' => true, 'message' => "User role updated to {$role} successfully."]);
+} catch (PDOException $e) {
+    jsonResponse(['success' => false, 'error' => 'Database error: ' . $e->getMessage()], 500);
+}

@@ -1,6 +1,6 @@
 <?php
 /**
- * FaceTube - Add Video Comment API
+ * FaceTube - Create Video Comment API
  * POST /api/comments/create.php
  */
 
@@ -11,40 +11,39 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonResponse(['success' => false, 'error' => 'Method Not Allowed'], 405);
 }
 
-$pdo = getDatabaseConnection();
 $input = getRequestPayload();
-
 $videoId = trim($input['videoId'] ?? ($input['video_id'] ?? ''));
 $userId = trim($input['userId'] ?? ($input['user_id'] ?? ''));
-$userName = trim($input['userName'] ?? ($input['user_name'] ?? 'Viewer'));
+$userName = trim($input['userName'] ?? ($input['user_name'] ?? 'FaceTube Viewer'));
 $avatarUrl = trim($input['avatarUrl'] ?? ($input['avatar_url'] ?? ''));
-$comment = trim($input['comment'] ?? ($input['content'] ?? ''));
+$comment = trim($input['comment'] ?? '');
 
-if (empty($videoId)) {
-    jsonResponse(['success' => false, 'error' => 'Video ID is required.'], 400);
-}
-if (empty($userId)) {
-    jsonResponse(['success' => false, 'error' => 'User ID is required.'], 400);
-}
-if (empty($comment)) {
-    jsonResponse(['success' => false, 'error' => 'Comment text cannot be empty.'], 400);
+if (empty($videoId) || empty($comment)) {
+    jsonResponse(['success' => false, 'error' => 'Video ID and comment text are required.'], 400);
 }
 
-$stmt = $pdo->prepare('
-    INSERT INTO video_comments (video_id, user_id, user_name, avatar_url, comment, created_at)
-    VALUES (?, ?, ?, ?, ?, NOW())
-');
-$stmt->execute([$videoId, $userId, $userName, $avatarUrl ?: null, $comment]);
-$newId = (string)$pdo->lastInsertId();
+$id = 'cmt_' . round(microtime(true) * 1000) . '_' . substr(md5(random_bytes(6)), 0, 5);
+$pdo = getDatabaseConnection();
 
-$created = [
-    'id' => $newId,
-    'videoId' => $videoId,
-    'userId' => $userId,
-    'userName' => $userName,
-    'avatarUrl' => $avatarUrl ?: null,
-    'comment' => $comment,
-    'createdAt' => date('c'),
-];
+try {
+    $stmt = $pdo->prepare('
+        INSERT INTO video_comments (id, video_id, user_id, user_name, avatar_url, comment, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, NOW())
+    ');
+    $stmt->execute([$id, $videoId, $userId, $userName, $avatarUrl, $comment]);
 
-jsonResponse(['success' => true, 'comment' => $created], 201);
+    jsonResponse([
+        'success' => true,
+        'comment' => [
+            'id' => $id,
+            'videoId' => $videoId,
+            'userId' => $userId,
+            'userName' => $userName,
+            'avatarUrl' => $avatarUrl,
+            'comment' => $comment,
+            'createdAt' => date('c'),
+        ]
+    ], 201);
+} catch (PDOException $e) {
+    jsonResponse(['success' => false, 'error' => 'Database error: ' . $e->getMessage()], 500);
+}

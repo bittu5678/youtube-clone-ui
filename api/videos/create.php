@@ -1,6 +1,6 @@
 <?php
 /**
- * FaceTube - Create Video Upload API
+ * FaceTube - Create Uploaded Video API
  * POST /api/videos/create.php
  */
 
@@ -14,81 +14,89 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $pdo = getDatabaseConnection();
 $input = getRequestPayload();
 
-$id = trim($input['id'] ?? ('vid-' . round(microtime(true) * 1000) . '-' . random_int(1000, 9999)));
-$userId = trim($input['userId'] ?? ($input['user_id'] ?? ''));
-$creatorName = trim($input['creatorName'] ?? ($input['creator_name'] ?? 'Creator'));
+$id = trim($input['id'] ?? ('vid_' . round(microtime(true) * 1000) . '_' . substr(md5(random_bytes(6)), 0, 6)));
+$userId = trim($input['user_id'] ?? ($input['userId'] ?? ''));
+$creatorName = trim($input['creator_name'] ?? ($input['creatorName'] ?? 'Creator'));
 $title = trim($input['title'] ?? '');
 $description = trim($input['description'] ?? '');
-$videoUrl = trim($input['videoUrl'] ?? ($input['video_url'] ?? ''));
-$thumbnailUrl = trim($input['thumbnailUrl'] ?? ($input['thumbnail_url'] ?? ''));
-$videoType = ($input['videoType'] ?? ($input['video_type'] ?? 'free')) === 'premium' ? 'premium' : 'free';
-$contentType = ($input['contentType'] ?? ($input['content_type'] ?? 'long')) === 'short' ? 'short' : 'long';
-$category = trim($input['category'] ?? 'Entertainment');
-$duration = trim($input['duration'] ?? ($contentType === 'short' ? '0:45' : '12:30'));
-$paymentStatus = trim($input['paymentStatus'] ?? ($input['payment_status'] ?? ($videoType === 'premium' ? 'pending' : 'not_required')));
-$paymentId = trim($input['paymentId'] ?? ($input['payment_id'] ?? ''));
-$paymentAmount = (float)($input['paymentAmount'] ?? ($input['payment_amount'] ?? ($videoType === 'premium' ? 6.00 : 0.00)));
+$videoUrl = trim($input['video_url'] ?? ($input['videoUrl'] ?? ''));
+$thumbnailUrl = trim($input['thumbnail_url'] ?? ($input['thumbnailUrl'] ?? ''));
+$videoType = trim($input['video_type'] ?? ($input['videoType'] ?? 'free'));
+$contentType = trim($input['content_type'] ?? ($input['contentType'] ?? 'long'));
+$category = trim($input['category'] ?? 'General');
+$duration = trim($input['duration'] ?? '0:00');
+$paymentStatus = trim($input['payment_status'] ?? ($input['paymentStatus'] ?? ($videoType === 'premium' ? 'pending' : 'not_required')));
+$paymentId = !empty($input['payment_id']) ? trim($input['payment_id']) : (!empty($input['paymentId']) ? trim($input['paymentId']) : null);
+$paymentAmount = floatval($input['payment_amount'] ?? ($input['paymentAmount'] ?? ($videoType === 'premium' ? 6.00 : 0.00)));
 
-if (empty($userId)) {
-    jsonResponse(['success' => false, 'error' => 'User ID is required.'], 400);
-}
 if (empty($title)) {
     jsonResponse(['success' => false, 'error' => 'Video title is required.'], 400);
 }
 
-// Fallback sample URLs if not provided
 if (empty($videoUrl)) {
-    $videoUrl = $contentType === 'short'
-        ? 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
-        : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-}
-if (empty($thumbnailUrl)) {
-    $thumbnailUrl = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60';
+    jsonResponse(['success' => false, 'error' => 'Video URL or file is required.'], 400);
 }
 
-$stmt = $pdo->prepare('
-    INSERT INTO uploaded_videos (
-        id, user_id, creator_name, title, description, video_url, thumbnail_url,
-        video_type, content_type, category, duration, views, likes,
-        payment_status, payment_id, payment_amount, is_promoted, created_at, updated_at
-    ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, 0, 0,
-        ?, ?, ?, 0, NOW(), NOW()
-    )
-    ON DUPLICATE KEY UPDATE
-        payment_status = VALUES(payment_status),
-        payment_id = VALUES(payment_id),
-        payment_amount = VALUES(payment_amount),
-        updated_at = NOW()
-');
+try {
+    $stmt = $pdo->prepare('
+        INSERT INTO uploaded_videos (
+            id, user_id, creator_name, title, description, video_url, thumbnail_url,
+            video_type, content_type, category, duration, views, likes,
+            payment_status, payment_id, payment_amount, is_promoted,
+            created_at, updated_at
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, 0, 0,
+            ?, ?, ?, 0,
+            NOW(), NOW()
+        )
+    ');
 
-$stmt->execute([
-    $id, $userId, $creatorName, $title, $description, $videoUrl, $thumbnailUrl,
-    $videoType, $contentType, $category, $duration,
-    $paymentStatus, $paymentId ?: null, $paymentAmount
-]);
+    $stmt->execute([
+        $id,
+        $userId,
+        $creatorName,
+        $title,
+        $description,
+        $videoUrl,
+        $thumbnailUrl,
+        $videoType,
+        $contentType,
+        $category,
+        $duration,
+        $paymentStatus,
+        $paymentId,
+        $paymentAmount
+    ]);
 
-$createdVideo = [
-    'id' => $id,
-    'userId' => $userId,
-    'creatorName' => $creatorName,
-    'title' => $title,
-    'description' => $description,
-    'videoUrl' => $videoUrl,
-    'thumbnailUrl' => $thumbnailUrl,
-    'videoType' => $videoType,
-    'contentType' => $contentType,
-    'category' => $category,
-    'duration' => $duration,
-    'views' => 0,
-    'likes' => 0,
-    'paymentStatus' => $paymentStatus,
-    'paymentId' => $paymentId ?: null,
-    'paymentAmount' => $paymentAmount,
-    'isPromoted' => false,
-    'createdAt' => date('c'),
-    'updatedAt' => date('c'),
-];
-
-jsonResponse(['success' => true, 'video' => $createdVideo], 201);
+    jsonResponse([
+        'success' => true,
+        'video' => [
+            'id' => $id,
+            'userId' => $userId,
+            'user_id' => $userId,
+            'creatorName' => $creatorName,
+            'creator_name' => $creatorName,
+            'title' => $title,
+            'description' => $description,
+            'videoUrl' => $videoUrl,
+            'video_url' => $videoUrl,
+            'thumbnailUrl' => $thumbnailUrl,
+            'thumbnail_url' => $thumbnailUrl,
+            'videoType' => $videoType,
+            'video_type' => $videoType,
+            'contentType' => $contentType,
+            'content_type' => $contentType,
+            'category' => $category,
+            'duration' => $duration,
+            'paymentStatus' => $paymentStatus,
+            'payment_status' => $paymentStatus,
+            'paymentId' => $paymentId,
+            'paymentAmount' => $paymentAmount,
+            'isPromoted' => false,
+            'created_at' => date('c'),
+        ]
+    ], 201);
+} catch (PDOException $e) {
+    jsonResponse(['success' => false, 'error' => 'Database insert error: ' . $e->getMessage()], 500);
+}

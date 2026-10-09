@@ -1,0 +1,206 @@
+{
+  "users": [
+    {
+      "id": "a0000000-0000-0000-0000-000000000001",
+      "user_id": "FT102857",
+      "name": "FaceTube Administrator",
+      "mobile": "+1 555-019-2834",
+      "email": "admin@facetube.com",
+      "password_hash": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "admin",
+      "referral_code": "FTVIP",
+      "avatar_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+      "created_at": "2026-09-09T07:21:29.240Z"
+    },
+    {
+      "id": "a0000000-0000-0000-0000-000000000002",
+      "user_id": "FT483921",
+      "name": "Alex Rivera",
+      "mobile": "+1 555-014-8392",
+      "email": "alex@facetube.com",
+      "password_hash": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "user",
+      "referral_code": "CREATOR50",
+      "avatar_url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80",
+      "created_at": "2026-09-24T07:21:29.240Z"
+    },
+    {
+      "id": "a0000000-0000-0000-0000-000000000003",
+      "user_id": "FT900431",
+      "name": "Maya Lin",
+      "mobile": "+1 555-019-0043",
+      "email": "maya@facetube.com",
+      "password_hash": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "user",
+      "referral_code": null,
+      "avatar_url": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80",
+      "created_at": "2026-10-02T07:21:29.240Z"
+    }
+  ],
+  "sessions": {
+    "701a44a4c149d6745fef0fc9fcf08d8cae65c6b1f3bb1da9": "FT102857"
+  },
+  "videos": [
+    {
+      "id": "vid-seed-001",
+      "user_id": "FT483921",
+      "creator_name": "Alex Rivera",
+      "title": "10 Coding Shortcuts Every React Dev Must Know #Shorts",
+      "description": "Lightning-fast developer workflow hacks in under 45 seconds.",
+      "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+      "thumbnail_url": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60",
+      "video_type": "free",
+      "content_type": "short",
+      "category": "Coding",
+      "duration": "0:42",
+      "views": 45200,
+      "likes": 3120,
+      "payment_status": "not_required",
+      "payment_amount": 0,
+      "is_promoted": false,
+      "created_at": "2026-09-27T07:21:29.240Z",
+      "updated_at": "2026-09-27T07:21:29.240Z"
+    },
+    {
+      "id": "vid-seed-002",
+      "user_id": "FT483921",
+      "creator_name": "Alex Rivera",
+      "title": "Full Stack App Architecture from Scratch: Zero to Production",
+      "description": "Complete guide to modern multi-tenant cloud application development.",
+      "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+      "thumbnail_url": "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&auto=format&fit=crop&q=60",
+      "video_type": "free",
+      "content_type": "long",
+      "category": "Coding",
+      "duration": "24:18",
+      "views": 128400,
+      "likes": 9840,
+      "payment_status": "not_required",
+      "payment_amount": 0,
+      "is_promoted": false,
+      "created_at": "2026-09-29T07:21:29.240Z",
+      "updated_at": "2026-09-29T07:21:29.240Z"
+    },
+    {
+      "id": "vid-seed-003",
+      "user_id": "FT900431",
+      "creator_name": "Maya Lin",
+      "title": "How to Build a 6-Figure YouTube Channel in 2026 #Shorts",
+      "description": "Creator monetization secrets revealed in under 60 seconds.",
+      "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+      "thumbnail_url": "https://images.unsplash.com/photo-1579202673506-ca3ce28943ef?w=800&auto=format&fit=crop&q=60",
+      "video_type": "premium",
+      "content_type": "short",
+      "category": "Business",
+      "duration": "0:58",
+      "views": 68900,
+      "likes": 5410,
+      "payment_status": "paid",
+      "payment_id": "pay_seed_maya_short_01",
+      "payment_amount": 6,
+      "is_promoted": false,
+      "created_at": "2026-10-03T07:21:29.240Z",
+      "updated_at": "2026-10-03T07:21:29.240Z"
+    },
+    {
+      "id": "vid-seed-004",
+      "user_id": "FT900431",
+      "creator_name": "Maya Lin",
+      "title": "Masterclass: High-Ticket Creator Monetization & Brand Deals",
+      "description": "Comprehensive blueprint for closing 5-figure creator sponsor deals.",
+      "video_url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+      "thumbnail_url": "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=800&auto=format&fit=crop&q=60",
+      "video_type": "premium",
+      "content_type": "long",
+      "category": "Business",
+      "duration": "42:15",
+      "views": 312000,
+      "likes": 24900,
+      "payment_status": "paid",
+      "payment_id": "pay_seed_maya_long_01",
+      "payment_amount": 6,
+      "is_promoted": true,
+      "promotion_plan": "plan-monthly",
+      "promotion_expires_at": "2026-11-03T07:21:29.240Z",
+      "created_at": "2026-10-04T07:21:29.240Z",
+      "updated_at": "2026-10-04T07:21:29.240Z"
+    }
+  ],
+  "comments": [
+    {
+      "id": "cmt-seed-01",
+      "video_id": "vid-seed-001",
+      "user_id": "FT900431",
+      "user_name": "Maya Lin",
+      "avatar_url": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80",
+      "comment": "These shortcuts saved me hours today! Amazing video.",
+      "created_at": "2026-10-07T07:21:29.240Z"
+    }
+  ],
+  "images": [],
+  "personalKyc": {
+    "FT102857": {
+      "fullName": "FaceTube Administrator",
+      "mobile": "+1 555-019-2834",
+      "dob": "1990-05-12",
+      "address": "742 Evergreen Terrace, Tech Park",
+      "city": "San Jose",
+      "state": "California",
+      "pincode": "95110",
+      "nomineeName": "Sarah Administrator",
+      "nomineeRelation": "Spouse",
+      "nomineeMobile": "+1 555-019-8821",
+      "status": "Verified"
+    },
+    "FT483921": {
+      "fullName": "Alex Rivera",
+      "mobile": "+1 555-014-8392",
+      "dob": "1994-08-15",
+      "address": "402 Skyline Boulevard, Suite 120",
+      "city": "San Francisco",
+      "state": "California",
+      "pincode": "94107",
+      "nomineeName": "Elena Rivera",
+      "nomineeRelation": "Spouse",
+      "nomineeMobile": "+1 555-014-9921",
+      "status": "Verified"
+    },
+    "FT900431": {
+      "fullName": "Maya Lin",
+      "mobile": "+1 555-019-0043",
+      "dob": "1996-11-20",
+      "address": "18 Orchard St, Creator Row",
+      "city": "New York",
+      "state": "New York",
+      "pincode": "10002",
+      "nomineeName": "David Lin",
+      "nomineeRelation": "Father",
+      "nomineeMobile": "+1 555-019-4411",
+      "status": "Submitted"
+    }
+  },
+  "bankKyc": {
+    "FT102857": {
+      "accountHolderName": "FaceTube Administrator",
+      "bankName": "Silicon Valley Bank",
+      "accountNumber": "918239019201",
+      "ifscCode": "SVBL0001048",
+      "branchName": "Santa Clara Tech Hub",
+      "accountType": "Current",
+      "upiId": "facetube.admin@okaxis",
+      "status": "Verified"
+    },
+    "FT483921": {
+      "accountHolderName": "Alex Rivera",
+      "bankName": "HDFC Bank",
+      "accountNumber": "50100481920194",
+      "ifscCode": "HDFC0001824",
+      "branchName": "Silicon Valley Branch",
+      "accountType": "Savings",
+      "upiId": "alexrivera@okhdfcbank",
+      "status": "Verified"
+    }
+  },
+  "certificates": {},
+  "walletTransactions": []
+}

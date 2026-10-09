@@ -74,7 +74,19 @@ export async function apiFetch<T = unknown>(
       data = null;
     }
   } else {
-    data = await res.text();
+    const text = await res.text();
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+
+  if (
+    typeof data === "string" &&
+    (data.includes("<?php") || data.startsWith("<!DOCTYPE") || data.startsWith("<html"))
+  ) {
+    throw new Error(`Invalid response received from endpoint ${cleanEndpoint}`);
   }
 
   if (!res.ok) {

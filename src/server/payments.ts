@@ -311,13 +311,14 @@ export async function verifyServerPayment(
   referrerUserId?: string | null,
   env?: Record<string, string | undefined>,
 ): Promise<PaymentVerifyResult> {
+  const hasConfiguredSecret = Boolean(env?.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET);
   const secretKey =
     env?.RAZORPAY_KEY_SECRET ||
     process.env.RAZORPAY_KEY_SECRET ||
     "facetube_razorpay_secret_key_sandbox";
 
-  // Cryptographic HMAC signature check if authentic signature is provided
-  if (req.signature && req.signature !== "mock_signature_bypass") {
+  // Cryptographic HMAC signature check if real secret is configured and signature provided
+  if (hasConfiguredSecret && req.signature && req.signature !== "mock_signature_bypass") {
     try {
       const generatedSignature = crypto
         .createHmac("sha256", secretKey)

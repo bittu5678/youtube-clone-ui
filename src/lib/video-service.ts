@@ -255,7 +255,9 @@ export async function fetchUploadedVideos(userId?: string): Promise<UploadedVide
         duration: d.duration || "0:00",
         views: Number(d.views) || 0,
         likes: Number(d.likes) || 0,
-        paymentStatus: (d.payment_status || d.paymentStatus || "not_required") as VideoPaymentStatus,
+        paymentStatus: (d.payment_status ||
+          d.paymentStatus ||
+          "not_required") as VideoPaymentStatus,
         paymentId: d.payment_id || d.paymentId,
         paymentAmount: Number(d.payment_amount || d.paymentAmount) || 0,
         isPromoted: Boolean(d.is_promoted ?? d.isPromoted),
