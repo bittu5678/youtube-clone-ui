@@ -140,16 +140,13 @@ try {
         'error' => 'Email delivery failed'
     ];
     try {
-        $isHttps = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-        $scheme = $isHttps ? 'https' : 'http';
-        $hostHeader = $_SERVER['HTTP_HOST'] ?? 'facetube.online';
-        $loginLink = "{$scheme}://{$hostHeader}/login";
-        $emailDelivery = sendWelcomeEmailPhp($name, $email, $userId, $password, $loginLink);
+        $loginLink = getenv('LOGIN_URL') ?: (getenv('APP_URL') ? rtrim(getenv('APP_URL'), '/') . '/login' : 'https://facetube.online/login');
+        $emailDelivery = sendWelcomeEmailPhp($name, $email, $userId, $loginLink);
     } catch (Throwable $eMail) {
         $emailDelivery = [
             'success' => false,
             'provider' => 'smtp',
-            'error' => 'Email delivery failed'
+            'error' => 'Email delivery error: ' . $eMail->getMessage()
         ];
     }
 

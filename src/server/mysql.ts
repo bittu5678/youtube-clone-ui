@@ -12,20 +12,20 @@ try {
 }
 
 export interface DbConfig {
-  host?: string;
+  host?: string | undefined;
   port: number;
-  database?: string;
-  user?: string;
-  password?: string;
+  database?: string | undefined;
+  user?: string | undefined;
+  password?: string | undefined;
   isConfigured: boolean;
 }
 
 export function getDbConfig(): DbConfig {
-  const host = process.env.DB_HOST || process.env.MYSQL_HOST;
-  const port = Number(process.env.DB_PORT || process.env.MYSQL_PORT || 3306);
-  const database = process.env.DB_NAME || process.env.MYSQL_DATABASE;
-  const user = process.env.DB_USER || process.env.MYSQL_USER;
-  const password = process.env.DB_PASSWORD || process.env.MYSQL_PASSWORD || "";
+  const host = process.env["DB_HOST"] || process.env["MYSQL_HOST"];
+  const port = Number(process.env["DB_PORT"] || process.env["MYSQL_PORT"] || 3306);
+  const database = process.env["DB_NAME"] || process.env["MYSQL_DATABASE"];
+  const user = process.env["DB_USER"] || process.env["MYSQL_USER"];
+  const password = process.env["DB_PASSWORD"] || process.env["MYSQL_PASSWORD"] || "";
 
   // Verify that required connection parameters exist
   const isConfigured = Boolean(host && database && user);
@@ -44,7 +44,7 @@ let pool: mysql.Pool | null = null;
 
 export function getMysqlPool(): mysql.Pool | null {
   const conf = getDbConfig();
-  if (!conf.isConfigured) {
+  if (!conf.isConfigured || !conf.host || !conf.database || !conf.user) {
     return null;
   }
 
@@ -53,7 +53,7 @@ export function getMysqlPool(): mysql.Pool | null {
       host: conf.host,
       port: conf.port,
       user: conf.user,
-      password: conf.password,
+      password: conf.password || "",
       database: conf.database,
       waitForConnections: true,
       connectionLimit: 10,
@@ -71,10 +71,10 @@ export function getMysqlPool(): mysql.Pool | null {
  */
 export async function testDatabaseConnection(): Promise<{
   connected: boolean;
-  error?: string;
-  host?: string;
-  database?: string;
-  user?: string;
+  error?: string | undefined;
+  host?: string | undefined;
+  database?: string | undefined;
+  user?: string | undefined;
 }> {
   const conf = getDbConfig();
   if (!conf.isConfigured) {

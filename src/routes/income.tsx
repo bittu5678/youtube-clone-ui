@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
 import {
   Wallet,
   DollarSign,
@@ -13,6 +14,8 @@ import {
 } from "lucide-react";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
 import { DashboardSummaryCards } from "@/components/videohub/DashboardSummaryCards";
+import { useAuth } from "@/lib/auth-context";
+import { getUserWallet, type UserWallet } from "@/lib/ledger-service";
 
 export const Route = createFileRoute("/income")({
   head: () => ({
@@ -31,9 +34,9 @@ export const Route = createFileRoute("/income")({
 const incomeStreams = [
   {
     title: "Referral Income",
-    desc: "10% direct sponsor rewards from creator subscriptions and tips",
-    balance: "$1,079.50",
-    badge: "10% Direct",
+    desc: "Direct referral commissions from creator subscriptions and invited members",
+    balance: "₹0.00",
+    badge: "Referral",
     icon: DollarSign,
     color: "text-emerald-400 bg-emerald-500/10",
     link: "/referral-income",
@@ -86,6 +89,36 @@ const incomeStreams = [
 ];
 
 function IncomePage() {
+  const { profile, dbUser, user } = useAuth();
+  const userId = profile?.user_id || dbUser?.user_id || user?.email?.split("@")[0] || "FT483921";
+  const [wallet, setWallet] = useState<UserWallet | null>(null);
+
+  useEffect(() => {
+    getUserWallet(userId).then((w) => setWallet(w));
+  }, [userId]);
+
+  const streamsWithRealValues = incomeStreams.map((s) => {
+    if (s.title === "Referral Income") {
+      return { ...s, balance: `₹${wallet ? wallet.referralIncome.toFixed(2) : "0.00"}` };
+    }
+    if (s.title === "Global Income") {
+      return { ...s, balance: `₹${wallet ? wallet.globalIncome.toFixed(2) : "0.00"}` };
+    }
+    if (s.title === "AdSense Income") {
+      return { ...s, balance: `₹${wallet ? wallet.adsenseIncome.toFixed(2) : "0.00"}` };
+    }
+    if (s.title === "Affiliate Income") {
+      return { ...s, balance: `₹${wallet ? wallet.affiliateIncome.toFixed(2) : "0.00"}` };
+    }
+    if (s.title === "Wallet Balance") {
+      return { ...s, balance: `₹${wallet ? wallet.balance.toFixed(2) : "0.00"}` };
+    }
+    if (s.title === "Withdrawal Balance") {
+      return { ...s, balance: `₹${wallet ? wallet.totalWithdrawn.toFixed(2) : "0.00"}` };
+    }
+    return s;
+  });
+
   return (
     <VideoHubLayout>
       <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">
@@ -115,13 +148,23 @@ function IncomePage() {
         </div>
 
         {/* Income Summary Cards */}
-        <DashboardSummaryCards filterCategory="income" />
+        <DashboardSummaryCards
+          filterCategory="income"
+          dynamicOverrides={{
+            "referral-income": `₹${wallet ? wallet.referralIncome.toFixed(2) : "0.00"}`,
+            "global-income": `₹${wallet ? wallet.globalIncome.toFixed(2) : "0.00"}`,
+            "wallet-balance": `₹${wallet ? wallet.balance.toFixed(2) : "0.00"}`,
+            "adsense-income": `₹${wallet ? wallet.adsenseIncome.toFixed(2) : "0.00"}`,
+            "affiliate-income": `₹${wallet ? wallet.affiliateIncome.toFixed(2) : "0.00"}`,
+            "withdrawal-balance": `₹${wallet ? wallet.totalWithdrawn.toFixed(2) : "0.00"}`,
+          }}
+        />
 
         {/* 6 Income Stream Cards */}
         <div className="space-y-3 pt-2">
           <h2 className="text-base font-extrabold text-foreground">Revenue Streams & Payouts</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {incomeStreams.map((stream) => {
+            {streamsWithRealValues.map((stream) => {
               const Icon = stream.icon;
               return (
                 <Link

@@ -281,7 +281,8 @@ export function createServerPaymentOrder(
   }
 
   const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-  const keyId = env?.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || "rzp_test_facetube_demo_key";
+  const keyId =
+    env?.["RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"] || "rzp_test_facetube_demo_key";
 
   return {
     orderId,
@@ -311,34 +312,59 @@ export async function verifyServerPayment(
   referrerUserId?: string | null,
   env?: Record<string, string | undefined>,
 ): Promise<PaymentVerifyResult> {
-  const hasConfiguredSecret = Boolean(env?.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET);
-  const secretKey =
-    env?.RAZORPAY_KEY_SECRET ||
-    process.env.RAZORPAY_KEY_SECRET ||
-    "facetube_razorpay_secret_key_sandbox";
+  const secretKey = env?.["RAZORPAY_KEY_SECRET"] || process.env["RAZORPAY_KEY_SECRET"];
 
-  // Cryptographic HMAC signature check if real secret is configured and signature provided
-  if (hasConfiguredSecret && req.signature && req.signature !== "mock_signature_bypass") {
-    try {
-      const generatedSignature = crypto
-        .createHmac("sha256", secretKey)
-        .update(`${req.orderId}|${req.paymentId}`)
-        .digest("hex");
-
-      if (generatedSignature !== req.signature) {
-        return {
-          verified: false,
-          paymentId: req.paymentId,
-          orderId: req.orderId,
-          amount: 0,
-          purpose: req.purpose,
-          error: "Invalid Razorpay payment signature verification failed",
-        };
-      }
-    } catch {
-      // In sandbox fallback environment allow standard token
-    }
+  // Strictly fail closed if secret key is missing or signature is not provided
+  if (!secretKey) {
+    return {
+      verified: false,
+      paymentId: req.paymentId,
+      orderId: req.orderId,
+      amount: 0,
+      purpose: req.purpose,
+      error: "Payment verification failed closed: RAZORPAY_KEY_SECRET is not configured on the server",
+    };
   }
+
+  if (!req.signature || req.signature === "mock_signature_bypass" || req.signature.startsWith("mock_")) {
+    return {
+      verified: false,
+      paymentId: req.paymentId,
+      orderId: req.orderId,
+      amount: 0,
+      purpose: req.purpose,
+      error: "Payment signature missing or invalid mock signature rejected",
+    };
+  }
+
+  // Cryptographic HMAC signature check
+  try {
+    const generatedSignature = crypto
+      .createHmac("sha256", secretKey)
+      .update(`${req.orderId}|${req.paymentId}`)
+      .digest("hex");
+
+    if (generatedSignature !== req.signature) {
+      return {
+        verified: false,
+        paymentId: req.paymentId,
+        orderId: req.orderId,
+        amount: 0,
+        purpose: req.purpose,
+        error: "Invalid Razorpay payment signature verification failed",
+      };
+    }
+  } catch (err: any) {
+    return {
+      verified: false,
+      paymentId: req.paymentId,
+      orderId: req.orderId,
+      amount: 0,
+      purpose: req.purpose,
+      error: `Signature calculation error: ${err?.message || "Unknown error"}`,
+    };
+  }
+
 
   // Atomic critical section for sequence allocation & duplicate prevention
   return withLock(async () => {
@@ -411,9 +437,9 @@ export async function verifyServerPayment(
         txNumber: currentTxNumber,
         paymentId: req.paymentId,
         orderId: req.orderId,
-        videoId: req.videoId || req.metadata?.videoId?.toString() || `vid_${Date.now()}`,
+        videoId: req.videoId || req.metadata?.["videoId"]?.toString() || `vid_${Date.now()}`,
         userId: req.userId,
-        userName: req.userName || req.metadata?.userName?.toString() || "FaceTube Creator",
+        userName: req.userName || req.metadata?.["userName"]?.toString() || "FaceTube Creator",
         referrerId: refId,
         amount: PRICING_CONFIG.PREMIUM_VIDEO.TOTAL_PRICE, // ₹6.00
         transactionType: "premium_upload",
@@ -449,7 +475,7 @@ export async function verifyServerPayment(
     }
 
     // 3. ADS PROMOTION PROCESSING
-    const planId = (req.metadata?.planId as AdsPlanId) || "plan-monthly";
+    const planId = (req.metadata?.["planId"] as AdsPlanId) || "plan-monthly";
     const amount = PRICING_CONFIG.ADS_PROMOTION[planId]?.price || 100;
     const refId = (referrerUserId || req.referrerUserId || null)?.trim().toUpperCase() || null;
 

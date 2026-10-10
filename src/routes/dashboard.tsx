@@ -137,11 +137,15 @@ function DashboardPage() {
     "free-videos": String(videoCounts.totalFree),
     "premium-videos": String(videoCounts.totalPremium),
     "short-videos": String(videoCounts.freeShort + videoCounts.premiumShort),
-    "total-referrals": referralData ? String(referralData.directReferralsCount) : "24",
-    "total-team": referralData ? String(referralData.teamMembersCount) : "89",
-    "wallet-balance": wallet ? `₹${wallet.balance.toFixed(2)}` : "₹4,280.50",
-    "referral-income": referralData ? `₹${referralData.referralIncome.toFixed(2)}` : "₹1,079.50",
-    "global-income": wallet ? `₹${wallet.globalIncome.toFixed(2)}` : "₹2,450.00",
+    "total-referrals": referralData ? String(referralData.directReferralsCount) : "0",
+    "total-team": referralData ? String(referralData.teamMembersCount) : "0",
+    "wallet-balance": wallet ? `₹${wallet.balance.toFixed(2)}` : "₹0.00",
+    "referral-income": referralData
+      ? `₹${referralData.referralIncome.toFixed(2)}`
+      : wallet
+        ? `₹${wallet.referralIncome.toFixed(2)}`
+        : "₹0.00",
+    "global-income": wallet ? `₹${wallet.globalIncome.toFixed(2)}` : "₹0.00",
     "current-rank": currentCreatorRank.awardName,
   };
 
@@ -176,7 +180,7 @@ function DashboardPage() {
               className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-secondary/80 px-4 py-2 text-xs font-bold text-foreground transition hover:bg-secondary active:scale-95"
             >
               <Wallet className="h-3.5 w-3.5 text-emerald-400" />
-              Wallet: {wallet ? `₹${wallet.balance.toFixed(2)}` : "₹4,280.50"}
+              Wallet: {wallet ? `₹${wallet.balance.toFixed(2)}` : "₹0.00"}
             </Link>
             <Link
               to="/upload"

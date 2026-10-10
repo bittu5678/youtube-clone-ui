@@ -36,7 +36,7 @@ export const Route = createFileRoute("/referral-members")({
       {
         name: "description",
         content:
-          "Track Direct Referrals, Team Members, and ₹1 Direct Commission per Premium Video uploaded on FaceTube.",
+          "Track your Direct Referrals, Team Members, and earned referral commissions on FaceTube.",
       },
     ],
   }),
@@ -63,12 +63,12 @@ function ReferralMembersPage() {
   const userId = profile?.user_id || dbUser?.user_id || user?.email?.split("@")[0] || "FT483921";
 
   const [data, setData] = useState<ReferralDashboardData>({
-    directReferralsCount: 5,
-    teamMembersCount: 24,
-    referralIncome: 14.0,
+    directReferralsCount: 0,
+    teamMembersCount: 0,
+    referralIncome: 0.0,
     referralCode: userId,
-    referralNumber: profile?.mobile || dbUser?.mobile || "+1 555-014-8392",
-    referralLink: `https://facetube.app/register?ref=${userId}`,
+    referralNumber: profile?.mobile || dbUser?.mobile || "",
+    referralLink: `https://facetube.online/register?ref=${userId}`,
     members: [],
   });
 
@@ -123,8 +123,7 @@ function ReferralMembersPage() {
                 Referral & Team Members
               </h1>
               <p className="text-sm text-muted-foreground">
-                Earn ₹1 Direct Commission for every Premium Video uploaded by directly referred
-                creators
+                Track your registered direct referrals, team members, and earned commissions
               </p>
             </div>
           </div>
@@ -141,16 +140,7 @@ function ReferralMembersPage() {
           </div>
         </div>
 
-        {/* ------------------------------------------------------------------ */}
-        {/* REQUIREMENT 6: TOP REFERRAL INFORMATION CARD                       */}
-        {/* Shows:                                                             */}
-        {/* - Direct Referral                                                  */}
-        {/* - Team Members                                                     */}
-        {/* - Referral Income / Direct Commission                              */}
-        {/* - Referral Link                                                    */}
-        {/* - Referral Number                                                  */}
-        {/* - Referral Code                                                    */}
-        {/* ------------------------------------------------------------------ */}
+        {/* Top Referral Information Card */}
         <div className="rounded-3xl border border-brand/40 bg-gradient-to-br from-brand/10 via-card to-card p-6 shadow-card space-y-6">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 border-b border-border/70 pb-6">
             <div className="space-y-2">
@@ -159,12 +149,11 @@ function ReferralMembersPage() {
                 Referral Program Overview
               </div>
               <h2 className="text-xl sm:text-2xl font-black text-foreground">
-                Invite Creators & Earn Passive Income
+                Invite Creators & Build Your Team
               </h2>
               <p className="text-xs text-muted-foreground max-w-xl">
-                Free Video uploads earn ₹0 referral income. When your direct referral uploads a{" "}
-                <strong>Premium Video</strong>, you automatically receive{" "}
-                <strong>₹1 per Premium Video</strong> as Direct Commission!
+                Invite creators to register using your referral link or referral code to build your
+                creator team.
               </p>
             </div>
 
@@ -247,7 +236,7 @@ function ReferralMembersPage() {
               </p>
             </div>
 
-            {/* 2. Team Members (Requirement 6: MUST use 'Team Members' label) */}
+            {/* 2. Team Members */}
             <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4 space-y-1 shadow-sm">
               <span className="text-xs font-bold text-blue-400 block">Team Members</span>
               <p className="text-2xl font-black text-blue-300">{data.teamMembersCount}</p>
@@ -262,21 +251,16 @@ function ReferralMembersPage() {
               <p className="text-2xl font-black text-amber-300">
                 ₹{data.referralIncome.toFixed(2)}
               </p>
-              <p className="text-[11px] text-amber-400/80 font-mono">₹1 per Premium Video</p>
+              <p className="text-[11px] text-muted-foreground">From verified video activity</p>
             </div>
 
-            {/* 4. Business Rule Reminder */}
+            {/* 4. Active Creators */}
             <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-1 shadow-sm">
-              <span className="text-xs font-bold text-emerald-400 block">Income Rule</span>
-              <div className="text-xs font-medium text-foreground space-y-0.5 pt-0.5">
-                <div>
-                  • Free Video: <strong className="text-muted-foreground">₹0</strong>
-                </div>
-                <div>
-                  • Premium Video: <strong className="text-emerald-400">₹1.00</strong>
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground">Instant wallet credit</p>
+              <span className="text-xs font-bold text-emerald-400 block">Active Channels</span>
+              <p className="text-2xl font-black text-emerald-300">
+                {data.members.filter((m) => m.status === "Active").length}
+              </p>
+              <p className="text-[11px] text-muted-foreground">Active downline channels</p>
             </div>
           </div>
         </div>
@@ -312,8 +296,8 @@ function ReferralMembersPage() {
                   <th className="px-4 py-3 whitespace-nowrap">User ID</th>
                   <th className="px-4 py-3 whitespace-nowrap">Mobile Number</th>
                   <th className="px-4 py-3 whitespace-nowrap">Joined</th>
-                  <th className="px-4 py-3 text-center whitespace-nowrap">Free Videos (₹0)</th>
-                  <th className="px-4 py-3 text-center whitespace-nowrap">Premium Videos (₹1)</th>
+                  <th className="px-4 py-3 text-center whitespace-nowrap">Free Videos</th>
+                  <th className="px-4 py-3 text-center whitespace-nowrap">Premium Videos</th>
                   <th className="px-4 py-3 text-right whitespace-nowrap">Direct Commission</th>
                   <th className="px-4 py-3 text-center whitespace-nowrap">Access</th>
                 </tr>

@@ -39,77 +39,10 @@ export interface UserWallet {
 const LOCAL_STORAGE_LEDGER_KEY = "facetube_income_ledger_v3";
 const LOCAL_STORAGE_WALLETS_KEY = "facetube_user_wallets_v3";
 
-// Initial seed ledger transactions
-const INITIAL_SEED_LEDGER: LedgerTransaction[] = [
-  {
-    id: "tx-init-001",
-    transactionId: "TX_REF_91028341",
-    userId: "FT483921", // Alex Rivera
-    sourceUserId: "FT900431", // Maya Lin
-    sourceUserName: "Maya Lin",
-    incomeType: "referral_income",
-    amount: 1.0, // ₹1 for Maya's Premium Video
-    status: "settled",
-    description: "Direct Commission (₹1) for Premium Video upload by Maya Lin (FT900431)",
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "tx-init-002",
-    transactionId: "TX_GLB_84729103",
-    userId: "FT483921",
-    incomeType: "global_income",
-    amount: 1.5, // Share of ₹3 pool between 2 eligible creators
-    status: "settled",
-    description: "Global Income Pool distribution share (1 of 2 eligible creators)",
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "tx-init-003",
-    transactionId: "TX_GLB_84729104",
-    userId: "FT900431",
-    incomeType: "global_income",
-    amount: 1.5, // Share of ₹3 pool between 2 eligible creators
-    status: "settled",
-    description: "Global Income Pool distribution share (1 of 2 eligible creators)",
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
+// Initial empty ledger and wallet storage (real earnings fetched from backend)
+const INITIAL_SEED_LEDGER: LedgerTransaction[] = [];
 
-const INITIAL_SEED_WALLETS: Record<string, UserWallet> = {
-  FT483921: {
-    userId: "FT483921",
-    balance: 4280.5,
-    totalEarned: 7430.5,
-    totalWithdrawn: 3150.0,
-    referralIncome: 1079.5,
-    globalIncome: 2450.0,
-    adsenseIncome: 1890.2,
-    affiliateIncome: 940.8,
-    updatedAt: new Date().toISOString(),
-  },
-  FT102857: {
-    userId: "FT102857",
-    balance: 15400.0,
-    totalEarned: 22000.0,
-    totalWithdrawn: 6600.0,
-    referralIncome: 3400.0,
-    globalIncome: 8200.0,
-    adsenseIncome: 4500.0,
-    affiliateIncome: 1300.0,
-    updatedAt: new Date().toISOString(),
-  },
-  FT900431: {
-    userId: "FT900431",
-    balance: 850.0,
-    totalEarned: 850.0,
-    totalWithdrawn: 0.0,
-    referralIncome: 120.0,
-    globalIncome: 450.0,
-    adsenseIncome: 280.0,
-    affiliateIncome: 0.0,
-    updatedAt: new Date().toISOString(),
-  },
-};
+const INITIAL_SEED_WALLETS: Record<string, UserWallet> = {};
 
 export function getStoredLedger(): LedgerTransaction[] {
   if (typeof window === "undefined") return INITIAL_SEED_LEDGER;

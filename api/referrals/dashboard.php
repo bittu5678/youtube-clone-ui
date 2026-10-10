@@ -8,59 +8,122 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../response.php';
 
 $pdo = getDatabaseConnection();
-$userId = trim($_GET['userId'] ?? ($_GET['user_id'] ?? ''));
+$requestedUserId = trim($_GET['userId'] ?? ($_GET['user_id'] ?? ''));
 
-if (empty($userId)) {
-    $authUser = getAuthUser($pdo);
-    $userId = $authUser ? $authUser['user_id'] : 'FT102857';
-}
+// Strictly derive identity from session token and restrict cross-user access to admins
+list($authUser, $userId) = requireAuthUser($pdo, $requestedUserId ?: null);
+
 
 try {
     // 1. Get user profile
-    $stmtUser = $pdo->prepare('SELECT id, user_id, referral_code FROM users WHERE UPPER(user_id) = UPPER(?) LIMIT 1');
+    $stmtUser = $pdo->prepare('SELECT id, user_id, name, referral_code, mobile FROM users WHERE UPPER(user_id) = UPPER(?) LIMIT 1');
     $stmtUser->execute([$userId]);
     $user = $stmtUser->fetch();
 
-    $referralCode = $user['referral_code'] ?? 'FTVIP';
+    if (!$user) {
+        jsonResponse([
+            'success' => true,
+            'dashboard' => [
+                'userId' => $userId,
+                'referralCode' => $userId,
+                'referralNumber' => '',
+                'referralLink' => 'https://facetube.online/register?ref=' . urlencode($userId),
+                'directReferralsCount' => 0,
+                'teamMembersCount' => 0,
+                'referralIncome' => 0.00,
+                'directReferralIncome' => 0.00,
+                'totalReferralIncome' => 0.00,
+                'members' => [],
+                'referralMembers' => [],
+            ]
+        ]);
+        exit;
+    }
+
+    $referralCode = !empty($user['referral_code']) ? $user['referral_code'] : $user['user_id'];
+    $userNormId = $user['user_id'];
 
     // 2. Direct referrals (users registered with this user referral code or user_id)
     $stmtDirect = $pdo->prepare('
-        SELECT user_id, name, created_at, role
+        SELECT id, user_id, name, email, mobile, created_at, role
         FROM users
-        WHERE referral_code = ? OR referral_code = ?
+        WHERE (UPPER(referral_code) = UPPER(?) OR UPPER(referral_code) = UPPER(?))
+          AND UPPER(user_id) != UPPER(?)
         ORDER BY created_at DESC
     ');
-    $stmtDirect->execute([$referralCode, $userId]);
+    $stmtDirect->execute([$referralCode, $userNormId, $userNormId]);
     $directReferrals = $stmtDirect->fetchAll();
 
     $directCount = count($directReferrals);
-    $teamCount = $directCount * 4; // Simulated multi-tier matrix
+    $teamCount = $directCount;
 
-    $directIncome = $directCount * 500.00;
-    $teamIncome = $teamCount * 150.00;
-    $totalReferralIncome = $directIncome + $teamIncome;
+    // 3. Fetch actual earned referral income from wallet_balances
+    $stmtWallet = $pdo->prepare('SELECT referral_income FROM wallet_balances WHERE UPPER(user_id) = UPPER(?) LIMIT 1');
+    $stmtWallet->execute([$userNormId]);
+    $walletRow = $stmtWallet->fetch();
+    $referralIncome = floatval($walletRow['referral_income'] ?? 0.00);
 
-    $members = array_map(function ($r, $idx) {
-        return [
-            'userId' => $r['user_id'],
+    // 4. Calculate member details from actual uploaded video records
+    $members = [];
+    $stmtVideos = $pdo->prepare('
+        SELECT video_type, payment_status, COUNT(*) as cnt
+        FROM uploaded_videos
+        WHERE UPPER(user_id) = UPPER(?)
+        GROUP BY video_type, payment_status
+    ');
+
+    foreach ($directReferrals as $r) {
+        $mUserId = $r['user_id'];
+        $stmtVideos->execute([$mUserId]);
+        $vRows = $stmtVideos->fetchAll();
+
+        $freeCount = 0;
+        $premiumPaidCount = 0;
+        foreach ($vRows as $vr) {
+            $vt = strtolower($vr['video_type'] ?? 'free');
+            $ps = strtolower($vr['payment_status'] ?? '');
+            $cnt = intval($vr['cnt'] ?? 0);
+            if ($vt === 'free') {
+                $freeCount += $cnt;
+            } elseif ($vt === 'premium' && ($ps === 'paid' || $ps === 'completed' || $ps === 'not_required')) {
+                $premiumPaidCount += $cnt;
+            }
+        }
+
+        // Each eligible paid premium video uploaded by direct referral earns ₹1.00
+        $memberComm = floatval($premiumPaidCount * 1.00);
+
+        $members[] = [
+            'id' => $r['id'] ?? ('mem_' . $mUserId),
+            'userId' => $mUserId,
             'name' => $r['name'],
+            'email' => $r['email'],
+            'mobile' => $r['mobile'],
             'joinedAt' => $r['created_at'],
-            'level' => 1,
-            'status' => 'active',
-            'contribution' => 500,
+            'status' => 'Active',
+            'tier' => ($r['role'] === 'admin') ? 'Admin' : 'Creator',
+            'freeVideosCount' => $freeCount,
+            'premiumVideosCount' => $premiumPaidCount,
+            'totalVideosCount' => $freeCount + $premiumPaidCount,
+            'directCommissionEarned' => $memberComm,
+            'contribution' => $memberComm,
+            'access' => 'Granted',
         ];
-    }, $directReferrals, array_keys($directReferrals));
+    }
 
     jsonResponse([
         'success' => true,
         'dashboard' => [
-            'userId' => $userId,
+            'userId' => $userNormId,
             'referralCode' => $referralCode,
+            'referralNumber' => $user['mobile'] ?? '',
+            'referralLink' => 'https://facetube.online/register?ref=' . urlencode($referralCode),
             'directReferralsCount' => $directCount,
             'teamMembersCount' => $teamCount,
-            'directReferralIncome' => $directIncome,
-            'teamIncome' => $teamIncome,
-            'totalReferralIncome' => $totalReferralIncome,
+            'referralIncome' => $referralIncome,
+            'directReferralIncome' => $referralIncome,
+            'totalReferralIncome' => $referralIncome,
+            'members' => $members,
             'referralMembers' => $members,
         ]
     ]);

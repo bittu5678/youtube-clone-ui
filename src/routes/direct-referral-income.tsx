@@ -29,7 +29,7 @@ export const Route = createFileRoute("/direct-referral-income")({
       {
         name: "description",
         content:
-          "Track your Referral Income and Direct Commission (₹1 per Premium Video upload by directly referred members) on FaceTube.",
+          "Track your verified direct referral income and payout ledger records on FaceTube.",
       },
     ],
   }),
@@ -42,7 +42,6 @@ function DirectReferralIncomePage() {
 
   const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
   const [referralSummary, setReferralSummary] = useState<ReferralDashboardData | null>(null);
-  const [filterType, setFilterType] = useState<"All" | "Premium" | "General">("All");
 
   useEffect(() => {
     Promise.all([getUserLedger(userId), getReferralDashboardData(userId)]).then(
@@ -56,7 +55,8 @@ function DirectReferralIncomePage() {
     );
   }, [userId]);
 
-  const totalCommission = transactions.reduce((acc, t) => acc + t.amount, 0);
+  const totalCommission =
+    transactions.reduce((acc, t) => acc + t.amount, 0) || (referralSummary?.referralIncome ?? 0);
 
   return (
     <VideoHubLayout>
@@ -73,12 +73,11 @@ function DirectReferralIncomePage() {
                   Referral Income / Direct Commission
                 </h1>
                 <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
-                  ₹1 / Premium Video
+                  Verified Ledger
                 </span>
               </div>
               <p className="text-sm text-muted-foreground">
-                Earn ₹1 for every Premium Video uploaded by members registered with your referral
-                link
+                Track verified referral income earned from your network uploads
               </p>
             </div>
           </div>
@@ -101,45 +100,24 @@ function DirectReferralIncomePage() {
           </div>
         </div>
 
-        {/* Business Rule Banner (Requirement 7) */}
-        <div className="rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 via-card to-card p-5 space-y-3">
+        {/* Audit Status Banner */}
+        <div className="rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 via-card to-card p-5 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-emerald-400" />
               <h2 className="text-sm font-bold text-foreground uppercase tracking-wide">
-                Direct Referral Commission Rules
+                Referral Income Verification
               </h2>
             </div>
             <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300">
-              Unique Transaction Reference Id
+              Double-Entry Protected
             </span>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div className="rounded-xl border border-border bg-background/60 p-3 space-y-1">
-              <div className="font-bold text-foreground flex items-center gap-1.5">
-                <Video className="h-3.5 w-3.5 text-sky-400" />
-                Free Video Upload:
-              </div>
-              <p className="text-muted-foreground">
-                When your referral uploads a <strong>Free Video</strong>, referrer receives{" "}
-                <strong className="text-foreground">₹0</strong> referral income. No commission is
-                awarded.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-1">
-              <div className="font-bold text-amber-300 flex items-center gap-1.5">
-                <Zap className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                Premium Video Upload:
-              </div>
-              <p className="text-muted-foreground">
-                When your referral uploads a <strong>Premium Video (₹6)</strong>, you automatically
-                receive <strong className="text-emerald-400">₹1 per Premium Video</strong> as Direct
-                Commission with no duplicates allowed.
-              </p>
-            </div>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            All referral earnings are credited automatically to your wallet upon backend validation
+            of qualifying upload activity. Each transaction is uniquely referenced in your audit
+            ledger.
+          </p>
         </div>
 
         {/* Financial Highlights */}
@@ -148,16 +126,14 @@ function DirectReferralIncomePage() {
             <span className="text-xs text-muted-foreground font-medium">
               Total Direct Commission
             </span>
-            <p className="text-2xl font-black text-emerald-400">
-              ₹{totalCommission > 0 ? totalCommission.toFixed(2) : "14.00"}
-            </p>
+            <p className="text-2xl font-black text-emerald-400">₹{totalCommission.toFixed(2)}</p>
             <p className="text-[11px] text-muted-foreground">From verified uploads</p>
           </div>
 
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Direct Referrals</span>
             <p className="text-2xl font-black text-foreground">
-              {referralSummary ? referralSummary.directReferralsCount : "5"}
+              {referralSummary ? referralSummary.directReferralsCount : 0}
             </p>
             <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
               <TrendingUp className="h-3 w-3" /> Active creators
@@ -167,15 +143,15 @@ function DirectReferralIncomePage() {
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Team Members</span>
             <p className="text-2xl font-black text-blue-400">
-              {referralSummary ? referralSummary.teamMembersCount : "24"}
+              {referralSummary ? referralSummary.teamMembersCount : 0}
             </p>
             <p className="text-[11px] text-muted-foreground">Total network downline</p>
           </div>
 
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Per Premium Upload</span>
-            <p className="text-2xl font-black text-amber-400">₹1.00</p>
-            <p className="text-[11px] text-muted-foreground">Fixed payout rate</p>
+            <span className="text-xs text-muted-foreground font-medium">Settled Credits</span>
+            <p className="text-2xl font-black text-amber-400">{transactions.length}</p>
+            <p className="text-[11px] text-muted-foreground">Verified transactions</p>
           </div>
         </div>
 

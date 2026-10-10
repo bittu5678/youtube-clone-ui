@@ -200,16 +200,12 @@ export async function registerUserInDatabase({
   } else {
     // If backend did not dispatch email inline, trigger via email service
     try {
-      const loginLink =
-        (typeof window !== "undefined" && window.location.origin
-          ? window.location.origin
-          : "https://facetube.online") + "/login";
+      const loginLink = "https://facetube.online/login";
 
       const res = await sendWelcomeEmail({
         name: trimmedName,
         email: normalizedEmail,
         userId: generatedUserId,
-        password: password,
         loginLink,
       });
       emailDelivery = {

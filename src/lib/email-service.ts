@@ -8,12 +8,12 @@
  * - User Name
  * - User ID (FT + 6 digits)
  * - Registered Email
- * - Password
- * - Login Link (https://youtube-clone-ui-8qmb.vercel.app/login)
+ * - Safe Account Access Instructions
+ * - Production Login Link (https://facetube.online/login)
  *
  * Real Delivery:
- * Dispatches to /api/send-welcome-email, which delivers via SMTP (Gmail) or Resend.
- * If sending fails, handles failure with: "Email delivery failed".
+ * Dispatches to /api/send-welcome-email, which delivers via SMTP.
+ * If sending fails, handles failure with accurate error diagnostics.
  */
 
 export interface SentWelcomeEmail {
@@ -33,7 +33,6 @@ export interface WelcomeEmailParams {
   name: string;
   email: string;
   userId: string;
-  password?: string;
   loginLink?: string;
 }
 
@@ -45,20 +44,19 @@ export interface EmailDispatchResult {
 }
 
 const STORAGE_KEY_SENT_EMAILS = "facetube_sent_welcome_emails_v2";
-export const OFFICIAL_LOGIN_LINK = "https://youtube-clone-ui-8qmb.vercel.app/login";
+export const OFFICIAL_LOGIN_LINK = "https://facetube.online/login";
 
 export function generateWelcomeEmailContent(
   name: string,
   email: string,
   userId: string,
-  password: string = "••••••••",
   loginLink: string = OFFICIAL_LOGIN_LINK,
 ): {
   subject: string;
   body: string;
 } {
   const subject = "Welcome to Facetube";
-  const body = `Hello ${name}
+  const body = `Hello ${name},
 
 Your Facetube account has been created successfully.
 
@@ -67,13 +65,17 @@ Account Details:
 • User Name: ${name}
 • User ID: ${userId}
 • Registered Email: ${email}
-• Password: ${password}
+• Account Status: Active (Password Encrypted)
 ------------------------------------------
 
-Login Link:
-${loginLink}
+How to Access Your Account:
+• Sign in at ${loginLink} using your User ID (${userId}) or Registered Email (${email}).
+• Use the confidential password you created during registration.
+• For your security, account passwords are encrypted and never transmitted via email.
+• Keep your credentials private. If you ever forget your password, you can request a secure reset directly from the login page.
 
-You can log in using either your User ID or Email.`;
+Production Login Link:
+${loginLink}`;
 
   return { subject, body };
 }
@@ -86,10 +88,9 @@ export async function sendWelcomeEmail({
   name,
   email,
   userId,
-  password,
   loginLink = OFFICIAL_LOGIN_LINK,
 }: WelcomeEmailParams): Promise<EmailDispatchResult> {
-  const { subject, body } = generateWelcomeEmailContent(name, email, userId, password, loginLink);
+  const { subject, body } = generateWelcomeEmailContent(name, email, userId, loginLink);
 
   let dispatchResult: EmailDispatchResult = {
     success: false,
@@ -106,7 +107,6 @@ export async function sendWelcomeEmail({
         userName: name,
         userId,
         email,
-        password: password || "",
         loginLink,
       }),
     });

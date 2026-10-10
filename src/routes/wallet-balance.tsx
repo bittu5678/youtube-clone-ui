@@ -92,7 +92,7 @@ function WalletBalancePage() {
     loadWalletData();
   }, [loadWalletData]);
 
-  const balance = wallet ? wallet.balance : 4280.5;
+  const balance = wallet ? wallet.balance : 0;
   const remainingDailyLimit = Math.max(0, WITHDRAWAL_RULES.MAX_DAILY_LIMIT - alreadyWithdrawnToday);
 
   // Real-time validation on input change
@@ -356,9 +356,9 @@ function WalletBalancePage() {
               Referral Income
             </span>
             <p className="text-xl font-bold text-foreground">
-              ₹{wallet ? wallet.referralIncome.toFixed(2) : "1,079.50"}
+              ₹{wallet ? wallet.referralIncome.toFixed(2) : "0.00"}
             </p>
-            <p className="text-[11px] text-muted-foreground">₹1 / Premium Video upload</p>
+            <p className="text-[11px] text-muted-foreground">Earned network commissions</p>
           </div>
 
           {/* 2. Video AdSense */}
@@ -368,7 +368,7 @@ function WalletBalancePage() {
               Video AdSense
             </span>
             <p className="text-xl font-bold text-yellow-400">
-              ₹{wallet ? wallet.adsenseIncome.toFixed(2) : "1,890.20"}
+              ₹{wallet ? wallet.adsenseIncome.toFixed(2) : "0.00"}
             </p>
             <p className="text-[11px] text-muted-foreground">Ad revenue monetization</p>
           </div>
@@ -380,9 +380,9 @@ function WalletBalancePage() {
               Global Pool
             </span>
             <p className="text-xl font-bold text-cyan-400">
-              ₹{wallet ? wallet.globalIncome.toFixed(2) : "2,450.00"}
+              ₹{wallet ? wallet.globalIncome.toFixed(2) : "0.00"}
             </p>
-            <p className="text-[11px] text-muted-foreground">₹3 pool distributions</p>
+            <p className="text-[11px] text-muted-foreground">Global pool distributions</p>
           </div>
 
           {/* 4. Affiliate Income */}
@@ -392,7 +392,7 @@ function WalletBalancePage() {
               Affiliate Links
             </span>
             <p className="text-xl font-bold text-indigo-400">
-              ₹{wallet ? wallet.affiliateIncome.toFixed(2) : "940.80"}
+              ₹{wallet ? wallet.affiliateIncome.toFixed(2) : "0.00"}
             </p>
             <p className="text-[11px] text-muted-foreground">Gear &amp; product sales</p>
           </div>

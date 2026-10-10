@@ -50,14 +50,20 @@ function facetubeApiDevPlugin(): Plugin {
               }
             }
 
-            const webReq = new Request(fullUrl.toString(), {
-              method: req.method,
+            const reqInit: RequestInit = {
+              method: req.method || "GET",
               headers,
-              body:
-                req.method !== "GET" && req.method !== "HEAD" && bodyBuffer && bodyBuffer.length > 0
-                  ? bodyBuffer
-                  : undefined,
-            });
+            };
+            if (
+              req.method !== "GET" &&
+              req.method !== "HEAD" &&
+              bodyBuffer &&
+              bodyBuffer.length > 0
+            ) {
+              reqInit.body = bodyBuffer;
+            }
+
+            const webReq = new Request(fullUrl.toString(), reqInit);
 
             const { handleApiRequest } = await import("./src/server/api-handler");
             const response = await handleApiRequest(webReq);

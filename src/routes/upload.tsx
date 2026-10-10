@@ -313,7 +313,7 @@ function FourOptionsSelectionView({
                 Premium
               </h2>
               <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                ₹6 verified payment unlocking Referral Commission (₹1) and Global Pool (₹3).
+                ₹6 verified payment for monetized content with audit verification.
               </p>
             </div>
 
@@ -724,7 +724,7 @@ function PremiumVideoUploadView({
   const userId = profile?.user_id || dbUser?.user_id || user?.email?.split("@")[0] || "FT483921";
   const creatorName =
     profile?.name || dbUser?.name || user?.user_metadata?.full_name || "Alex Rivera";
-  const referrerId = profile?.referral_code || dbUser?.referral_code || "FT102857";
+  const referrerId = profile?.referral_code || dbUser?.referral_code || undefined;
 
   const [format, setFormat] = useState<VideoFormatChoice>(initialFormat);
   const [title, setTitle] = useState("");
@@ -805,8 +805,7 @@ function PremiumVideoUploadView({
         <div>
           <h2 className="text-2xl font-black text-foreground">Premium Video Published!</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Payment of ₹6 was verified. Referral commission (₹1) and Global Income Pool (₹3)
-            credited.
+            Payment of ₹6 was verified. Monetized video published with audit ledger protection.
           </p>
         </div>
         <div className="flex items-center justify-center gap-3 pt-4">
@@ -943,23 +942,23 @@ function PremiumVideoUploadView({
           </div>
         </div>
 
-        {/* Income Distribution Notice */}
+        {/* Monetization Verification Notice */}
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs space-y-2">
           <div className="font-bold text-amber-400 flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4" /> ₹6 Premium Fee Allocation:
+            <Sparkles className="h-4 w-4" /> ₹6 Premium Upload Verification:
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-muted-foreground">
             <div>
-              • Direct Referral: <strong className="text-foreground">₹1</strong>
+              • Monetized Status: <strong className="text-foreground">Active</strong>
             </div>
             <div>
-              • Global Pool: <strong className="text-foreground">₹3</strong>
+              • Video Type: <strong className="text-foreground">Premium</strong>
             </div>
             <div>
-              • Platform Fee: <strong className="text-foreground">₹1</strong>
+              • Audit Security: <strong className="text-foreground">Ledger Protected</strong>
             </div>
             <div>
-              • Taxes/GST: <strong className="text-foreground">₹1</strong>
+              • Processing: <strong className="text-foreground">Instant</strong>
             </div>
           </div>
         </div>
@@ -1000,7 +999,7 @@ function AdPromotionUploadView({
   const userId = profile?.user_id || dbUser?.user_id || user?.email?.split("@")[0] || "FT483921";
   const creatorName =
     profile?.name || dbUser?.name || user?.user_metadata?.full_name || "Alex Rivera";
-  const referrerId = profile?.referral_code || dbUser?.referral_code || "FT102857";
+  const referrerId = profile?.referral_code || dbUser?.referral_code || undefined;
 
   const DURATION_PLANS = [
     { id: "7_days", name: "7_days", label: "7 Days", days: 7, price: 100, rateText: "₹14.28/day" },

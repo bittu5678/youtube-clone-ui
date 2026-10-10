@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   DollarSign,
   TrendingUp,
@@ -11,6 +11,14 @@ import {
   Wallet,
 } from "lucide-react";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
+import { useAuth } from "@/lib/auth-context";
+import {
+  getUserWallet,
+  getUserLedger,
+  type UserWallet,
+  type LedgerTransaction,
+} from "@/lib/ledger-service";
+import { getReferralDashboardData, type ReferralDashboardData } from "@/lib/referral-service";
 
 export const Route = createFileRoute("/referral-income")({
   head: () => ({
@@ -18,57 +26,57 @@ export const Route = createFileRoute("/referral-income")({
       { title: "Referral Income — FaceTube" },
       {
         name: "description",
-        content: "Track your 10% direct sponsor referral earnings and payout records on FaceTube.",
+        content: "Track your verified referral earnings and payout ledger records on FaceTube.",
       },
     ],
   }),
   component: ReferralIncomePage,
 });
 
-const mockTransactions = [
-  {
-    id: "ref-tx-1",
-    user: "Alex Rivera (FT928412)",
-    type: "Ad Revenue Share",
-    amount: "+$84.00",
-    date: "Today, 09:15 AM",
-    status: "Settled",
-  },
-  {
-    id: "ref-tx-2",
-    user: "Samantha Chen (FT810492)",
-    type: "Channel Membership",
-    amount: "+$32.00",
-    date: "Yesterday",
-    status: "Settled",
-  },
-  {
-    id: "ref-tx-3",
-    user: "Marcus Vance (FT748190)",
-    type: "Super Thanks Tip",
-    amount: "+$25.00",
-    date: "Sep 17, 2026",
-    status: "Settled",
-  },
-  {
-    id: "ref-tx-4",
-    user: "Elena Rostova (FT619024)",
-    type: "Course Purchase",
-    amount: "+$12.00",
-    date: "Sep 16, 2026",
-    status: "Settled",
-  },
-  {
-    id: "ref-tx-5",
-    user: "Priya Sharma (FT419820)",
-    type: "Ad Revenue Share",
-    amount: "+$145.00",
-    date: "Sep 15, 2026",
-    status: "Settled",
-  },
-];
-
 function ReferralIncomePage() {
+  const { profile, dbUser, user } = useAuth();
+  const userId = profile?.user_id || dbUser?.user_id || user?.email?.split("@")[0] || "FT483921";
+
+  const [wallet, setWallet] = useState<UserWallet | null>(null);
+  const [referralSummary, setReferralSummary] = useState<ReferralDashboardData | null>(null);
+  const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadData() {
+      try {
+        const [w, refData, txList] = await Promise.all([
+          getUserWallet(userId),
+          getReferralDashboardData(userId),
+          getUserLedger(userId),
+        ]);
+        if (mounted) {
+          setWallet(w);
+          setReferralSummary(refData);
+          const referralTxs = txList.filter(
+            (t) => t.incomeType === "referral_income" || t.incomeType === "direct_commission",
+          );
+          setTransactions(referralTxs);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to load referral income data:", err);
+        if (mounted) setIsLoading(false);
+      }
+    }
+    loadData();
+    return () => {
+      mounted = false;
+    };
+  }, [userId]);
+
+  const earnedReferralIncome = wallet?.referralIncome ?? referralSummary?.referralIncome ?? 0;
+  const directCommissionTotal =
+    transactions.reduce((acc, t) => acc + t.amount, 0) || earnedReferralIncome;
+  const directCount = referralSummary?.directReferralsCount ?? 0;
+  const teamCount = referralSummary?.teamMembersCount ?? 0;
+
   return (
     <VideoHubLayout>
       <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">
@@ -83,7 +91,7 @@ function ReferralIncomePage() {
                 Referral Income
               </h1>
               <p className="text-sm text-muted-foreground">
-                Earn 10% direct sponsor rewards on all earnings from creators you personally invited
+                View your earned referral income and verified ledger payout records
               </p>
             </div>
           </div>
@@ -110,25 +118,27 @@ function ReferralIncomePage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Total Referral Income</span>
-            <p className="text-2xl font-black text-emerald-400">$1,079.50</p>
-            <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" /> +24% this month
+            <p className="text-2xl font-black text-emerald-400">
+              ₹{earnedReferralIncome.toFixed(2)}
             </p>
+            <p className="text-[11px] text-muted-foreground">From verified network activity</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Direct Commission</span>
-            <p className="text-2xl font-black text-foreground">10% Flat</p>
-            <p className="text-[11px] text-muted-foreground">On all referral revenue</p>
+            <p className="text-2xl font-black text-foreground">
+              ₹{directCommissionTotal.toFixed(2)}
+            </p>
+            <p className="text-[11px] text-muted-foreground">Earned directly to wallet</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Active Referrals</span>
-            <p className="text-2xl font-black text-foreground">24 Members</p>
-            <p className="text-[11px] text-muted-foreground">Generating commissions</p>
+            <span className="text-xs text-muted-foreground font-medium">Direct Referrals</span>
+            <p className="text-2xl font-black text-foreground">{directCount} Members</p>
+            <p className="text-[11px] text-muted-foreground">Directly registered members</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Pending Settlement</span>
-            <p className="text-2xl font-black text-amber-400">$50.00</p>
-            <p className="text-[11px] text-muted-foreground">Releasing in 24h</p>
+            <span className="text-xs text-muted-foreground font-medium">Team Members</span>
+            <p className="text-2xl font-black text-foreground">{teamCount} Members</p>
+            <p className="text-[11px] text-muted-foreground">Total network downline</p>
           </div>
         </div>
 
@@ -136,40 +146,54 @@ function ReferralIncomePage() {
         <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-card">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
             <h3 className="text-sm font-bold text-foreground">Recent Referral Transactions</h3>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-secondary/50 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-secondary"
-            >
-              <Download className="h-3.5 w-3.5" /> Export
-            </button>
+            <span className="text-xs text-muted-foreground">Verified audit ledger records</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="border-b border-border bg-secondary/40 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3">Member</th>
-                  <th className="px-4 py-3">Income Source</th>
+                  <th className="px-4 py-3">Transaction ID</th>
+                  <th className="px-4 py-3">Source Member</th>
+                  <th className="px-4 py-3">Description</th>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Earned</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {mockTransactions.map((tx) => (
-                  <tr key={tx.id} className="transition hover:bg-secondary/20">
-                    <td className="px-4 py-3.5 font-bold text-foreground">{tx.user}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground">{tx.type}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground">{tx.date}</td>
-                    <td className="px-4 py-3.5">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
-                        <CheckCircle2 className="h-3 w-3" /> {tx.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 text-right font-black text-emerald-400 text-sm">
-                      {tx.amount}
+                {transactions.length > 0 ? (
+                  transactions.map((tx) => (
+                    <tr key={tx.id} className="transition hover:bg-secondary/20">
+                      <td className="px-4 py-3.5 font-mono text-xs text-amber-400 font-bold">
+                        {tx.transactionId}
+                      </td>
+                      <td className="px-4 py-3.5 font-bold text-foreground">
+                        {tx.sourceUserName || tx.sourceUserId || "Referred Creator"}
+                      </td>
+                      <td className="px-4 py-3.5 text-muted-foreground max-w-xs truncate">
+                        {tx.description}
+                      </td>
+                      <td className="px-4 py-3.5 text-muted-foreground">
+                        {new Date(tx.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+                          <CheckCircle2 className="h-3 w-3" /> Settled
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-black text-emerald-400 text-sm">
+                        +₹{tx.amount.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                      No referral commission transactions yet. Earnings will appear automatically
+                      when referred members complete eligible video uploads.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

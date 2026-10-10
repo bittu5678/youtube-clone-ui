@@ -85,3 +85,43 @@ function getAuthUser($pdo) {
         return null;
     }
 }
+
+/**
+ * Enforces session authentication and authorization.
+ * Returns authenticated user array and resolved target user_id.
+ * If targetUserId is requested:
+ * - If target matches the auth user, returns target.
+ * - If auth user is role='admin', permits cross-user access to target.
+ * - Otherwise rejects with 403 Forbidden.
+ */
+function requireAuthUser($pdo, $requestedUserId = null) {
+    $authUser = getAuthUser($pdo);
+    if (!$authUser) {
+        jsonResponse([
+            'success' => false,
+            'error' => 'Authentication required. Please provide a valid Bearer session token.'
+        ], 401);
+    }
+
+    $effectiveUserId = $authUser['user_id'];
+
+    if (!empty($requestedUserId)) {
+        $req = trim($requestedUserId);
+        if (strcasecmp($req, $authUser['user_id']) === 0) {
+            $effectiveUserId = $authUser['user_id'];
+        } else {
+            // Cross-user requested: strictly require admin role
+            $isAdmin = isset($authUser['role']) && strtolower($authUser['role']) === 'admin';
+            if (!$isAdmin) {
+                jsonResponse([
+                    'success' => false,
+                    'error' => 'Unauthorized: Cross-user access is restricted to verified administrators.'
+                ], 403);
+            }
+            $effectiveUserId = $req;
+        }
+    }
+
+    return [$authUser, $effectiveUserId];
+}
+

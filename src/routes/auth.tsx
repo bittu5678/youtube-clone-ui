@@ -106,7 +106,6 @@ function AuthPage() {
     error?: string;
     provider?: "resend" | "smtp" | "none";
   } | null>(null);
-  const [registeredPassword, setRegisteredPassword] = useState("");
   const [isRetryingEmail, setIsRetryingEmail] = useState(false);
 
   const isSignup = mode === "signup";
@@ -133,14 +132,13 @@ function AuthPage() {
         name: registeredUser?.name || fullName,
         email: registeredUser?.email || email,
         userId: registeredUserId,
-        password: registeredPassword || password,
-        loginLink: "https://youtube-clone-ui-8qmb.vercel.app/login",
+        loginLink: "https://facetube.online/login",
       });
       setEmailDeliveryStatus(res);
       if (res.success) {
         toast.success(`Welcome email sent to ${registeredUser?.email || email}`);
       } else {
-        toast.error("Email delivery failed");
+        toast.error(res.error || "Email delivery failed");
       }
     } catch (_e) {
       toast.error("Email delivery failed");
@@ -211,12 +209,11 @@ function AuthPage() {
         // Registration Flow Step 5: Show popup
         setRegisteredUserId(res.userId);
         if (res.user) setRegisteredUser(res.user);
-        setRegisteredPassword(password);
 
         if (res.emailDelivery) {
           setEmailDeliveryStatus(res.emailDelivery);
           if (!res.emailDelivery.success) {
-            toast.error("Email delivery failed");
+            toast.error(res.emailDelivery.error || "Email delivery failed");
           } else {
             toast.success(`Welcome email sent to ${res.user?.email || email}`);
           }
@@ -910,7 +907,7 @@ function AuthPage() {
                     registeredUser?.name || fullName,
                     registeredUser?.email || email,
                     registeredUserId,
-                    registeredPassword || password,
+                    "https://facetube.online/login",
                   ).body
                 }
               </div>

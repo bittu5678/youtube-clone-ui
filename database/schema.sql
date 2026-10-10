@@ -214,6 +214,34 @@ CREATE TABLE IF NOT EXISTS `premium_transactions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------------------------
+-- 9b. Table: payment_transactions
+-- General payment record tracking for Razorpay payments and allocations
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `payment_transactions` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `order_id` VARCHAR(100) DEFAULT NULL,
+  `payment_id` VARCHAR(100) NOT NULL,
+  `user_id` VARCHAR(50) NOT NULL,
+  `user_name` VARCHAR(255) DEFAULT 'Creator',
+  `video_id` VARCHAR(100) DEFAULT NULL,
+  `purpose` VARCHAR(50) NOT NULL DEFAULT 'premium_video_upload',
+  `amount` DECIMAL(10, 2) NOT NULL DEFAULT 6.00,
+  `tx_number` BIGINT NOT NULL,
+  `is_special` TINYINT(1) NOT NULL DEFAULT 0,
+  `special_tag` VARCHAR(50) NOT NULL DEFAULT 'NORMAL_PREMIUM',
+  `referral_commission` DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  `admin_allocation` DECIMAL(10, 2) NOT NULL DEFAULT 1.00,
+  `global_pool_allocation` DECIMAL(10, 2) NOT NULL DEFAULT 3.00,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_pt_payment_id` (`payment_id`),
+  KEY `idx_pt_tx_number` (`tx_number`),
+  KEY `idx_pt_user_id` (`user_id`),
+  KEY `idx_pt_created_at` (`created_at` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ------------------------------------------------------------------------------
 -- 10. Table: personal_kyc
 -- Personal identification details and nominee information
 -- ------------------------------------------------------------------------------

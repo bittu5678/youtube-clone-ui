@@ -78,10 +78,24 @@ interface ServerStore {
   bankKyc: Record<string, Record<string, unknown>>;
   certificates: Record<string, Record<string, unknown>>;
   walletTransactions: Array<Record<string, unknown>>;
+  wallets: Record<
+    string,
+    {
+      balance: number;
+      total_earned: number;
+      total_withdrawn: number;
+      referral_income: number;
+      global_income: number;
+      adsense_income: number;
+      affiliate_income: number;
+      updated_at: string;
+    }
+  >;
 }
 
 function getInitialStore(): ServerStore {
   return {
+    wallets: {},
     users: [
       {
         id: "a0000000-0000-0000-0000-000000000001",
@@ -443,12 +457,117 @@ export async function handleApiRequest(
     if (method === "POST") {
       try {
         const payload = await request.json();
+        const uploaderId = String(payload.userId || payload.user_id || "")
+          .trim()
+          .toUpperCase();
+
+        // 1. Verify referral relationship strictly in the backend from users record
+        let verifiedReferrerId: string | null = null;
+        if (uploaderId) {
+          const uploaderUser = store.users.find((u) => u.user_id.toUpperCase() === uploaderId);
+          if (uploaderUser && uploaderUser.referral_code) {
+            const code = uploaderUser.referral_code.trim().toUpperCase();
+            const refUser = store.users.find(
+              (u) =>
+                (u.user_id.toUpperCase() === code || u.referral_code?.toUpperCase() === code) &&
+                u.user_id.toUpperCase() !== uploaderId,
+            );
+            if (refUser) {
+              verifiedReferrerId = refUser.user_id;
+            }
+          }
+
+          if (!verifiedReferrerId && payload.referrerUserId) {
+            const candidateRef = String(payload.referrerUserId).trim().toUpperCase();
+            const exists = store.users.find(
+              (u) => u.user_id.toUpperCase() === candidateRef && candidateRef !== uploaderId,
+            );
+            if (exists) {
+              verifiedReferrerId = exists.user_id;
+            }
+          }
+        }
+
         const result = await verifyServerPayment(
           payload,
           ["FT483921", "FT900431"],
-          payload.referrerUserId || null,
+          verifiedReferrerId,
           env,
         );
+
+        // 2. Credit referral commission to verified referrer in store/ledger if eligible
+        if (
+          result.verified &&
+          result.distribution?.directReferralAmount &&
+          result.distribution.directReferralAmount > 0 &&
+          verifiedReferrerId
+        ) {
+          if (!store.wallets) store.wallets = {};
+          if (!store.wallets[verifiedReferrerId]) {
+            store.wallets[verifiedReferrerId] = {
+              balance: 0,
+              total_earned: 0,
+              total_withdrawn: 0,
+              referral_income: 0,
+              global_income: 0,
+              adsense_income: 0,
+              affiliate_income: 0,
+              updated_at: new Date().toISOString(),
+            };
+          }
+          const w = store.wallets[verifiedReferrerId];
+          const comm = Number(result.distribution.directReferralAmount);
+          w.balance += comm;
+          w.total_earned += comm;
+          w.referral_income += comm;
+          w.updated_at = new Date().toISOString();
+
+          const txRefId = `TX_REF_${result.paymentId}`;
+          const existingTx = store.walletTransactions.find(
+            (t: any) => t.transactionId === txRefId || t.transaction_id === txRefId,
+          );
+          if (!existingTx) {
+            store.walletTransactions.unshift({
+              id: `tx-ref-${Date.now()}`,
+              transactionId: txRefId,
+              transaction_id: txRefId,
+              userId: verifiedReferrerId,
+              user_id: verifiedReferrerId,
+              sourceUserId: uploaderId,
+              source_user_id: uploaderId,
+              sourceUserName: payload.userName || "Referred Creator",
+              source_user_name: payload.userName || "Referred Creator",
+              videoId: payload.videoId || "",
+              video_id: payload.videoId || "",
+              incomeType: "referral_income",
+              income_type: "referral_income",
+              amount: comm,
+              status: "settled",
+              description: `Direct referral commission (₹${comm.toFixed(2)}) for eligible Premium Video upload by ${payload.userName || uploaderId}`,
+              createdAt: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+            });
+          }
+          saveStore(store);
+
+          if (pool) {
+            try {
+              await pool.query(
+                `INSERT INTO wallet_balances (user_id, balance, total_earned, total_withdrawn, referral_income, global_income, adsense_income, affiliate_income, updated_at)
+                 VALUES (?, ?, ?, 0.00, ?, 0.00, 0.00, 0.00, NOW())
+                 ON DUPLICATE KEY UPDATE
+                   balance = balance + ?,
+                   total_earned = total_earned + ?,
+                   referral_income = referral_income + ?,
+                   updated_at = NOW()`,
+                [verifiedReferrerId, comm, comm, comm, comm, comm, comm],
+              );
+            } catch (_e) {
+              // Ignore pool error
+            }
+          }
+        }
+
         return jsonResponse(result);
       } catch (err) {
         return jsonResponse({ verified: false, error: "Payment verification failed" }, 500);
@@ -599,22 +718,22 @@ export async function handleApiRequest(
           };
 
           try {
-            const origin = new URL(request.url).origin || "https://facetube.online";
+            const loginLink = "https://facetube.online/login";
             emailDelivery = await sendWelcomeEmailServer(
               {
                 userName: name.trim(),
                 userId,
                 email: normalizedEmail,
-                password,
-                loginLink: `${origin}/login`,
+                loginLink,
               },
               env,
             );
-          } catch (_err) {
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
             emailDelivery = {
               success: false,
               provider: "smtp",
-              error: "Email delivery failed",
+              error: `Email delivery failed: ${msg}`,
             };
           }
 
@@ -1151,26 +1270,94 @@ export async function handleApiRequest(
   // 8. Wallet & Income
   if (route === "wallet/balance") {
     if (method === "GET") {
-      const userId = (url.searchParams.get("userId") || "FT102857").toUpperCase();
-      const user = store.users.find((u) => u.user_id.toUpperCase() === userId);
-      const isSeedAdmin = userId === "FT102857";
-      const totalBalance = isSeedAdmin ? 14500 : 2800;
+      const userId = (url.searchParams.get("userId") || "").trim().toUpperCase();
+      if (!userId) {
+        return jsonResponse({ success: false, error: "User identity required" }, 400);
+      }
+
+      if (pool) {
+        try {
+          const [rows] = await pool.query<any[]>(
+            `SELECT * FROM wallet_balances WHERE UPPER(user_id) = UPPER(?) LIMIT 1`,
+            [userId],
+          );
+          if (rows && rows.length > 0) {
+            const w = rows[0];
+            const bal = Number(w.balance || 0);
+            const refInc = Number(w.referral_income || 0);
+            const glbInc = Number(w.global_income || 0);
+            const adsInc = Number(w.adsense_income || 0);
+            const affInc = Number(w.affiliate_income || 0);
+            const totEarn = Number(w.total_earned || bal);
+            const totWdr = Number(w.total_withdrawn || 0);
+
+            return jsonResponse({
+              success: true,
+              wallet: {
+                userId,
+                user_id: userId,
+                balance: bal,
+                totalBalance: bal,
+                withdrawableBalance: bal,
+                referralIncome: refInc,
+                referral_income: refInc,
+                directReferralIncome: refInc,
+                globalIncome: glbInc,
+                global_income: glbInc,
+                adsenseIncome: adsInc,
+                adsense_income: adsInc,
+                affiliateIncome: affInc,
+                affiliate_income: affInc,
+                totalEarnings: totEarn,
+                total_earned: totEarn,
+                totalWithdrawn: totWdr,
+                total_withdrawn: totWdr,
+                pendingWithdrawals: 0,
+                updatedAt: w.updated_at || new Date().toISOString(),
+                updated_at: w.updated_at || new Date().toISOString(),
+              },
+            });
+          }
+        } catch (_e) {
+          // fallback to store
+        }
+      }
+
+      const w = store.wallets?.[userId] || {
+        balance: 0,
+        total_earned: 0,
+        total_withdrawn: 0,
+        referral_income: 0,
+        global_income: 0,
+        adsense_income: 0,
+        affiliate_income: 0,
+        updated_at: new Date().toISOString(),
+      };
 
       return jsonResponse({
         success: true,
         wallet: {
           userId,
-          totalBalance,
-          withdrawableBalance: totalBalance,
-          referralIncome: isSeedAdmin ? 4500 : 1200,
-          teamIncome: isSeedAdmin ? 3500 : 800,
-          directReferralIncome: isSeedAdmin ? 2000 : 600,
-          adsenseIncome: isSeedAdmin ? 3000 : 200,
-          globalIncome: isSeedAdmin ? 1500 : 0,
-          affiliateIncome: 0,
-          totalEarnings: totalBalance,
-          totalWithdrawn: 0,
+          user_id: userId,
+          balance: w.balance,
+          totalBalance: w.balance,
+          withdrawableBalance: w.balance,
+          referralIncome: w.referral_income,
+          referral_income: w.referral_income,
+          directReferralIncome: w.referral_income,
+          globalIncome: w.global_income,
+          global_income: w.global_income,
+          adsenseIncome: w.adsense_income,
+          adsense_income: w.adsense_income,
+          affiliateIncome: w.affiliate_income,
+          affiliate_income: w.affiliate_income,
+          totalEarnings: w.total_earned,
+          total_earned: w.total_earned,
+          totalWithdrawn: w.total_withdrawn,
+          total_withdrawn: w.total_withdrawn,
           pendingWithdrawals: 0,
+          updatedAt: w.updated_at,
+          updated_at: w.updated_at,
         },
       });
     }
@@ -1287,35 +1474,153 @@ export async function handleApiRequest(
   // 10. Referrals
   if (route === "referrals/dashboard") {
     if (method === "GET") {
-      const userId = (url.searchParams.get("userId") || "FT102857").toUpperCase();
+      const userId = (url.searchParams.get("userId") || "").trim().toUpperCase();
+      if (!userId) {
+        return jsonResponse({ success: false, error: "User identity required" }, 400);
+      }
+
+      if (pool) {
+        try {
+          const [uRows] = await pool.query<any[]>(
+            `SELECT user_id, referral_code, mobile, name FROM users WHERE UPPER(user_id) = UPPER(?) LIMIT 1`,
+            [userId],
+          );
+          if (uRows && uRows.length > 0) {
+            const u = uRows[0];
+            const myRefCode = u.referral_code || u.user_id;
+
+            const [refRows] = await pool.query<any[]>(
+              `SELECT id, user_id, name, email, mobile, created_at, role 
+               FROM users 
+               WHERE (UPPER(referral_code) = UPPER(?) OR UPPER(referral_code) = UPPER(?)) 
+                 AND UPPER(user_id) != UPPER(?) 
+               ORDER BY created_at DESC`,
+              [myRefCode, u.user_id, u.user_id],
+            );
+
+            const [wRows] = await pool.query<any[]>(
+              `SELECT referral_income FROM wallet_balances WHERE UPPER(user_id) = UPPER(?) LIMIT 1`,
+              [userId],
+            );
+            const refIncome = Number(wRows?.[0]?.referral_income || 0);
+
+            const members = await Promise.all(
+              (refRows || []).map(async (r: any) => {
+                const [vRows] = await pool.query<any[]>(
+                  `SELECT video_type, payment_status, COUNT(*) as cnt 
+                   FROM uploaded_videos 
+                   WHERE UPPER(user_id) = UPPER(?) 
+                   GROUP BY video_type, payment_status`,
+                  [r.user_id],
+                );
+                let freeCount = 0;
+                let premCount = 0;
+                for (const vr of vRows || []) {
+                  if (vr.video_type === "free") freeCount += Number(vr.cnt);
+                  if (
+                    vr.video_type === "premium" &&
+                    (vr.payment_status === "paid" || vr.payment_status === "not_required")
+                  ) {
+                    premCount += Number(vr.cnt);
+                  }
+                }
+                const comm = premCount * 1.0;
+                return {
+                  id: r.id || `mem_${r.user_id}`,
+                  userId: r.user_id,
+                  name: r.name,
+                  email: r.email,
+                  mobile: r.mobile,
+                  joinedAt: r.created_at,
+                  status: "Active",
+                  tier: r.role === "admin" ? "Admin" : "Creator",
+                  freeVideosCount: freeCount,
+                  premiumVideosCount: premCount,
+                  totalVideosCount: freeCount + premCount,
+                  directCommissionEarned: comm,
+                  contribution: comm,
+                  access: "Granted",
+                };
+              }),
+            );
+
+            return jsonResponse({
+              success: true,
+              dashboard: {
+                userId,
+                referralCode: myRefCode,
+                referralNumber: u.mobile || "",
+                referralLink: `https://facetube.online/register?ref=${encodeURIComponent(myRefCode)}`,
+                directReferralsCount: members.length,
+                teamMembersCount: members.length,
+                referralIncome: refIncome,
+                directReferralIncome: refIncome,
+                totalReferralIncome: refIncome,
+                members,
+                referralMembers: members,
+              },
+            });
+          }
+        } catch (_e) {
+          // fallback to store
+        }
+      }
+
+      // Store fallback:
+      const user = store.users.find((u) => u.user_id.toUpperCase() === userId);
+      const myRefCode = user?.referral_code || userId;
+      const directUsers = store.users.filter(
+        (u) =>
+          u.user_id.toUpperCase() !== userId &&
+          (u.referral_code?.toUpperCase() === myRefCode.toUpperCase() ||
+            u.referral_code?.toUpperCase() === userId),
+      );
+
+      const refIncome = Number(store.wallets?.[userId]?.referral_income || 0);
+
+      const members = directUsers.map((r) => {
+        const uVideos = store.videos.filter(
+          (v) => v.user_id.toUpperCase() === r.user_id.toUpperCase(),
+        );
+        const freeCount = uVideos.filter((v) => v.video_type === "free").length;
+        const premCount = uVideos.filter(
+          (v) =>
+            v.video_type === "premium" &&
+            (v.payment_status === "paid" || v.payment_status === "not_required"),
+        ).length;
+        const comm = premCount * 1.0;
+        return {
+          id: r.id || `mem_${r.user_id}`,
+          userId: r.user_id,
+          name: r.name,
+          email: r.email,
+          mobile: r.mobile,
+          joinedAt: r.created_at,
+          status: "Active",
+          tier: r.role === "admin" ? "Admin" : "Creator",
+          freeVideosCount: freeCount,
+          premiumVideosCount: premCount,
+          totalVideosCount: freeCount + premCount,
+          directCommissionEarned: comm,
+          contribution: comm,
+          access: "Granted",
+        };
+      });
+
       return jsonResponse({
         success: true,
         dashboard: {
           userId,
-          referralCode: "FTVIP",
-          directReferralsCount: 4,
-          teamMembersCount: 16,
-          directReferralIncome: 2000,
-          teamIncome: 3500,
-          totalReferralIncome: 5500,
-          referralMembers: [
-            {
-              userId: "FT483921",
-              name: "Alex Rivera",
-              joinedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-              level: 1,
-              status: "active",
-              contribution: 1000,
-            },
-            {
-              userId: "FT900431",
-              name: "Maya Lin",
-              joinedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-              level: 1,
-              status: "active",
-              contribution: 1000,
-            },
-          ],
+          referralCode: myRefCode,
+          referralNumber: user?.mobile || "",
+          referralLink: `https://facetube.online/register?ref=${encodeURIComponent(myRefCode)}`,
+          directReferralsCount: members.length,
+          teamMembersCount: members.length,
+          referralIncome: refIncome,
+          directReferralIncome: refIncome,
+          totalReferralIncome: refIncome,
+          members,
+          referralMembers: members,
         },
       });
     }
