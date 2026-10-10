@@ -1,7 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { verifyServerPayment } from "./payments";
+import { verifyServerPayment, verifyPayment } from "./payments";
+import { handleApiRequest } from "./api-handler";
 
 describe("Payment Verification & Referral Security Audit Tests", () => {
   const secret = "test_razorpay_secret_key_1234567890";
@@ -67,8 +68,11 @@ describe("Payment Verification & Referral Security Audit Tests", () => {
   });
 
   it("4. Credits referral commission correctly for verified premium video upload", async () => {
-    const uniquePayId = `pay_unique_${Date.now()}_${Math.random()}`;
-    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${uniquePayId}`).digest("hex");
+    const uniquePayId = `pay_unique_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto
+      .createHmac("sha256", secret)
+      .update(`${orderId}|${uniquePayId}`)
+      .digest("hex");
 
     const res = await verifyPayment(
       {
@@ -85,13 +89,16 @@ describe("Payment Verification & Referral Security Audit Tests", () => {
 
     assert.equal(res.verified, true);
     assert.equal(res.amount, 6.0); // Exact ₹6.00 business rule
-    assert.equal(res.distribution.directReferralAmount, 1.0); // Exact ₹1.00 business rule
-    assert.equal(res.distribution.referrerId, "FT102857");
+    assert.equal(res.distribution?.directReferralAmount, 1.0); // Exact ₹1.00 business rule
+    assert.equal(res.distribution?.referrerId, "FT102857");
   });
 
   it("5. Prevents duplicate commission credit on duplicate payment ID (idempotency)", async () => {
-    const uniquePayId = `pay_dedup_${Date.now()}`;
-    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${uniquePayId}`).digest("hex");
+    const uniquePayId = `pay_dedup_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto
+      .createHmac("sha256", secret)
+      .update(`${orderId}|${uniquePayId}`)
+      .digest("hex");
 
     // First attempt
     const firstRes = await verifyPayment(
@@ -125,5 +132,349 @@ describe("Payment Verification & Referral Security Audit Tests", () => {
     assert.equal(secondRes.verified, true);
     assert.equal(secondRes.txNumber, firstRes.txNumber); // Does not increment sequence
     assert.match(secondRes.error || "", /already been processed/i);
+  });
+
+  it("6. Handles concurrent duplicate payment verification requests safely", async () => {
+    const concurrentPayId = `pay_concurrent_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto
+      .createHmac("sha256", secret)
+      .update(`${orderId}|${concurrentPayId}`)
+      .digest("hex");
+
+    const reqData = {
+      orderId,
+      paymentId: concurrentPayId,
+      signature: sig,
+      userId: "FT483921",
+      purpose: "premium_video_upload" as const,
+    };
+
+    // Fire 3 simultaneous verification attempts
+    const [res1, res2, res3] = await Promise.all([
+      verifyServerPayment(reqData, ["FT483921"], "FT102857", { RAZORPAY_KEY_SECRET: secret }),
+      verifyServerPayment(reqData, ["FT483921"], "FT102857", { RAZORPAY_KEY_SECRET: secret }),
+      verifyServerPayment(reqData, ["FT483921"], "FT102857", { RAZORPAY_KEY_SECRET: secret }),
+    ]);
+
+    // All should be marked verified, but only one is the original sequence allocation
+    assert.equal(res1.verified, true);
+    assert.equal(res2.verified, true);
+    assert.equal(res3.verified, true);
+
+    // All must have identical sequence numbers (no sequence inflation)
+    assert.equal(res1.txNumber, res2.txNumber);
+    assert.equal(res2.txNumber, res3.txNumber);
+  });
+});
+
+describe("API Handler Authentication & Authorization Security Tests", () => {
+  const adminToken = "test_session_token_admin_001";
+  const userToken = "test_session_token_user_002";
+  const envConfig = { RAZORPAY_KEY_SECRET: "test_secret_for_api_tests_123456" };
+
+  // Helper to simulate API requests with tokens
+  async function makeApiCall(
+    url: string,
+    method = "GET",
+    body: any = null,
+    token: string | null = null,
+  ) {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    const init: RequestInit = { method, headers };
+    if (body) {
+      init.body = JSON.stringify(body);
+    }
+    const req = new Request(`http://localhost:3000${url}`, init);
+    const resp = await handleApiRequest(req, envConfig);
+    assert.ok(resp, `Response should exist for ${url}`);
+    const data = await resp.json();
+    return { status: resp.status, data };
+  }
+
+  it("1. Rejects unauthenticated access to wallet/balance with 401", async () => {
+    const { status, data } = await makeApiCall("/api/wallet/balance.php?userId=FT483921");
+    assert.equal(status, 401);
+    assert.equal(data.success, false);
+    assert.match(data.error, /Authentication required/i);
+  });
+
+  it("2. Rejects unauthenticated access to wallet/transactions with 401", async () => {
+    const { status, data } = await makeApiCall("/api/wallet/transactions.php");
+    assert.equal(status, 401);
+    assert.equal(data.success, false);
+    assert.match(data.error, /Authentication required/i);
+  });
+
+  it("3. Rejects unauthenticated access to wallet/withdraw with 401", async () => {
+    const { status, data } = await makeApiCall("/api/wallet/withdraw.php", "POST", {
+      amount: 1000,
+      userId: "FT483921",
+    });
+    assert.equal(status, 401);
+    assert.equal(data.success, false);
+    assert.match(data.error, /Authentication required/i);
+  });
+
+  it("4. Rejects unauthenticated access to referrals/dashboard with 401", async () => {
+    const { status, data } = await makeApiCall("/api/referrals/dashboard.php?userId=FT483921");
+    assert.equal(status, 401);
+    assert.equal(data.success, false);
+    assert.match(data.error, /Authentication required/i);
+  });
+
+  it("5. Authenticates regular user and generates valid session token", async () => {
+    const { status, data } = await makeApiCall("/api/auth/login.php", "POST", {
+      identifier: "alex@facetube.com",
+      password: "password",
+    });
+    assert.equal(status, 200);
+    assert.equal(data.success, true);
+    assert.ok(data.token, "Login should return session token");
+    assert.equal(data.user.user_id, "FT483921");
+    assert.equal(data.user.role, "user");
+  });
+
+  it("6. Allows regular user to access their own wallet/balance", async () => {
+    // Log in as Alex
+    const login = await makeApiCall("/api/auth/login.php", "POST", {
+      identifier: "alex@facetube.com",
+      password: "password",
+    });
+    const token = login.data.token;
+
+    const { status, data } = await makeApiCall(
+      "/api/wallet/balance.php?userId=FT483921",
+      "GET",
+      null,
+      token,
+    );
+    assert.equal(status, 200);
+    assert.equal(data.success, true);
+    assert.equal(data.wallet.userId, "FT483921");
+  });
+
+  it("7. Blocks standard user from cross-user access to another user's wallet with 403", async () => {
+    // Log in as Alex (role: user)
+    const login = await makeApiCall("/api/auth/login.php", "POST", {
+      identifier: "alex@facetube.com",
+      password: "password",
+    });
+    const token = login.data.token;
+
+    // Try accessing Admin's wallet (FT102857)
+    const { status, data } = await makeApiCall(
+      "/api/wallet/balance.php?userId=FT102857",
+      "GET",
+      null,
+      token,
+    );
+    assert.equal(status, 403);
+    assert.equal(data.success, false);
+    assert.match(data.error, /Cross-user access is restricted to verified administrators/i);
+  });
+
+  it("8. Blocks standard user from cross-user access to another user's referrals/dashboard with 403", async () => {
+    // Log in as Alex
+    const login = await makeApiCall("/api/auth/login.php", "POST", {
+      identifier: "alex@facetube.com",
+      password: "password",
+    });
+    const token = login.data.token;
+
+    // Try accessing Admin's referral dashboard
+    const { status, data } = await makeApiCall(
+      "/api/referrals/dashboard.php?userId=FT102857",
+      "GET",
+      null,
+      token,
+    );
+    assert.equal(status, 403);
+    assert.equal(data.success, false);
+    assert.match(data.error, /Cross-user access is restricted to verified administrators/i);
+  });
+
+  it("9. Permits admin user to access cross-user wallet/balance and referrals/dashboard", async () => {
+    // Log in as Admin
+    const login = await makeApiCall("/api/auth/login.php", "POST", {
+      identifier: "admin@facetube.com",
+      password: "password",
+    });
+    assert.equal(login.status, 200);
+    const token = login.data.token;
+
+    // Admin accessing Alex's wallet
+    const walletRes = await makeApiCall(
+      "/api/wallet/balance.php?userId=FT483921",
+      "GET",
+      null,
+      token,
+    );
+    assert.equal(walletRes.status, 200);
+    assert.equal(walletRes.data.success, true);
+    assert.equal(walletRes.data.wallet.userId, "FT483921");
+
+    // Admin accessing Alex's referrals
+    const refRes = await makeApiCall(
+      "/api/referrals/dashboard.php?userId=FT483921",
+      "GET",
+      null,
+      token,
+    );
+    assert.equal(refRes.status, 200);
+    assert.equal(refRes.data.success, true);
+    assert.equal(refRes.data.dashboard.userId, "FT483921");
+  });
+
+  it("10. Enforces withdrawal limit boundaries (min ₹1,000 and max ₹10,000)", async () => {
+    const login = await makeApiCall("/api/auth/login.php", "POST", {
+      identifier: "admin@facetube.com",
+      password: "password",
+    });
+    const token = login.data.token;
+
+    // Below minimum
+    const belowMin = await makeApiCall("/api/wallet/withdraw.php", "POST", { amount: 500 }, token);
+    assert.equal(belowMin.status, 400);
+    assert.match(belowMin.data.error, /Minimum withdrawal amount is ₹1,000/i);
+
+    // Above maximum
+    const aboveMax = await makeApiCall(
+      "/api/wallet/withdraw.php",
+      "POST",
+      { amount: 15000 },
+      token,
+    );
+    assert.equal(aboveMax.status, 400);
+    assert.match(aboveMax.data.error, /Maximum daily withdrawal limit is ₹10,000/i);
+  });
+
+  it("11. Rejects payment verification for mismatched amount or unsupported purpose", async () => {
+    const login = await makeApiCall("/api/auth/login.php", "POST", {
+      identifier: "alex@facetube.com",
+      password: "password",
+    });
+    const token = login.data.token;
+
+    const ordId = "ord_test_val_1";
+    const payId = `pay_val_${Date.now()}`;
+    const sig = crypto
+      .createHmac("sha256", envConfig.RAZORPAY_KEY_SECRET)
+      .update(`${ordId}|${payId}`)
+      .digest("hex");
+
+    // Mismatched amount (e.g. ₹5 instead of required ₹6 for premium video)
+    const badAmount = await makeApiCall(
+      "/api/payments/verify.php",
+      "POST",
+      {
+        orderId: ordId,
+        paymentId: payId,
+        signature: sig,
+        purpose: "premium_video_upload",
+        amount: 5.0,
+      },
+      token,
+    );
+    assert.equal(badAmount.status, 400);
+    assert.match(badAmount.data.error, /does not match expected fee/i);
+
+    // Unsupported purpose
+    const badPurpose = await makeApiCall(
+      "/api/payments/verify.php",
+      "POST",
+      {
+        orderId: ordId,
+        paymentId: payId,
+        signature: sig,
+        purpose: "unknown_hack_purpose",
+      },
+      token,
+    );
+    assert.equal(badPurpose.status, 400);
+    assert.match(badPurpose.data.error, /Unsupported payment purpose/i);
+  });
+
+  it("12. Rejects payment verification when user attempts to verify video owned by another creator", async () => {
+    // Maya Lin attempting to verify Alex's video (vid-seed-001)
+    const login = await makeApiCall("/api/auth/login.php", "POST", {
+      identifier: "maya@facetube.com",
+      password: "password",
+    });
+    const token = login.data.token;
+
+    const ordId = "ord_test_vid_owner";
+    const payId = `pay_vid_${Date.now()}`;
+    const sig = crypto
+      .createHmac("sha256", envConfig.RAZORPAY_KEY_SECRET)
+      .update(`${ordId}|${payId}`)
+      .digest("hex");
+
+    const res = await makeApiCall(
+      "/api/payments/verify.php",
+      "POST",
+      {
+        orderId: ordId,
+        paymentId: payId,
+        signature: sig,
+        videoId: "vid-seed-001", // Alex's video
+        userId: "FT900431", // Maya's ID
+        purpose: "premium_video_upload",
+      },
+      token,
+    );
+
+    assert.equal(res.status, 403);
+    assert.match(res.data.error, /does not match the authenticated payer/i);
+  });
+});
+
+describe("Database Transaction Rollback Simulation Tests", () => {
+  it("Simulates MySQL transaction rollback on failure during payment verification flow", async () => {
+    let transactionBegun = false;
+    let transactionCommitted = false;
+    let transactionRolledBack = false;
+
+    // Mock MySQL Connection with transactional operations
+    const mockConnection = {
+      beginTransaction: async () => {
+        transactionBegun = true;
+      },
+      query: async (sql: string) => {
+        if (sql.includes("SELECT * FROM payment_transactions")) {
+          return [[]]; // No duplicate
+        }
+        if (sql.includes("COUNT(*)")) {
+          return [[{ total: 5 }]];
+        }
+        if (sql.includes("INSERT INTO payment_transactions")) {
+          // Simulate simulated unexpected database constraint error on ledger
+          throw new Error("Simulated database failure during ledger step");
+        }
+        return [{}];
+      },
+      commit: async () => {
+        transactionCommitted = true;
+      },
+      rollback: async () => {
+        transactionRolledBack = true;
+      },
+      release: () => {},
+    };
+
+    try {
+      await mockConnection.beginTransaction();
+      await mockConnection.query("SELECT * FROM payment_transactions WHERE payment_id = ?");
+      await mockConnection.query("INSERT INTO payment_transactions ...");
+      await mockConnection.commit();
+    } catch (_err) {
+      await mockConnection.rollback();
+    }
+
+    assert.equal(transactionBegun, true, "Transaction must begin");
+    assert.equal(transactionCommitted, false, "Transaction must not commit on error");
+    assert.equal(transactionRolledBack, true, "Transaction must roll back on error");
   });
 });

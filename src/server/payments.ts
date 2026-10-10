@@ -322,11 +322,16 @@ export async function verifyServerPayment(
       orderId: req.orderId,
       amount: 0,
       purpose: req.purpose,
-      error: "Payment verification failed closed: RAZORPAY_KEY_SECRET is not configured on the server",
+      error:
+        "Payment verification failed closed: RAZORPAY_KEY_SECRET is not configured on the server",
     };
   }
 
-  if (!req.signature || req.signature === "mock_signature_bypass" || req.signature.startsWith("mock_")) {
+  if (
+    !req.signature ||
+    req.signature === "mock_signature_bypass" ||
+    req.signature.startsWith("mock_")
+  ) {
     return {
       verified: false,
       paymentId: req.paymentId,
@@ -364,7 +369,6 @@ export async function verifyServerPayment(
       error: `Signature calculation error: ${err?.message || "Unknown error"}`,
     };
   }
-
 
   // Atomic critical section for sequence allocation & duplicate prevention
   return withLock(async () => {
@@ -497,3 +501,5 @@ export async function verifyServerPayment(
     };
   });
 }
+
+export { verifyServerPayment as verifyPayment };

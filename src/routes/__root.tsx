@@ -80,16 +80,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "FaceTube — Stream. Create. Discover." },
+      { title: "FaceTube" },
       {
         name: "description",
         content:
-          "FaceTube is a modern video streaming experience for creators and viewers — trending videos, popular creators, role management and fresh uploads.",
+          "FaceTube - A modern video streaming and discovery platform with authentication, role-based access control, and interactive video playback.",
       },
-      { property: "og:title", content: "FaceTube — Stream. Create. Discover." },
+      { property: "og:title", content: "FaceTube" },
       {
         property: "og:description",
-        content: "A premium video streaming interface for creators and viewers.",
+        content:
+          "FaceTube - A modern video streaming and discovery platform with authentication, role-based access control, and interactive video playback.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
