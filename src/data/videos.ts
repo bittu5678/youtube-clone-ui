@@ -17,6 +17,7 @@ export type Video = {
   tint: string;
   category: string;
   description: string;
+  videoUrl?: string;
 };
 
 export const VIDEO_CATEGORIES = [
@@ -203,4 +204,39 @@ export const creators = [
 
 export const allVideos: Video[] = [...recommended, ...trending, ...recent];
 
-export const findVideo = (id: string) => allVideos.find((v) => v.id === id);
+export const findVideo = (id: string): Video | undefined => {
+  const staticFound = allVideos.find((v) => v.id === id);
+  if (staticFound) return staticFound;
+
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem("facetube_uploaded_videos_v3");
+      if (stored) {
+        const list = JSON.parse(stored);
+        if (Array.isArray(list)) {
+          const match = list.find((v: any) => v.id === id);
+          if (match) {
+            return {
+              id: match.id,
+              title: match.title,
+              channel: match.creatorName || "FaceTube Creator",
+              initials: (match.creatorName || "FC").slice(0, 2).toUpperCase(),
+              views: `${match.views || 0} views`,
+              age: "Recently uploaded",
+              duration: match.duration || "0:00",
+              thumb: match.thumbnailUrl || thumb1,
+              tint: "oklch(0.5 0.18 20)",
+              category: match.category || "General",
+              description: match.description || "",
+              videoUrl: match.videoUrl,
+            };
+          }
+        }
+      }
+    } catch (_e) {
+      // ignore
+    }
+  }
+
+  return undefined;
+};

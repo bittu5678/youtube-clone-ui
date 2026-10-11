@@ -29,6 +29,7 @@ import { ThemeToggle } from "@/components/videohub/ThemeToggle";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { Footer } from "@/components/videohub/Footer";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api";
 import {
   recordNewVideoUpload,
   fetchUploadedVideos,
@@ -497,11 +498,82 @@ function FreeVideoUploadView({
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<string>("Coding");
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [detectedDuration, setDetectedDuration] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [publishedVideo, setPublishedVideo] = useState<UploadedVideo | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validExts = [".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv"];
+    const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
+    if (!file.type.startsWith("video/") && !validExts.includes(ext)) {
+      toast.error("Unsupported video format. Please select an MP4, WebM, OGG, or MOV file.");
+      return;
+    }
+
+    if (file.size > 150 * 1024 * 1024) {
+      toast.error("Video file size cannot exceed 150MB.");
+      return;
+    }
+
+    setVideoFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    if (!title.trim()) {
+      setTitle(file.name.replace(/\.[^/.]+$/, ""));
+    }
+
+    // Attempt duration detection via temporary video element
+    const tempVideo = document.createElement("video");
+    tempVideo.preload = "metadata";
+    tempVideo.src = objectUrl;
+    tempVideo.onloadedmetadata = () => {
+      const sec = Math.round(tempVideo.duration);
+      if (!isNaN(sec) && sec > 0) {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        setDetectedDuration(`${m}:${s.toString().padStart(2, "0")}`);
+      }
+    };
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    const validExts = [".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv"];
+    const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
+    if (!file.type.startsWith("video/") && !validExts.includes(ext)) {
+      toast.error("Unsupported video format. Please drop an MP4, WebM, OGG, or MOV file.");
+      return;
+    }
+
+    if (file.size > 150 * 1024 * 1024) {
+      toast.error("Video file size cannot exceed 150MB.");
+      return;
+    }
+
+    setVideoFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    if (!title.trim()) {
+      setTitle(file.name.replace(/\.[^/.]+$/, ""));
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!videoFile) {
+      toast.error("Please select a video file to upload.");
+      return;
+    }
     if (!title.trim()) {
       toast.error("Please enter a video title.");
       return;
@@ -509,30 +581,36 @@ function FreeVideoUploadView({
 
     setUploading(true);
     try {
-      await recordNewVideoUpload({
+      // 1. Upload the actual video file to production storage
+      const uploadRes = await api.uploads.uploadVideo(videoFile);
+      if (!uploadRes || !uploadRes.url) {
+        throw new Error((uploadRes as any)?.error || "Failed to upload video file to server storage.");
+      }
+
+      // 2. Persist video metadata to database through server API
+      const newVideo = await recordNewVideoUpload({
         userId,
         creatorName,
         title: title.trim(),
         description: description.trim(),
-        videoUrl:
-          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-        thumbnailUrl:
-          "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&auto=format&fit=crop&q=60",
+        videoUrl: uploadRes.url,
         videoType: "free",
         contentType: format,
         category,
-        duration: format === "short" ? "0:45" : "14:20",
+        duration: detectedDuration || (format === "short" ? "0:45" : "14:20"),
         paymentStatus: "not_required",
         paymentAmount: 0,
       });
 
+      setPublishedVideo(newVideo);
       setUploadSuccess(true);
       toast.success(
-        `🎉 Free ${format === "short" ? "Short" : "Long"} Video uploaded successfully! Zero fee (₹0).`,
+        `🎉 Free ${format === "short" ? "Short" : "Long"} Video uploaded and published successfully! Zero fee (₹0).`,
       );
       onUploaded?.();
-    } catch (err) {
-      toast.error("Failed to upload video.");
+    } catch (err: any) {
+      console.error("Free video upload failed:", err);
+      toast.error(err?.message || "Failed to upload and publish video.");
     } finally {
       setUploading(false);
     }
@@ -551,6 +629,25 @@ function FreeVideoUploadView({
             with no payment.
           </p>
         </div>
+
+        {publishedVideo?.videoUrl && (
+          <div className="mx-auto max-w-md overflow-hidden rounded-2xl border border-border shadow-card bg-secondary/30 p-2">
+            <video
+              controls
+              playsInline
+              preload="metadata"
+              className="aspect-video w-full rounded-xl bg-black object-contain"
+              src={publishedVideo.videoUrl}
+            />
+            <div className="p-3 text-left">
+              <div className="text-xs font-bold text-foreground truncate">{publishedVideo.title}</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5 font-mono uppercase">
+                {publishedVideo.contentType} video · {publishedVideo.category} · Duration: {publishedVideo.duration}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-center gap-3 pt-4">
           <button
             type="button"
@@ -558,6 +655,8 @@ function FreeVideoUploadView({
               setTitle("");
               setDescription("");
               setVideoFile(null);
+              setPreviewUrl("");
+              setPublishedVideo(null);
               setUploadSuccess(false);
             }}
             className="rounded-xl bg-sky-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-sky-500 transition"
@@ -638,6 +737,57 @@ function FreeVideoUploadView({
           </div>
         </div>
 
+        {/* Video File Picker Dropzone */}
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className="group relative cursor-pointer rounded-3xl border-2 border-dashed border-border bg-card p-8 text-center transition hover:border-sky-500/60 hover:bg-sky-500/5 shadow-card"
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="video/mp4,video/webm,video/ogg,video/quicktime,.mp4,.webm,.ogg,.mov,.m4v"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+
+          {previewUrl ? (
+            <div className="space-y-3">
+              <video
+                controls
+                playsInline
+                preload="metadata"
+                className="mx-auto max-h-56 rounded-2xl bg-black object-contain border border-border shadow-sm"
+                src={previewUrl}
+              />
+              <div className="flex items-center justify-center gap-2 text-xs font-bold text-sky-400">
+                <Check className="h-4 w-4 text-emerald-400" />
+                <span>{videoFile?.name}</span>
+                <span className="text-muted-foreground font-normal">
+                  ({((videoFile?.size || 0) / (1024 * 1024)).toFixed(2)} MB
+                  {detectedDuration ? ` · ${detectedDuration}` : ""})
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Click or drop another file to change video</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-sky-500/10 text-sky-400 border border-sky-500/20 group-hover:scale-105 transition-transform">
+                <FileVideo className="h-7 w-7" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-foreground">
+                  Click to select or drag and drop video file here
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Supports MP4, WebM, OGG, MOV (Up to 150 MB)
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Video Metadata Inputs */}
         <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
           <div>
@@ -700,7 +850,7 @@ function FreeVideoUploadView({
             disabled={uploading}
             className="rounded-xl bg-sky-600 px-8 py-3 text-xs font-bold text-white hover:bg-sky-500 transition shadow-sm disabled:opacity-50"
           >
-            {uploading ? "Publishing Video..." : `Publish Free Video (₹0)`}
+            {uploading ? "Uploading & Publishing..." : `Publish Free Video (₹0)`}
           </button>
         </div>
       </form>
@@ -730,11 +880,81 @@ function PremiumVideoUploadView({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<string>("Coding");
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [detectedDuration, setDetectedDuration] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validExts = [".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv"];
+    const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
+    if (!file.type.startsWith("video/") && !validExts.includes(ext)) {
+      toast.error("Unsupported video format. Please select an MP4, WebM, OGG, or MOV file.");
+      return;
+    }
+
+    if (file.size > 150 * 1024 * 1024) {
+      toast.error("Video file size cannot exceed 150MB.");
+      return;
+    }
+
+    setVideoFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    if (!title.trim()) {
+      setTitle(file.name.replace(/\.[^/.]+$/, ""));
+    }
+
+    const tempVideo = document.createElement("video");
+    tempVideo.preload = "metadata";
+    tempVideo.src = objectUrl;
+    tempVideo.onloadedmetadata = () => {
+      const sec = Math.round(tempVideo.duration);
+      if (!isNaN(sec) && sec > 0) {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        setDetectedDuration(`${m}:${s.toString().padStart(2, "0")}`);
+      }
+    };
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    const validExts = [".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv"];
+    const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
+    if (!file.type.startsWith("video/") && !validExts.includes(ext)) {
+      toast.error("Unsupported video format. Please drop an MP4, WebM, OGG, or MOV file.");
+      return;
+    }
+
+    if (file.size > 150 * 1024 * 1024) {
+      toast.error("Video file size cannot exceed 150MB.");
+      return;
+    }
+
+    setVideoFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    if (!title.trim()) {
+      setTitle(file.name.replace(/\.[^/.]+$/, ""));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!videoFile) {
+      toast.error("Please select a video file for premium upload.");
+      return;
+    }
     if (!title.trim()) {
       toast.error("Please enter a video title.");
       return;
@@ -742,38 +962,27 @@ function PremiumVideoUploadView({
 
     setUploading(true);
     try {
+      // 1. Upload video file to server storage first
+      const uploadRes = await api.uploads.uploadVideo(videoFile);
+      if (!uploadRes || !uploadRes.url) {
+        throw new Error((uploadRes as any)?.error || "Failed to upload video file to storage.");
+      }
+
       const vidId = `vid-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
+      // 2. Initiate Razorpay ₹6 payment flow with server verification
       await initiatePremiumVideoPayment({
         uploaderUserId: userId,
         uploaderName: creatorName,
         userEmail: user?.email || "creator@facetube.app",
         videoId: vidId,
         videoTitle: title.trim(),
-        videoType: "premium",
+        description: description.trim(),
+        videoUrl: uploadRes.url,
+        category,
         contentType: format,
         directReferrerId: referrerId,
-        onSuccess: async (paymentId) => {
-          // Record in video service
-          await recordNewVideoUpload({
-            id: vidId,
-            userId,
-            creatorName,
-            title: title.trim(),
-            description: description.trim(),
-            videoUrl:
-              "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-            thumbnailUrl:
-              "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=800&auto=format&fit=crop&q=60",
-            videoType: "premium",
-            contentType: format,
-            category,
-            duration: format === "short" ? "0:58" : "22:15",
-            paymentStatus: "paid",
-            paymentId,
-            paymentAmount: 6.0,
-          });
-
+        onSuccess: async () => {
           setUploading(false);
           setUploadSuccess(true);
           toast.success(
@@ -783,16 +992,16 @@ function PremiumVideoUploadView({
         },
         onFailure: (err) => {
           setUploading(false);
-          toast.error(err || "Payment failed.");
+          toast.error(err || "Payment failed. Video was not published.");
         },
         onCancel: () => {
           setUploading(false);
           toast.info("Payment cancelled.");
         },
       });
-    } catch (err) {
+    } catch (err: any) {
       setUploading(false);
-      toast.error("Failed to initiate premium payment.");
+      toast.error(err?.message || "Failed to initiate premium upload.");
     }
   };
 
@@ -814,6 +1023,8 @@ function PremiumVideoUploadView({
             onClick={() => {
               setTitle("");
               setDescription("");
+              setVideoFile(null);
+              setPreviewUrl("");
               setUploadSuccess(false);
             }}
             className="rounded-xl bg-amber-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-amber-500 transition"
@@ -892,6 +1103,57 @@ function PremiumVideoUploadView({
               </p>
             </button>
           </div>
+        </div>
+
+        {/* Video File Picker Dropzone */}
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className="group relative cursor-pointer rounded-3xl border-2 border-dashed border-border bg-card p-8 text-center transition hover:border-amber-500/60 hover:bg-amber-500/5 shadow-card"
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="video/mp4,video/webm,video/ogg,video/quicktime,.mp4,.webm,.ogg,.mov,.m4v"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+
+          {previewUrl ? (
+            <div className="space-y-3">
+              <video
+                controls
+                playsInline
+                preload="metadata"
+                className="mx-auto max-h-56 rounded-2xl bg-black object-contain border border-border shadow-sm"
+                src={previewUrl}
+              />
+              <div className="flex items-center justify-center gap-2 text-xs font-bold text-amber-400">
+                <Check className="h-4 w-4 text-emerald-400" />
+                <span>{videoFile?.name}</span>
+                <span className="text-muted-foreground font-normal">
+                  ({((videoFile?.size || 0) / (1024 * 1024)).toFixed(2)} MB
+                  {detectedDuration ? ` · ${detectedDuration}` : ""})
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Click or drop another file to change video</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 group-hover:scale-105 transition-transform">
+                <FileVideo className="h-7 w-7" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-foreground">
+                  Click to select or drag and drop video file here
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Supports MP4, WebM, OGG, MOV (Up to 150 MB)
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Video Metadata Inputs */}
@@ -977,7 +1239,7 @@ function PremiumVideoUploadView({
             disabled={uploading}
             className="rounded-xl bg-amber-600 px-8 py-3 text-xs font-bold text-white hover:bg-amber-500 transition shadow-sm disabled:opacity-50"
           >
-            {uploading ? "Connecting Gateway..." : `Pay ₹6 & Publish Premium Video`}
+            {uploading ? "Uploading & Connecting Gateway..." : `Pay ₹6 & Publish Premium Video`}
           </button>
         </div>
       </form>
@@ -1002,9 +1264,9 @@ function AdPromotionUploadView({
   const referrerId = profile?.referral_code || dbUser?.referral_code || undefined;
 
   const DURATION_PLANS = [
-    { id: "7_days", name: "7_days", label: "7 Days", days: 7, price: 100, rateText: "₹14.28/day" },
+    { id: "plan-7-days", name: "7_days", label: "7 Days", days: 7, price: 100, rateText: "₹14.28/day" },
     {
-      id: "15_days",
+      id: "plan-15-days",
       name: "15_days",
       label: "15 Days",
       days: 15,
@@ -1012,7 +1274,7 @@ function AdPromotionUploadView({
       rateText: "₹13.33/day",
     },
     {
-      id: "1_month",
+      id: "plan-monthly",
       name: "1_month",
       label: "1 Month",
       days: 30,
@@ -1020,7 +1282,7 @@ function AdPromotionUploadView({
       rateText: "₹10.00/day",
     },
     {
-      id: "1_year",
+      id: "plan-yearly",
       name: "1_year",
       label: "1 Year",
       days: 365,
@@ -1030,7 +1292,7 @@ function AdPromotionUploadView({
   ];
 
   const [format, setFormat] = useState<VideoFormatChoice>("short");
-  const [selectedPlanId, setSelectedPlanId] = useState("7_days");
+  const [selectedPlanId, setSelectedPlanId] = useState("plan-7-days");
   const [availableVideos, setAvailableVideos] = useState<UploadedVideo[]>([]);
   const [selectedVideoId, setSelectedVideoId] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1058,7 +1320,8 @@ function AdPromotionUploadView({
       userName: creatorName,
       userEmail: user?.email || "creator@facetube.app",
       videoId: selectedVideoId || "vid-custom",
-      planName: currentPlan.name,
+      planId: currentPlan.id as "plan-7-days" | "plan-15-days" | "plan-monthly" | "plan-yearly",
+      planName: currentPlan.label,
       durationDays: currentPlan.days,
       price: currentPlan.price,
       directReferrerId: referrerId,

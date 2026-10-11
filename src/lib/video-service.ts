@@ -378,41 +378,46 @@ export async function calculateUserVideoCounts(userId?: string): Promise<VideoCa
 }
 
 /**
- * Creates and records a newly uploaded video with strict payment verification
+ * Creates and records a newly uploaded video with strict payment and server verification
  */
 export async function recordNewVideoUpload(params: {
+  id?: string;
   userId: string;
   creatorName: string;
   title: string;
   description: string;
-  videoUrl?: string;
+  videoUrl: string;
   thumbnailUrl?: string;
   videoType: VideoType; // "free" | "premium"
   contentType: ContentType; // "short" | "long"
   category?: string;
+  duration?: string;
   paymentStatus?: VideoPaymentStatus;
   paymentId?: string;
   paymentAmount?: number;
 }): Promise<UploadedVideo> {
   const isPremium = params.videoType === "premium";
+
+  if (!params.videoUrl || !params.videoUrl.trim()) {
+    throw new Error("Cannot publish video: videoUrl is missing. Video must be uploaded to storage first.");
+  }
+
+  const videoId = params.id || `vid-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
   const newVideo: UploadedVideo = {
-    id: `vid-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+    id: videoId,
     userId: params.userId,
     creatorName: params.creatorName,
     title: params.title.trim(),
     description: params.description.trim(),
-    videoUrl:
-      params.videoUrl ||
-      (params.contentType === "short"
-        ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
-        : "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"),
+    videoUrl: params.videoUrl.trim(),
     thumbnailUrl:
       params.thumbnailUrl ||
       "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60",
     videoType: params.videoType,
     contentType: params.contentType,
     category: params.category || "Entertainment",
-    duration: params.contentType === "short" ? "0:45" : "12:30",
+    duration: params.duration || (params.contentType === "short" ? "0:45" : "12:30"),
     views: 0,
     likes: 0,
     paymentStatus: isPremium ? params.paymentStatus || "pending" : "not_required",
@@ -423,30 +428,31 @@ export async function recordNewVideoUpload(params: {
     updatedAt: new Date().toISOString(),
   };
 
-  try {
-    await api.videos.create({
-      id: newVideo.id,
-      user_id: newVideo.userId,
-      creator_name: newVideo.creatorName,
-      title: newVideo.title,
-      description: newVideo.description,
-      video_url: newVideo.videoUrl,
-      thumbnail_url: newVideo.thumbnailUrl,
-      video_type: newVideo.videoType,
-      content_type: newVideo.contentType,
-      category: newVideo.category,
-      duration: newVideo.duration,
-      payment_status: newVideo.paymentStatus,
-      payment_id: newVideo.paymentId,
-      payment_amount: newVideo.paymentAmount,
-      is_promoted: false,
-    });
-  } catch (_e) {
-    // fallback to local storage
+  // 1. Production API & Database Insertion - Must confirm success before publishing
+  const apiRes = await api.videos.create({
+    id: newVideo.id,
+    user_id: newVideo.userId,
+    creator_name: newVideo.creatorName,
+    title: newVideo.title,
+    description: newVideo.description,
+    video_url: newVideo.videoUrl,
+    thumbnail_url: newVideo.thumbnailUrl,
+    video_type: newVideo.videoType,
+    content_type: newVideo.contentType,
+    category: newVideo.category,
+    duration: newVideo.duration,
+    payment_status: newVideo.paymentStatus,
+    payment_id: newVideo.paymentId,
+    payment_amount: newVideo.paymentAmount,
+    is_promoted: false,
+  });
+
+  if (!apiRes || !apiRes.success) {
+    throw new Error((apiRes as any)?.error || "Server rejected video creation. Video was not published.");
   }
 
+  // 2. Cache newly confirmed video in local store for rapid UI transitions
   const all = getStoredVideos();
-  // Prevent duplicate insertion
   const exists = all.some(
     (v) => v.id === newVideo.id || (newVideo.paymentId && v.paymentId === newVideo.paymentId),
   );

@@ -81,6 +81,9 @@ export interface InitiatePremiumVideoPaymentParams {
   title?: string;
   videoTitle?: string;
   description?: string;
+  videoUrl: string;
+  thumbnailUrl?: string;
+  category?: string;
   videoId?: string;
   videoType?: VideoType;
   contentType: ContentType; // "short" | "long"
@@ -187,10 +190,14 @@ export async function initiatePremiumVideoPayment(
 
         // 3. Save uploaded video with verified paid status
         const newVideo = await recordNewVideoUpload({
+          id: effectiveVideoId,
           userId: effectiveUserId,
           creatorName: effectiveUserName,
           title: effectiveTitle,
           description: effectiveDescription,
+          videoUrl: params.videoUrl,
+          thumbnailUrl: params.thumbnailUrl,
+          category: params.category || "General",
           videoType: "premium",
           contentType: params.contentType,
           paymentStatus: "paid",

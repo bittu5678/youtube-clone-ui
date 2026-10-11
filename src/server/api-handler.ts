@@ -1704,6 +1704,91 @@ export async function handleApiRequest(
       const category = url.searchParams.get("category");
       const search = url.searchParams.get("search");
 
+      const pool = getMysqlPool();
+      if (pool) {
+        try {
+          const where: string[] = [];
+          const params: any[] = [];
+          if (userId) {
+            where.push("UPPER(user_id) = UPPER(?)");
+            params.push(userId.trim());
+          }
+          if (videoType && videoType !== "all") {
+            where.push("video_type = ?");
+            params.push(videoType);
+          }
+          if (contentType && contentType !== "all") {
+            where.push("content_type = ?");
+            params.push(contentType);
+          }
+          if (category && category !== "All") {
+            where.push("LOWER(category) = LOWER(?)");
+            params.push(category);
+          }
+          if (search) {
+            where.push("(title LIKE ? OR description LIKE ? OR creator_name LIKE ?)");
+            const s = `%${search}%`;
+            params.push(s, s, s);
+          }
+
+          const whereSql = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
+          const sql = `
+            SELECT 
+              id, user_id, creator_name, title, description, video_url, thumbnail_url,
+              video_type, content_type, category, duration, views, likes,
+              payment_status, payment_id, payment_amount, is_promoted,
+              promotion_plan, promotion_expires_at, created_at, updated_at
+            FROM uploaded_videos
+            ${whereSql}
+            ORDER BY is_promoted DESC, created_at DESC
+            LIMIT 100
+          `;
+          const [rows] = (await pool.query(sql, params)) as any;
+          if (Array.isArray(rows) && rows.length > 0) {
+            const formatted = rows.map((r: any) => ({
+              id: String(r.id),
+              userId: r.user_id,
+              user_id: r.user_id,
+              creatorName: r.creator_name,
+              creator_name: r.creator_name,
+              title: r.title,
+              description: r.description || "",
+              videoUrl: r.video_url,
+              video_url: r.video_url,
+              thumbnailUrl: r.thumbnail_url || "",
+              thumbnail_url: r.thumbnail_url || "",
+              videoType: r.video_type,
+              video_type: r.video_type,
+              contentType: r.content_type,
+              content_type: r.content_type,
+              category: r.category || "General",
+              duration: r.duration || "0:00",
+              views: Number(r.views) || 0,
+              likes: Number(r.likes) || 0,
+              paymentStatus: r.payment_status || "not_required",
+              payment_status: r.payment_status || "not_required",
+              paymentId: r.payment_id,
+              payment_id: r.payment_id,
+              paymentAmount: Number(r.payment_amount) || 0,
+              payment_amount: Number(r.payment_amount) || 0,
+              isPromoted: Boolean(r.is_promoted),
+              is_promoted: Boolean(r.is_promoted),
+              promotionPlan: r.promotion_plan,
+              promotion_plan: r.promotion_plan,
+              promotionExpiresAt: r.promotion_expires_at,
+              promotion_expires_at: r.promotion_expires_at,
+              createdAt: r.created_at,
+              created_at: r.created_at,
+              updatedAt: r.updated_at,
+              updated_at: r.updated_at,
+            }));
+            return jsonResponse({ success: true, videos: formatted, total: formatted.length });
+          }
+        } catch (dbErr) {
+          console.warn("MySQL videos/list fallback to local store:", dbErr);
+        }
+      }
+
       let filtered = [...store.videos];
       if (userId) {
         filtered = filtered.filter((v) => v.user_id.toUpperCase() === userId.trim().toUpperCase());
@@ -1728,6 +1813,14 @@ export async function handleApiRequest(
             v.creator_name.toLowerCase().includes(s),
         );
       }
+
+      // Prioritize promoted videos at top of feeds
+      filtered.sort((a, b) => {
+        const pA = a.is_promoted ? 1 : 0;
+        const pB = b.is_promoted ? 1 : 0;
+        if (pA !== pB) return pB - pA;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
 
       const formatted = filtered.map((v) => ({
         ...v,
@@ -1754,6 +1847,63 @@ export async function handleApiRequest(
   if (route === "videos/get") {
     if (method === "GET") {
       const id = url.searchParams.get("id");
+      if (!id) return jsonResponse({ success: false, error: "Missing video id" }, 400);
+
+      const pool = getMysqlPool();
+      if (pool) {
+        try {
+          const [rows] = (await pool.query(
+            "SELECT * FROM uploaded_videos WHERE id = ? LIMIT 1",
+            [id],
+          )) as any;
+          if (Array.isArray(rows) && rows.length > 0) {
+            const r = rows[0];
+            return jsonResponse({
+              success: true,
+              video: {
+                id: String(r.id),
+                userId: r.user_id,
+                user_id: r.user_id,
+                creatorName: r.creator_name,
+                creator_name: r.creator_name,
+                title: r.title,
+                description: r.description || "",
+                videoUrl: r.video_url,
+                video_url: r.video_url,
+                thumbnailUrl: r.thumbnail_url || "",
+                thumbnail_url: r.thumbnail_url || "",
+                videoType: r.video_type,
+                video_type: r.video_type,
+                contentType: r.content_type,
+                content_type: r.content_type,
+                category: r.category || "General",
+                duration: r.duration || "0:00",
+                views: Number(r.views) || 0,
+                likes: Number(r.likes) || 0,
+                paymentStatus: r.payment_status,
+                payment_status: r.payment_status,
+                paymentId: r.payment_id,
+                payment_id: r.payment_id,
+                paymentAmount: Number(r.payment_amount) || 0,
+                payment_amount: Number(r.payment_amount) || 0,
+                isPromoted: Boolean(r.is_promoted),
+                is_promoted: Boolean(r.is_promoted),
+                promotionPlan: r.promotion_plan,
+                promotion_plan: r.promotion_plan,
+                promotionExpiresAt: r.promotion_expires_at,
+                promotion_expires_at: r.promotion_expires_at,
+                createdAt: r.created_at,
+                created_at: r.created_at,
+                updatedAt: r.updated_at,
+                updated_at: r.updated_at,
+              },
+            });
+          }
+        } catch (_dbErr) {
+          // fallback
+        }
+      }
+
       const v = store.videos.find((item) => item.id === id);
       if (v) {
         return jsonResponse({
@@ -1784,37 +1934,79 @@ export async function handleApiRequest(
   if (route === "videos/create") {
     if (method === "POST") {
       const body = await request.json();
+      const title = (body.title || "").trim();
+      const videoUrl = (body.video_url || body.videoUrl || "").trim();
+
+      if (!title) {
+        return jsonResponse({ success: false, error: "Video title is required." }, 400);
+      }
+      if (!videoUrl) {
+        return jsonResponse({ success: false, error: "Video URL is required." }, 400);
+      }
+
       const newVideo = {
         id: body.id || `vid-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         user_id: body.user_id || body.userId || "FT102857",
         creator_name: body.creator_name || body.creatorName || "FaceTube Creator",
-        title: body.title || "Untitled Video",
-        description: body.description || "",
-        video_url:
-          body.video_url ||
-          body.videoUrl ||
-          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+        title,
+        description: (body.description || "").trim(),
+        video_url: videoUrl,
         thumbnail_url:
           body.thumbnail_url ||
           body.thumbnailUrl ||
           "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60",
         video_type: (body.video_type || body.videoType || "free") as "free" | "premium",
-        content_type: (body.content_type || body.contentType || "short") as "short" | "long",
+        content_type: (body.content_type || body.contentType || "long") as "short" | "long",
         category: body.category || "General",
         duration: body.duration || "1:00",
         views: 0,
         likes: 0,
-        payment_status: (body.payment_status || body.paymentStatus || "not_required") as
+        payment_status: (body.payment_status || body.paymentStatus || (body.video_type === "premium" ? "pending" : "not_required")) as
           "not_required" | "pending" | "paid" | "failed",
-        payment_id: body.payment_id || body.paymentId,
+        payment_id: body.payment_id || body.paymentId || undefined,
         payment_amount: Number(body.payment_amount || body.paymentAmount) || 0,
         is_promoted: Boolean(body.is_promoted || body.isPromoted),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
+
+      // Persist to MySQL uploaded_videos table if pool is configured
+      const pool = getMysqlPool();
+      if (pool) {
+        try {
+          await pool.query(
+            `INSERT INTO uploaded_videos (
+              id, user_id, creator_name, title, description, video_url, thumbnail_url,
+              video_type, content_type, category, duration, views, likes,
+              payment_status, payment_id, payment_amount, is_promoted,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, NOW(), NOW())`,
+            [
+              newVideo.id,
+              newVideo.user_id,
+              newVideo.creator_name,
+              newVideo.title,
+              newVideo.description,
+              newVideo.video_url,
+              newVideo.thumbnail_url,
+              newVideo.video_type,
+              newVideo.content_type,
+              newVideo.category,
+              newVideo.duration,
+              newVideo.payment_status,
+              newVideo.payment_id || null,
+              newVideo.payment_amount,
+              newVideo.is_promoted ? 1 : 0,
+            ],
+          );
+        } catch (dbErr: any) {
+          console.warn("MySQL uploaded_videos insert warning:", dbErr?.message);
+        }
+      }
+
       store.videos.unshift(newVideo);
       saveStore(store);
-      return jsonResponse({ success: true, video: newVideo });
+      return jsonResponse({ success: true, video: newVideo }, 201);
     }
   }
 
@@ -1825,6 +2017,14 @@ export async function handleApiRequest(
       if (vid) {
         vid.likes = (vid.likes || 0) + 1;
         saveStore(store);
+
+        const pool = getMysqlPool();
+        if (pool) {
+          try {
+            await pool.query("UPDATE uploaded_videos SET likes = likes + 1 WHERE id = ?", [body.videoId]);
+          } catch (_e) {}
+        }
+
         return jsonResponse({ success: true, liked: true, likes: vid.likes });
       }
       return jsonResponse({ success: false, error: "Video not found" }, 404);
@@ -1871,20 +2071,181 @@ export async function handleApiRequest(
   if (route === "videos/promote") {
     if (method === "POST") {
       const body = await request.json();
-      const vid = store.videos.find((v) => v.id === body.videoId);
+      const videoId = body.videoId || body.video_id;
+      if (!videoId) return jsonResponse({ success: false, error: "Missing videoId" }, 400);
+
+      const days = Number(body.durationDays || body.duration_days) || 30;
+      const planId = body.planId || body.plan_id || "plan-monthly";
+      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
+      const pool = getMysqlPool();
+      if (pool) {
+        try {
+          await pool.query(
+            "UPDATE uploaded_videos SET is_promoted = 1, promotion_plan = ?, promotion_expires_at = ?, updated_at = NOW() WHERE id = ?",
+            [planId, expiresAt, videoId],
+          );
+        } catch (dbErr) {
+          console.warn("MySQL promote error:", dbErr);
+        }
+      }
+
+      const vid = store.videos.find((v) => v.id === videoId);
       if (vid) {
         vid.is_promoted = true;
-        vid.promotion_plan = body.planId;
-        const days = Number(body.durationDays) || 30;
-        vid.promotion_expires_at = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+        vid.promotion_plan = planId;
+        vid.promotion_expires_at = expiresAt;
         saveStore(store);
-        return jsonResponse({
-          success: true,
-          message: "Video promoted successfully",
-          promotionExpiresAt: vid.promotion_expires_at,
-        });
       }
-      return jsonResponse({ success: false, error: "Video not found" }, 404);
+
+      return jsonResponse({
+        success: true,
+        message: "Video promoted successfully.",
+        promotionExpiresAt: expiresAt,
+      });
+    }
+  }
+
+  // 6. Media File Uploads (Videos & Images)
+  if (route === "uploads/video") {
+    if (method === "POST") {
+      try {
+        const formData = await request.formData();
+        const file = formData.get("video");
+
+        if (!file || typeof file === "string") {
+          return jsonResponse(
+            { success: false, error: "No video file found in upload request. Field 'video' is required." },
+            400,
+          );
+        }
+
+        const videoFile = file as File;
+        const origName = videoFile.name || "video.mp4";
+        const ext = path.extname(origName).toLowerCase().replace(/^\./, "") || "mp4";
+        const allowedExts = ["mp4", "webm", "ogg", "mov", "m4v", "mkv"];
+
+        if (!allowedExts.includes(ext)) {
+          return jsonResponse(
+            {
+              success: false,
+              error: `Unsupported video format '.${ext}'. Supported formats are MP4, WebM, OGG, MOV, M4V.`,
+            },
+            400,
+          );
+        }
+
+        const maxSizeBytes = 250 * 1024 * 1024; // 250 MB
+        if (videoFile.size <= 0) {
+          return jsonResponse({ success: false, error: "Uploaded video file is empty (0 bytes)." }, 400);
+        }
+        if (videoFile.size > maxSizeBytes) {
+          return jsonResponse(
+            { success: false, error: "Video file size exceeds maximum permitted limit of 250MB." },
+            400,
+          );
+        }
+
+        const uploadDir = path.resolve(process.cwd(), "uploads", "videos");
+        await fs.promises.mkdir(uploadDir, { recursive: true });
+
+        const uniqueName = `vid_${Date.now()}_${crypto.randomBytes(6).toString("hex")}.${ext}`;
+        const targetPath = path.join(uploadDir, uniqueName);
+        const arrayBuf = await videoFile.arrayBuffer();
+        await fs.promises.writeFile(targetPath, Buffer.from(arrayBuf));
+
+        const fileSizeMb = `${(videoFile.size / (1024 * 1024)).toFixed(2)} MB`;
+
+        return jsonResponse(
+          {
+            success: true,
+            url: `/uploads/videos/${uniqueName}`,
+            fileName: uniqueName,
+            format: ext,
+            fileSize: fileSizeMb,
+            sizeBytes: videoFile.size,
+            uploadedAt: new Date().toISOString(),
+          },
+          201,
+        );
+      } catch (uploadErr: any) {
+        console.error("Video upload server error:", uploadErr);
+        return jsonResponse(
+          { success: false, error: "Server failed to process video upload: " + (uploadErr?.message || "Unknown error") },
+          500,
+        );
+      }
+    }
+  }
+
+  if (route === "uploads/image") {
+    if (method === "POST") {
+      try {
+        const formData = await request.formData();
+        const file = formData.get("image");
+
+        if (!file || typeof file === "string") {
+          return jsonResponse(
+            { success: false, error: "No image file found in upload request. Field 'image' is required." },
+            400,
+          );
+        }
+
+        const imgFile = file as File;
+        const origName = imgFile.name || "image.jpg";
+        const ext = path.extname(origName).toLowerCase().replace(/^\./, "") || "jpg";
+        const allowedExts = ["jpg", "jpeg", "png", "webp"];
+
+        if (!allowedExts.includes(ext)) {
+          return jsonResponse(
+            {
+              success: false,
+              error: `Unsupported image format '.${ext}'. Supported formats are JPG, JPEG, PNG, WEBP.`,
+            },
+            400,
+          );
+        }
+
+        const maxSizeBytes = 25 * 1024 * 1024; // 25 MB
+        if (imgFile.size <= 0) {
+          return jsonResponse({ success: false, error: "Uploaded image file is empty." }, 400);
+        }
+        if (imgFile.size > maxSizeBytes) {
+          return jsonResponse(
+            { success: false, error: "Image file exceeds maximum permitted limit of 25MB." },
+            400,
+          );
+        }
+
+        const uploadDir = path.resolve(process.cwd(), "uploads", "images");
+        await fs.promises.mkdir(uploadDir, { recursive: true });
+
+        const uniqueName = `img_${Date.now()}_${crypto.randomBytes(6).toString("hex")}.${ext}`;
+        const targetPath = path.join(uploadDir, uniqueName);
+        const arrayBuf = await imgFile.arrayBuffer();
+        await fs.promises.writeFile(targetPath, Buffer.from(arrayBuf));
+
+        const fileSizeMb = `${(imgFile.size / (1024 * 1024)).toFixed(2)} MB`;
+
+        return jsonResponse(
+          {
+            success: true,
+            url: `/uploads/images/${uniqueName}`,
+            fileName: uniqueName,
+            format: ext,
+            fileSize: fileSizeMb,
+            sizeBytes: imgFile.size,
+            uploadedAt: new Date().toISOString(),
+          },
+          201,
+        );
+      } catch (uploadErr: any) {
+        console.error("Image upload server error:", uploadErr);
+        return jsonResponse(
+          { success: false, error: "Server failed to process image upload: " + (uploadErr?.message || "Unknown error") },
+          500,
+        );
+      }
     }
   }
 
