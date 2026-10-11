@@ -127,6 +127,74 @@ if ($purpose === 'ads_promotion') {
 
 $amount = $expectedAmount;
 
+// Confirm payment status with Razorpay Payments API
+$keyId = getenv('RAZORPAY_KEY_ID') ?: ($_ENV['RAZORPAY_KEY_ID'] ?? ($_SERVER['RAZORPAY_KEY_ID'] ?? ''));
+if (!empty($keyId)) {
+    $ch = curl_init("https://api.razorpay.com/v1/payments/{$paymentId}");
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_USERPWD => "{$keyId}:{$secret}",
+        CURLOPT_TIMEOUT => 15,
+    ]);
+    $pResp = curl_exec($ch);
+    $pCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $pErr = curl_error($ch);
+    curl_close($ch);
+
+    if ($pResp === false || $pCode < 200 || $pCode >= 300) {
+        jsonResponse([
+            'verified' => false,
+            'paymentId' => $paymentId,
+            'orderId' => $orderId,
+            'error' => 'Razorpay payment confirmation failed with gateway: ' . ($pErr ?: $pResp),
+        ], 400);
+    }
+
+    $pData = json_decode($pResp, true);
+    if (!empty($pData['order_id']) && $pData['order_id'] !== $orderId) {
+        jsonResponse([
+            'verified' => false,
+            'error' => "Razorpay payment order mismatch (expected {$orderId}, received {$pData['order_id']})",
+        ], 400);
+    }
+
+    $expectedSubunits = (int)round($amount * 100);
+    if ((int)($pData['amount'] ?? 0) !== $expectedSubunits) {
+        jsonResponse([
+            'verified' => false,
+            'error' => "Razorpay payment amount mismatch (expected ₹{$amount}, received " . (($pData['amount'] ?? 0) / 100) . ")",
+        ], 400);
+    }
+
+    if (($pData['currency'] ?? '') !== 'INR') {
+        jsonResponse([
+            'verified' => false,
+            'error' => 'Razorpay payment currency mismatch: expected INR',
+        ], 400);
+    }
+
+    if ($pData['status'] !== 'captured' && $pData['status'] !== 'authorized') {
+        jsonResponse([
+            'verified' => false,
+            'error' => "Razorpay payment status is not successful (status: {$pData['status']})",
+        ], 400);
+    }
+
+    if ($pData['status'] === 'authorized') {
+        $capCh = curl_init("https://api.razorpay.com/v1/payments/{$paymentId}/capture");
+        curl_setopt_array($capCh, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_USERPWD => "{$keyId}:{$secret}",
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_POSTFIELDS => json_encode(['amount' => $expectedSubunits, 'currency' => 'INR']),
+            CURLOPT_TIMEOUT => 15,
+        ]);
+        curl_exec($capCh);
+        curl_close($capCh);
+    }
+}
+
 // If videoId is provided, verify it exists and belongs to the uploading user
 if (!empty($videoId)) {
     $stmtVidCheck = $pdo->prepare('SELECT id, user_id, video_type, payment_status FROM uploaded_videos WHERE id = ? LIMIT 1');

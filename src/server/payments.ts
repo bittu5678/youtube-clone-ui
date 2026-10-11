@@ -267,10 +267,14 @@ export interface PaymentVerifyResult {
 /**
  * Creates a server-side payment order (compatible with Razorpay Test Mode)
  */
-export function createServerPaymentOrder(
+/**
+ * Creates a server-side payment order with Razorpay Orders API
+ * Fails closed if real credentials are not configured in environment variables.
+ */
+export async function createServerPaymentOrder(
   req: PaymentOrderRequest,
   env?: Record<string, string | undefined>,
-): PaymentOrderResult {
+): Promise<PaymentOrderResult> {
   let amount = 0;
 
   if (req.purpose === "premium_video_upload") {
@@ -280,18 +284,68 @@ export function createServerPaymentOrder(
     amount = plan ? plan.price : PRICING_CONFIG.ADS_PROMOTION["plan-monthly"].price;
   }
 
-  const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-  const keyId =
-    env?.["RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"] || "rzp_test_facetube_demo_key";
+  const keyId = env?.["RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"];
+  const keySecret = env?.["RAZORPAY_KEY_SECRET"] || process.env["RAZORPAY_KEY_SECRET"];
+
+  if (!keyId || !keySecret) {
+    throw new Error(
+      "Razorpay credentials (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET) are not configured on the server. Real payments cannot be initiated until valid credentials are provided.",
+    );
+  }
+
+  const amountInSubunits = Math.round(amount * 100);
+
+  // If running in a test suite where live calls are bypassed
+  const skipRemote = Boolean(
+    env?.["RAZORPAY_SKIP_REMOTE_CHECK"] || process.env["RAZORPAY_SKIP_REMOTE_CHECK"],
+  );
+
+  let orderId: string;
+  if (skipRemote) {
+    orderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  } else {
+    try {
+      const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
+      const response = await fetch("https://api.razorpay.com/v1/orders", {
+        method: "POST",
+        headers: {
+          Authorization: authHeader,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: amountInSubunits,
+          currency: "INR",
+          receipt: `rcpt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          notes: {
+            purpose: req.purpose,
+            userId: req.userId,
+            userName: req.userName || "Creator",
+            videoId: req.videoId || "",
+            planId: req.planId || "",
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Razorpay API responded with ${response.status}: ${errorText}`);
+      }
+
+      const orderData = (await response.json()) as { id: string };
+      orderId = orderData.id;
+    } catch (err: any) {
+      throw new Error(`Failed to create Razorpay order: ${err?.message || "Gateway error"}`);
+    }
+  }
 
   return {
     orderId,
     amount,
-    amountInSubunits: Math.round(amount * 100),
+    amountInSubunits,
     currency: "INR",
     purpose: req.purpose,
     keyId,
-    isSandbox: true,
+    isSandbox: keyId.startsWith("rzp_test_"),
     metadata: {
       userId: req.userId,
       userName: req.userName,
@@ -305,6 +359,11 @@ export function createServerPaymentOrder(
 
 /**
  * Server-side payment verification and distribution logic with atomic, persistent transaction sequence.
+ * 1. Checks RAZORPAY_KEY_SECRET and strictly fails closed if missing.
+ * 2. Rejects mock signatures or bypass tokens.
+ * 3. Verifies cryptographic HMAC-SHA256 signature.
+ * 4. Confirms payment status and amount with Razorpay API (GET /v1/payments/{paymentId}).
+ * 5. Deduplicates under lock to prevent double crediting.
  */
 export async function verifyServerPayment(
   req: PaymentVerifyRequest,
@@ -312,9 +371,10 @@ export async function verifyServerPayment(
   referrerUserId?: string | null,
   env?: Record<string, string | undefined>,
 ): Promise<PaymentVerifyResult> {
+  const keyId = env?.["RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"];
   const secretKey = env?.["RAZORPAY_KEY_SECRET"] || process.env["RAZORPAY_KEY_SECRET"];
 
-  // Strictly fail closed if secret key is missing or signature is not provided
+  // Strictly fail closed if secret key is missing
   if (!secretKey) {
     return {
       verified: false,
@@ -342,7 +402,7 @@ export async function verifyServerPayment(
     };
   }
 
-  // Cryptographic HMAC signature check
+  // 1. Cryptographic HMAC signature check
   try {
     const generatedSignature = crypto
       .createHmac("sha256", secretKey)
@@ -368,6 +428,128 @@ export async function verifyServerPayment(
       purpose: req.purpose,
       error: `Signature calculation error: ${err?.message || "Unknown error"}`,
     };
+  }
+
+  // Determine expected amount in subunits
+  const expectedAmount =
+    req.purpose === "premium_video_upload"
+      ? PRICING_CONFIG.PREMIUM_VIDEO.TOTAL_PRICE // ₹6.00
+      : PRICING_CONFIG.ADS_PROMOTION[(req.metadata?.["planId"] as AdsPlanId) || "plan-monthly"]
+          ?.price || 300;
+  const expectedPaise = Math.round(expectedAmount * 100);
+
+  // 2. Real Razorpay API Confirmation
+  const skipRemote = Boolean(
+    env?.["RAZORPAY_SKIP_REMOTE_CHECK"] || process.env["RAZORPAY_SKIP_REMOTE_CHECK"],
+  );
+
+  if (keyId && !skipRemote) {
+    try {
+      const authHeader = `Basic ${Buffer.from(`${keyId}:${secretKey}`).toString("base64")}`;
+      const rzpRes = await fetch(`https://api.razorpay.com/v1/payments/${req.paymentId}`, {
+        method: "GET",
+        headers: { Authorization: authHeader },
+      });
+
+      if (!rzpRes.ok) {
+        const errText = await rzpRes.text();
+        return {
+          verified: false,
+          paymentId: req.paymentId,
+          orderId: req.orderId,
+          amount: 0,
+          purpose: req.purpose,
+          error: `Razorpay payment confirmation failed with status ${rzpRes.status}: ${errText}`,
+        };
+      }
+
+      const pData = (await rzpRes.json()) as {
+        id: string;
+        order_id: string;
+        status: string;
+        amount: number;
+        currency: string;
+      };
+
+      if (pData.order_id && pData.order_id !== req.orderId) {
+        return {
+          verified: false,
+          paymentId: req.paymentId,
+          orderId: req.orderId,
+          amount: 0,
+          purpose: req.purpose,
+          error: `Razorpay payment order mismatch (expected ${req.orderId}, received ${pData.order_id})`,
+        };
+      }
+
+      if (pData.amount !== expectedPaise) {
+        return {
+          verified: false,
+          paymentId: req.paymentId,
+          orderId: req.orderId,
+          amount: 0,
+          purpose: req.purpose,
+          error: `Razorpay payment amount mismatch: expected ₹${expectedAmount}, got ₹${pData.amount / 100}`,
+        };
+      }
+
+      if (pData.currency !== "INR") {
+        return {
+          verified: false,
+          paymentId: req.paymentId,
+          orderId: req.orderId,
+          amount: 0,
+          purpose: req.purpose,
+          error: `Razorpay payment currency mismatch: expected INR, received ${pData.currency}`,
+        };
+      }
+
+      if (pData.status !== "captured" && pData.status !== "authorized") {
+        return {
+          verified: false,
+          paymentId: req.paymentId,
+          orderId: req.orderId,
+          amount: 0,
+          purpose: req.purpose,
+          error: `Razorpay payment status is not successful (status: ${pData.status})`,
+        };
+      }
+
+      // If authorized, auto-capture to settle
+      if (pData.status === "authorized") {
+        const capRes = await fetch(
+          `https://api.razorpay.com/v1/payments/${req.paymentId}/capture`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: authHeader,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ amount: expectedPaise, currency: "INR" }),
+          },
+        );
+        if (!capRes.ok) {
+          const capErr = await capRes.text();
+          return {
+            verified: false,
+            paymentId: req.paymentId,
+            orderId: req.orderId,
+            amount: 0,
+            purpose: req.purpose,
+            error: `Failed to capture authorized Razorpay payment: ${capErr}`,
+          };
+        }
+      }
+    } catch (fetchErr: any) {
+      return {
+        verified: false,
+        paymentId: req.paymentId,
+        orderId: req.orderId,
+        amount: 0,
+        purpose: req.purpose,
+        error: `Razorpay remote API connection error: ${fetchErr?.message || "Network error"}`,
+      };
+    }
   }
 
   // Atomic critical section for sequence allocation & duplicate prevention

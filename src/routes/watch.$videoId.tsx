@@ -294,7 +294,8 @@ function WatchPage() {
 
           <div className="mt-5 rounded-2xl bg-secondary/70 p-4">
             <p className="text-sm font-semibold">
-              {video.views} · {video.age} · <span className="text-brand">#{video.category}</span>
+              {video.views} · {video.age} ·{" "}
+              <span className="text-brand">#{video.category || "General"}</span>
             </p>
             <p
               className={`mt-2 text-sm leading-relaxed text-foreground/85 ${

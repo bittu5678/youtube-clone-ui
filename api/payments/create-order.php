@@ -32,13 +32,65 @@ if ($purpose === 'ads_promotion') {
     $amount = $pricing[$planId] ?? 300.00;
 }
 
-$orderId = 'order_' . round(microtime(true) * 1000) . '_' . substr(md5(random_bytes(6)), 0, 7);
-$keyId = getenv('RAZORPAY_KEY_ID') ?: 'rzp_test_facetube_demo_key';
+$keyId = getenv('RAZORPAY_KEY_ID') ?: ($_ENV['RAZORPAY_KEY_ID'] ?? ($_SERVER['RAZORPAY_KEY_ID'] ?? ''));
+$keySecret = getenv('RAZORPAY_KEY_SECRET') ?: ($_ENV['RAZORPAY_KEY_SECRET'] ?? ($_SERVER['RAZORPAY_KEY_SECRET'] ?? ''));
+
+if (empty($keyId) || empty($keySecret)) {
+    jsonResponse([
+        'success' => false,
+        'error' => 'Razorpay credentials (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET) are not configured on the server. Real payments cannot be initiated until credentials are configured.'
+    ], 503);
+}
+
+$amountInSubunits = (int)round($amount * 100);
+
+// Call real Razorpay Orders API
+$ch = curl_init('https://api.razorpay.com/v1/orders');
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST => true,
+    CURLOPT_USERPWD => "{$keyId}:{$keySecret}",
+    CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+    CURLOPT_POSTFIELDS => json_encode([
+        'amount' => $amountInSubunits,
+        'currency' => 'INR',
+        'receipt' => 'rcpt_' . round(microtime(true) * 1000) . '_' . substr(md5(random_bytes(6)), 0, 7),
+        'notes' => [
+            'purpose' => $purpose,
+            'userId' => $userId,
+            'userName' => $userName,
+            'videoId' => $videoId,
+            'contentType' => $contentType,
+            'planId' => $planId,
+        ],
+    ]),
+    CURLOPT_TIMEOUT => 15,
+]);
+
+$response = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curlErr = curl_error($ch);
+curl_close($ch);
+
+if ($response === false || $httpCode < 200 || $httpCode >= 300) {
+    jsonResponse([
+        'success' => false,
+        'error' => 'Failed to create real Razorpay order with gateway API: ' . ($curlErr ?: $response),
+    ], 502);
+}
+
+$orderData = json_decode($response, true);
+if (empty($orderData['id'])) {
+    jsonResponse([
+        'success' => false,
+        'error' => 'Invalid order response returned by Razorpay API'
+    ], 502);
+}
 
 $result = [
-    'orderId' => $orderId,
+    'orderId' => $orderData['id'],
     'amount' => $amount,
-    'amountInSubunits' => (int)round($amount * 100),
+    'amountInSubunits' => (int)($orderData['amount'] ?? $amountInSubunits),
     'currency' => 'INR',
     'purpose' => $purpose,
     'keyId' => $keyId,

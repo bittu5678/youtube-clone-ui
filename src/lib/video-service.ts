@@ -6,6 +6,8 @@ export type VideoPaymentStatus = "not_required" | "pending" | "paid" | "failed";
 export type VideoPromotionStatus = "none" | "active" | "expired";
 
 export const VIDEO_CATEGORIES = [
+  "Cartoon",
+  "Agriculture",
   "Motivational",
   "Comedy",
   "Blog",
@@ -202,6 +204,53 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     isPromoted: false,
     createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  // 7. Free Long Video - Cartoon Category
+  {
+    id: "vid-seed-007",
+    userId: "FT483921",
+    creatorName: "Animation Studio X",
+    title: "The Great Forest Mystery — Animated Cartoon Adventure",
+    description:
+      "Classic animated adventure featuring funny cartoon characters, slapstick comedy, and heartwarming moments for all ages.",
+    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=60",
+    videoType: "free",
+    contentType: "long",
+    category: "Cartoon",
+    duration: "14:20",
+    views: 89000,
+    likes: 6700,
+    paymentStatus: "not_required",
+    paymentAmount: 0,
+    isPromoted: false,
+    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  // 8. Free Long Video - Agriculture Category
+  {
+    id: "vid-seed-008",
+    userId: "FT483921",
+    creatorName: "Green Earth Agri",
+    title: "Smart Organic Farming & High-Yield Agriculture Techniques",
+    description:
+      "Modern agricultural technologies, organic drip irrigation, soil health management, and sustainable crop cultivation techniques.",
+    videoUrl:
+      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=800&auto=format&fit=crop&q=60",
+    videoType: "free",
+    contentType: "long",
+    category: "Agriculture",
+    duration: "21:45",
+    views: 54000,
+    likes: 4300,
+    paymentStatus: "not_required",
+    paymentAmount: 0,
+    isPromoted: false,
+    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
   },
 ];
 

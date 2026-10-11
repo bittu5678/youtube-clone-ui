@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { Flame, Sparkles, Clock3, BadgeCheck, Search, SearchX } from "lucide-react";
 
@@ -27,8 +27,9 @@ import {
 } from "@/lib/image-service";
 
 export const Route = createFileRoute("/")({
-  validateSearch: (search: Record<string, unknown>): { q?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { q?: string; category?: string } => ({
     q: typeof search.q === "string" ? search.q : undefined,
+    category: typeof search.category === "string" ? search.category : undefined,
   }),
   head: () => ({
     meta: [
@@ -74,9 +75,10 @@ function SectionHeading({
 
 function Index() {
   const searchParams = Route.useSearch();
+  const navigate = useNavigate();
   const [railOpen, setRailOpen] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [activeCategory, setActiveCategory] = useState(searchParams.category || "All");
   const [query, setQuery] = useState(searchParams.q || "");
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
 
@@ -85,6 +87,23 @@ function Index() {
       setQuery(searchParams.q);
     }
   }, [searchParams.q]);
+
+  useEffect(() => {
+    if (searchParams.category !== undefined) {
+      setActiveCategory(searchParams.category || "All");
+    }
+  }, [searchParams.category]);
+
+  const handleSelectCategory = (cat: string) => {
+    setActiveCategory(cat);
+    navigate({
+      to: "/",
+      search: (prev: any) => ({
+        ...prev,
+        category: cat === "All" ? undefined : cat,
+      }),
+    });
+  };
 
   // Load uploaded images from storage/database
   useEffect(() => {
@@ -104,13 +123,15 @@ function Index() {
     const seen = new Set<string>();
     return allVideos.filter((v) => {
       if (seen.has(v.title)) return false;
-      const matchesCategory = activeCategory === "All" || v.category === activeCategory;
+      const vCat = (v.category || "General").trim();
+      const matchesCategory =
+        activeCategory === "All" || vCat.toLowerCase() === activeCategory.toLowerCase();
       const matchesQuery =
         q.length === 0 ||
-        v.title.toLowerCase().includes(q) ||
-        v.channel.toLowerCase().includes(q) ||
-        v.category.toLowerCase().includes(q) ||
-        v.description.toLowerCase().includes(q);
+        (v.title && v.title.toLowerCase().includes(q)) ||
+        (v.channel && v.channel.toLowerCase().includes(q)) ||
+        (vCat && vCat.toLowerCase().includes(q)) ||
+        (v.description && v.description.toLowerCase().includes(q));
       if (!matchesCategory || !matchesQuery) return false;
       seen.add(v.title);
       return true;
@@ -168,10 +189,10 @@ function Index() {
                 <button
                   key={c}
                   type="button"
-                  onClick={() => setActiveCategory(c)}
+                  onClick={() => handleSelectCategory(c)}
                   className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
                     activeCategory === c
-                      ? "bg-foreground text-background shadow-card"
+                      ? "bg-foreground text-background shadow-card font-semibold"
                       : "bg-secondary text-foreground/75 hover:-translate-y-0.5 hover:bg-brand/10 hover:text-brand"
                   }`}
                 >
@@ -234,7 +255,7 @@ function Index() {
                       type="button"
                       onClick={() => {
                         setQuery("");
-                        setActiveCategory("All");
+                        handleSelectCategory("All");
                       }}
                       className="mt-5 rounded-full bg-brand px-5 py-2 text-sm font-semibold text-brand-foreground transition hover:bg-brand-dark"
                     >

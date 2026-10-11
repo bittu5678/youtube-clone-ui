@@ -106,7 +106,7 @@ export async function initiatePremiumVideoPayment(
     params.videoId || `vid-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
   try {
-    // 1. Create Order via PHP REST API
+    // 1. Create real Order via server API (fails closed if credentials missing)
     let orderData: {
       orderId: string;
       amount: number;
@@ -123,6 +123,14 @@ export async function initiatePremiumVideoPayment(
         videoId: effectiveVideoId,
         contentType: params.contentType,
       });
+
+      if (!res?.orderId || !res?.keyId) {
+        throw new Error(
+          (res as any)?.error ||
+            "Server did not return a valid Razorpay order ID or Key ID. Please check server Razorpay configuration.",
+        );
+      }
+
       orderData = {
         orderId: res.orderId,
         amount: res.amount,
@@ -130,18 +138,21 @@ export async function initiatePremiumVideoPayment(
         currency: res.currency,
         keyId: res.keyId,
       };
-    } catch (_e) {
-      // Fallback order generation for client resilience
-      orderData = {
-        orderId: `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        amount: 6,
-        amountInSubunits: 600, // ₹6 in paise
-        currency: "INR",
-        keyId: "rzp_test_facetube_demo",
-      };
+    } catch (orderErr: any) {
+      params.onFailure(
+        orderErr?.message ||
+          "Could not create Razorpay payment order. Real Razorpay credentials (RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET) must be configured in server environment.",
+      );
+      return;
     }
 
     const scriptLoaded = await loadRazorpayScript();
+    if (!scriptLoaded || !window.Razorpay) {
+      params.onFailure(
+        "Razorpay checkout SDK could not be loaded. Please check your internet connection.",
+      );
+      return;
+    }
 
     // 2. Setup checkout handler
     const handlePaymentCompletion = async (
@@ -149,51 +160,32 @@ export async function initiatePremiumVideoPayment(
       orderId: string,
       signature?: string,
     ) => {
+      if (!signature) {
+        params.onFailure(
+          "Payment signature missing from Razorpay checkout response. Verification aborted.",
+        );
+        return;
+      }
+
       try {
-        // Server-side verification with atomic persistent sequence allocation in PHP MySQL
-        let verifyResult: {
-          verified: boolean;
-          txNumber?: number;
-          isSpecialTransaction?: boolean;
-          specialTag?: "SPECIAL_GLOBAL_RULE" | "NORMAL_PREMIUM" | string;
-          distribution?: {
-            directReferralAmount: number;
-            referrerId?: string | null;
-            adminAmount: number;
-            globalPoolAmount: number;
-            eligibleMembersCount: number;
-            perMemberShare: number;
-          };
-        } = { verified: true };
+        // Server-side cryptographic HMAC & API verification
+        const res = await api.payments.verify({
+          orderId,
+          paymentId,
+          signature,
+          userId: effectiveUserId,
+          userName: effectiveUserName,
+          videoId: effectiveVideoId,
+          purpose: "premium_video_upload",
+          referrerUserId: params.directReferrerId,
+        });
 
-        try {
-          const res = await api.payments.verify({
-            orderId,
-            paymentId,
-            signature: signature || "mock_signature_bypass",
-            userId: effectiveUserId,
-            userName: effectiveUserName,
-            videoId: effectiveVideoId,
-            purpose: "premium_video_upload",
-            referrerUserId: params.directReferrerId,
-          });
-          verifyResult = {
-            verified: res.verified,
-            txNumber: res.txNumber,
-            isSpecialTransaction: res.isSpecialTransaction,
-            specialTag: res.specialTag,
-            distribution: res.distribution,
-          };
-        } catch (_e) {
-          // Fallback
-        }
-
-        if (!verifyResult.verified) {
-          params.onFailure("Payment verification failed. Please try again.");
+        if (!res?.verified) {
+          params.onFailure(res?.error || "Payment verification failed on the server.");
           return;
         }
 
-        // 3. Save uploaded video with paid status
+        // 3. Save uploaded video with verified paid status
         const newVideo = await recordNewVideoUpload({
           userId: effectiveUserId,
           creatorName: effectiveUserName,
@@ -206,64 +198,60 @@ export async function initiatePremiumVideoPayment(
           paymentAmount: 6,
         });
 
-        // 4. Distribute income according to verified distribution & special rules
-        await distributePremiumVideoIncome({
-          uploaderUserId: effectiveUserId,
-          uploaderName: effectiveUserName,
-          videoId: newVideo.id || effectiveVideoId,
-          paymentId,
-          txNumber: verifyResult.txNumber,
-          directReferrerId: params.directReferrerId,
-          isSpecialTransaction: verifyResult.isSpecialTransaction,
-          specialTag: verifyResult.specialTag,
-          adminAmount: verifyResult.distribution?.adminAmount,
-        });
+        // 4. Update local ledger cache if not a duplicate
+        if (!res.duplicate) {
+          await distributePremiumVideoIncome({
+            uploaderUserId: effectiveUserId,
+            uploaderName: effectiveUserName,
+            videoId: newVideo.id || effectiveVideoId,
+            paymentId,
+            txNumber: res.txNumber,
+            directReferrerId: params.directReferrerId,
+            isSpecialTransaction: res.isSpecialTransaction,
+            specialTag: res.specialTag,
+            adminAmount: res.distribution?.adminAmount,
+          });
+        }
 
         params.onSuccess(paymentId);
-      } catch (err: unknown) {
+      } catch (err: any) {
         console.error("Error finalizing premium payment:", err);
-        params.onFailure("Failed to complete video activation.");
+        params.onFailure(err?.message || "Failed to complete payment verification on server.");
       }
     };
 
-    if (scriptLoaded && window.Razorpay) {
-      const options: RazorpayOptions = {
-        key: orderData.keyId,
-        amount: orderData.amountInSubunits,
-        currency: "INR",
-        name: "FaceTube Creator Studio",
-        description: `Premium ${params.contentType === "short" ? "Short" : "Long"} Video Upload (₹5 Base + 18% GST + 2% PG = ₹6 Total)`,
-        image: "/favicon.ico",
-        order_id: orderData.orderId,
-        handler: (response) => {
-          handlePaymentCompletion(
-            response.razorpay_payment_id,
-            response.razorpay_order_id,
-            response.razorpay_signature,
-          );
+    const options: RazorpayOptions = {
+      key: orderData.keyId,
+      amount: orderData.amountInSubunits,
+      currency: "INR",
+      name: "FaceTube Creator Studio",
+      description: `Premium ${params.contentType === "short" ? "Short" : "Long"} Video Upload (₹5 Base + 18% GST + 2% PG = ₹6 Total)`,
+      image: "/favicon.ico",
+      order_id: orderData.orderId,
+      handler: (response) => {
+        handlePaymentCompletion(
+          response.razorpay_payment_id,
+          response.razorpay_order_id,
+          response.razorpay_signature,
+        );
+      },
+      prefill: {
+        name: params.userName,
+        email: params.userEmail || `${params.userId.toLowerCase()}@facetube.app`,
+        contact: params.userMobile || "9999999999",
+      },
+      theme: {
+        color: "#e11d48", // Brand color
+      },
+      modal: {
+        ondismiss: () => {
+          if (params.onCancel) params.onCancel();
         },
-        prefill: {
-          name: params.userName,
-          email: params.userEmail || `${params.userId.toLowerCase()}@facetube.app`,
-          contact: params.userMobile || "9999999999",
-        },
-        theme: {
-          color: "#e11d48", // Brand color
-        },
-        modal: {
-          ondismiss: () => {
-            if (params.onCancel) params.onCancel();
-          },
-        },
-      };
+      },
+    };
 
-      const rzp = new window.Razorpay(options);
-      rzp.open();
-    } else {
-      // Fallback sandbox test trigger for seamless developer preview
-      const simulatedPaymentId = `pay_test_${Date.now()}`;
-      await handlePaymentCompletion(simulatedPaymentId, orderData.orderId);
-    }
+    const rzp = new window.Razorpay(options);
+    rzp.open();
   } catch (err: unknown) {
     console.error("Razorpay initiation error:", err);
     params.onFailure("Could not initiate payment gateway.");
@@ -306,6 +294,14 @@ export async function initiateAdsPromotionPayment(params: {
         videoId: params.videoId,
         planId: params.planId,
       });
+
+      if (!res?.orderId || !res?.keyId) {
+        throw new Error(
+          (res as any)?.error ||
+            "Server did not return a valid Razorpay order ID or Key ID. Please check server Razorpay configuration.",
+        );
+      }
+
       orderData = {
         orderId: res.orderId,
         amount: res.amount,
@@ -313,37 +309,43 @@ export async function initiateAdsPromotionPayment(params: {
         currency: res.currency,
         keyId: res.keyId,
       };
-    } catch (_e) {
-      orderData = {
-        orderId: `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        amount: params.price,
-        amountInSubunits: Math.round(params.price * 100),
-        currency: "INR",
-        keyId: "rzp_test_facetube_demo",
-      };
+    } catch (orderErr: any) {
+      params.onFailure(
+        orderErr?.message ||
+          "Could not create Razorpay payment order. Real Razorpay credentials (RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET) must be configured in server environment.",
+      );
+      return;
     }
 
     const scriptLoaded = await loadRazorpayScript();
+    if (!scriptLoaded || !window.Razorpay) {
+      params.onFailure(
+        "Razorpay checkout SDK could not be loaded. Please check your internet connection.",
+      );
+      return;
+    }
 
     const handleAdsCompletion = async (paymentId: string, orderId: string, signature?: string) => {
-      try {
-        let verifyResult: { verified: boolean } = { verified: true };
-        try {
-          const res = await api.payments.verify({
-            orderId,
-            paymentId,
-            signature: signature || "mock_signature_bypass",
-            userId: params.userId,
-            purpose: "ads_promotion",
-            referrerUserId: params.directReferrerId,
-          });
-          verifyResult = { verified: res.verified };
-        } catch (_e) {
-          // Fallback
-        }
+      if (!signature) {
+        params.onFailure(
+          "Payment signature missing from Razorpay checkout response. Verification aborted.",
+        );
+        return;
+      }
 
-        if (!verifyResult.verified) {
-          params.onFailure("Payment verification failed.");
+      try {
+        const res = await api.payments.verify({
+          orderId,
+          paymentId,
+          signature,
+          userId: params.userId,
+          purpose: "ads_promotion",
+          referrerUserId: params.directReferrerId,
+          metadata: { planId: params.planId },
+        });
+
+        if (!res?.verified) {
+          params.onFailure(res?.error || "Payment verification failed on the server.");
           return;
         }
 
@@ -362,51 +364,46 @@ export async function initiateAdsPromotionPayment(params: {
           days: params.durationDays,
           price: params.price,
         });
-      } catch (err: unknown) {
+      } catch (err: any) {
         console.error("Error completing ads promotion:", err);
-        params.onFailure("Could not activate promotion.");
+        params.onFailure(err?.message || "Could not activate promotion.");
       }
     };
 
-    if (scriptLoaded && window.Razorpay) {
-      const options: RazorpayOptions = {
-        key: orderData.keyId,
-        amount: orderData.amountInSubunits,
-        currency: "INR",
-        name: "FaceTube Ads Promotions",
-        description: `Promotion Campaign: ${params.planName} (₹${params.price})`,
-        image: "/favicon.ico",
-        order_id: orderData.orderId,
-        handler: (response) => {
-          handleAdsCompletion(
-            response.razorpay_payment_id,
-            response.razorpay_order_id,
-            response.razorpay_signature,
-          );
+    const options: RazorpayOptions = {
+      key: orderData.keyId,
+      amount: orderData.amountInSubunits,
+      currency: "INR",
+      name: "FaceTube Ads Promotions",
+      description: `Promotion Campaign: ${params.planName} (₹${params.price})`,
+      image: "/favicon.ico",
+      order_id: orderData.orderId,
+      handler: (response) => {
+        handleAdsCompletion(
+          response.razorpay_payment_id,
+          response.razorpay_order_id,
+          response.razorpay_signature,
+        );
+      },
+      prefill: {
+        name: params.userName,
+        email: params.userEmail || `${params.userId.toLowerCase()}@facetube.app`,
+        contact: params.userMobile || "9999999999",
+      },
+      theme: {
+        color: "#10b981", // Emerald accent for ads promotion
+      },
+      modal: {
+        ondismiss: () => {
+          if (params.onCancel) params.onCancel();
         },
-        prefill: {
-          name: params.userName,
-          email: params.userEmail || `${params.userId.toLowerCase()}@facetube.app`,
-          contact: params.userMobile || "9999999999",
-        },
-        theme: {
-          color: "#10b981", // Emerald accent for ads promotion
-        },
-        modal: {
-          ondismiss: () => {
-            if (params.onCancel) params.onCancel();
-          },
-        },
-      };
+      },
+    };
 
-      const rzp = new window.Razorpay(options);
-      rzp.open();
-    } else {
-      const simulatedPaymentId = `pay_ads_${Date.now()}`;
-      await handleAdsCompletion(simulatedPaymentId, orderData.orderId);
-    }
-  } catch (err: unknown) {
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+  } catch (err: any) {
     console.error("Ads promotion error:", err);
-    params.onFailure("Could not initiate ads payment gateway.");
+    params.onFailure(err?.message || "Could not initiate ads payment gateway.");
   }
 }

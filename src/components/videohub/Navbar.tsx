@@ -811,6 +811,18 @@ export function Navbar({
                         Settings
                       </Link>
 
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileOpen(false);
+                          window.dispatchEvent(new CustomEvent("facetube:replay-splash"));
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-foreground transition hover:bg-secondary cursor-pointer"
+                      >
+                        <Sparkles className="h-4 w-4 text-brand" />
+                        Replay App Intro
+                      </button>
+
                       {isAdmin && (
                         <Link
                           to="/admin"

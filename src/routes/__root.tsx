@@ -14,6 +14,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "../lib/auth-context";
 import { ThemeProvider } from "../lib/theme-context";
 import { Toaster } from "@/components/ui/sonner";
+import { SplashScreen } from "@/components/videohub/SplashScreen";
 
 function NotFoundComponent() {
   return (
@@ -146,6 +147,7 @@ function RootComponent() {
           {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
           <Outlet />
           <Toaster position="top-center" richColors closeButton />
+          <SplashScreen />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

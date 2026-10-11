@@ -478,3 +478,95 @@ describe("Database Transaction Rollback Simulation Tests", () => {
     assert.equal(transactionRolledBack, true, "Transaction must roll back on error");
   });
 });
+
+describe("Razorpay Real Order Creation & Gateway Verification Tests", () => {
+  const testKeyId = "rzp_test_testkey123456";
+  const testSecret = "test_secret_key_abcdef123456";
+
+  it("1. createServerPaymentOrder fails closed when credentials missing", async () => {
+    const { createServerPaymentOrder } = await import("./payments");
+
+    await assert.rejects(async () => {
+      await createServerPaymentOrder(
+        {
+          purpose: "premium_video_upload",
+          userId: "FT483921",
+        },
+        { RAZORPAY_KEY_ID: "", RAZORPAY_KEY_SECRET: "" },
+      );
+    }, /credentials.*not configured/i);
+  });
+
+  it("2. createServerPaymentOrder generates exact pricing for premium video and ads", async () => {
+    const { createServerPaymentOrder } = await import("./payments");
+
+    // Premium video: ₹6.00 / 600 paise
+    const premiumOrder = await createServerPaymentOrder(
+      {
+        purpose: "premium_video_upload",
+        userId: "FT483921",
+      },
+      {
+        RAZORPAY_KEY_ID: testKeyId,
+        RAZORPAY_KEY_SECRET: testSecret,
+        RAZORPAY_SKIP_REMOTE_CHECK: "true",
+      },
+    );
+    assert.equal(premiumOrder.amount, 6.0);
+    assert.equal(premiumOrder.amountInSubunits, 600);
+    assert.equal(premiumOrder.currency, "INR");
+
+    // Ads promotion: 7 days = ₹100 / 10000 paise
+    const ads7Days = await createServerPaymentOrder(
+      {
+        purpose: "ads_promotion",
+        userId: "FT483921",
+        planId: "plan-7-days",
+      },
+      {
+        RAZORPAY_KEY_ID: testKeyId,
+        RAZORPAY_KEY_SECRET: testSecret,
+        RAZORPAY_SKIP_REMOTE_CHECK: "true",
+      },
+    );
+    assert.equal(ads7Days.amount, 100.0);
+    assert.equal(ads7Days.amountInSubunits, 10000);
+
+    // Ads promotion: monthly = ₹300 / 30000 paise
+    const adsMonthly = await createServerPaymentOrder(
+      {
+        purpose: "ads_promotion",
+        userId: "FT483921",
+        planId: "plan-monthly",
+      },
+      {
+        RAZORPAY_KEY_ID: testKeyId,
+        RAZORPAY_KEY_SECRET: testSecret,
+        RAZORPAY_SKIP_REMOTE_CHECK: "true",
+      },
+    );
+    assert.equal(adsMonthly.amount, 300.0);
+    assert.equal(adsMonthly.amountInSubunits, 30000);
+  });
+
+  it("3. API create-order route returns 503 when credentials missing", async () => {
+    const req = new Request("http://localhost:3000/api/payments/create-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        purpose: "premium_video_upload",
+        userId: "FT483921",
+      }),
+    });
+
+    const res = await handleApiRequest(req, {
+      RAZORPAY_KEY_ID: "",
+      RAZORPAY_KEY_SECRET: "",
+    });
+
+    assert.ok(res);
+    assert.equal(res.status, 503);
+    const body = await res.json();
+    assert.match(body.error || "", /credentials.*not configured/i);
+  });
+});

@@ -233,6 +233,52 @@ function getInitialStore(): ServerStore {
         created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
         updated_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
       },
+      {
+        id: "vid-seed-007",
+        user_id: "FT483921",
+        creator_name: "Animation Studio X",
+        title: "The Great Forest Mystery — Animated Cartoon Adventure",
+        description:
+          "Classic animated adventure featuring funny cartoon characters, slapstick comedy, and heartwarming moments for all ages.",
+        video_url:
+          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+        thumbnail_url:
+          "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=60",
+        video_type: "free",
+        content_type: "long",
+        category: "Cartoon",
+        duration: "14:20",
+        views: 89000,
+        likes: 6700,
+        payment_status: "not_required",
+        payment_amount: 0,
+        is_promoted: false,
+        created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: "vid-seed-008",
+        user_id: "FT483921",
+        creator_name: "Green Earth Agri",
+        title: "Smart Organic Farming & High-Yield Agriculture Techniques",
+        description:
+          "Modern agricultural technologies, organic drip irrigation, soil health management, and sustainable crop cultivation techniques.",
+        video_url:
+          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+        thumbnail_url:
+          "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=800&auto=format&fit=crop&q=60",
+        video_type: "free",
+        content_type: "long",
+        category: "Agriculture",
+        duration: "21:45",
+        views: 54000,
+        likes: 4300,
+        payment_status: "not_required",
+        payment_amount: 0,
+        is_promoted: false,
+        created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+      },
     ],
     comments: [
       {
@@ -559,10 +605,12 @@ export async function handleApiRequest(
     if (method === "POST") {
       try {
         const payload = await request.json();
-        const result = createServerPaymentOrder(payload, env);
+        const result = await createServerPaymentOrder(payload, env);
         return jsonResponse(result);
-      } catch (err) {
-        return jsonResponse({ error: "Failed to create payment order" }, 500);
+      } catch (err: any) {
+        const msg = err?.message || "Failed to create payment order";
+        const status = msg.includes("credentials") ? 503 : 500;
+        return jsonResponse({ success: false, error: msg }, status);
       }
     }
   }
@@ -593,6 +641,7 @@ export async function handleApiRequest(
         }
 
         // 1. PAYMENT VERIFICATION: Cryptographic Signature & Fail-Closed Credential Check
+        const keyId = env?.["RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"];
         const secretKey = env?.["RAZORPAY_KEY_SECRET"] || process.env["RAZORPAY_KEY_SECRET"];
         if (!secretKey) {
           return jsonResponse(
@@ -636,6 +685,154 @@ export async function handleApiRequest(
           );
         }
 
+        // Authoritative pricing check before gateway verification
+        let expectedAmount = 6.0;
+        if (purpose === "ads_promotion") {
+          const planId = (payload.planId || payload.plan_id || "plan-monthly") as AdsPlanId;
+          const plan = PRICING_CONFIG.ADS_PROMOTION[planId];
+          expectedAmount = plan ? plan.price : 300.0;
+        } else if (purpose !== "premium_video_upload") {
+          return jsonResponse(
+            {
+              verified: false,
+              error: "Unsupported payment purpose.",
+            },
+            400,
+          );
+        }
+
+        if (requestedAmount !== undefined && Math.abs(requestedAmount - expectedAmount) > 0.01) {
+          return jsonResponse(
+            {
+              verified: false,
+              error: `Payment amount ₹${requestedAmount} does not match expected fee of ₹${expectedAmount.toFixed(2)}.`,
+            },
+            400,
+          );
+        }
+
+        const expectedPaise = Math.round(expectedAmount * 100);
+
+        // Remote Razorpay API confirmation (status, order_id, amount in paise)
+        const skipRemote = Boolean(
+          env?.["RAZORPAY_SKIP_REMOTE_CHECK"] || process.env["RAZORPAY_SKIP_REMOTE_CHECK"],
+        );
+
+        if (keyId && !skipRemote) {
+          try {
+            const authHeader = `Basic ${Buffer.from(`${keyId}:${secretKey}`).toString("base64")}`;
+            const rzpRes = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}`, {
+              method: "GET",
+              headers: { Authorization: authHeader },
+            });
+
+            if (!rzpRes.ok) {
+              const errBody = await rzpRes.text();
+              return jsonResponse(
+                {
+                  verified: false,
+                  paymentId,
+                  orderId,
+                  error: `Razorpay API lookup returned status ${rzpRes.status}: ${errBody}`,
+                },
+                400,
+              );
+            }
+
+            const pData = (await rzpRes.json()) as {
+              id: string;
+              order_id: string;
+              status: string;
+              amount: number;
+              currency: string;
+            };
+
+            if (pData.order_id && pData.order_id !== orderId) {
+              return jsonResponse(
+                {
+                  verified: false,
+                  paymentId,
+                  orderId,
+                  error: `Razorpay payment order mismatch: expected ${orderId}, got ${pData.order_id}`,
+                },
+                400,
+              );
+            }
+
+            if (pData.amount !== expectedPaise) {
+              return jsonResponse(
+                {
+                  verified: false,
+                  paymentId,
+                  orderId,
+                  error: `Razorpay payment amount mismatch: expected ₹${expectedAmount}, got ₹${pData.amount / 100}`,
+                },
+                400,
+              );
+            }
+
+            if (pData.currency !== "INR") {
+              return jsonResponse(
+                {
+                  verified: false,
+                  paymentId,
+                  orderId,
+                  error: `Razorpay payment currency mismatch: expected INR, received ${pData.currency}`,
+                },
+                400,
+              );
+            }
+
+            if (pData.status !== "captured" && pData.status !== "authorized") {
+              return jsonResponse(
+                {
+                  verified: false,
+                  paymentId,
+                  orderId,
+                  error: `Razorpay payment status is not successful (status: ${pData.status})`,
+                },
+                400,
+              );
+            }
+
+            if (pData.status === "authorized") {
+              const capRes = await fetch(
+                `https://api.razorpay.com/v1/payments/${paymentId}/capture`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: authHeader,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({ amount: expectedPaise, currency: "INR" }),
+                },
+              );
+              if (!capRes.ok) {
+                const capErr = await capRes.text();
+                return jsonResponse(
+                  {
+                    verified: false,
+                    paymentId,
+                    orderId,
+                    error: `Failed to capture authorized Razorpay payment: ${capErr}`,
+                  },
+                  400,
+                );
+              }
+            }
+          } catch (gatewayErr: any) {
+            return jsonResponse(
+              {
+                verified: false,
+                paymentId,
+                orderId,
+                error: `Razorpay remote API connection error: ${gatewayErr?.message || "Network error"}`,
+              },
+              502,
+            );
+          }
+        }
+
         // 2. AUTHORIZATION & OWNERSHIP VERIFICATION
         const pool = getMysqlPool();
         const authUser = await getAuthUserFromRequest(request, store, pool);
@@ -667,32 +864,7 @@ export async function handleApiRequest(
           }
         }
 
-        // 3. PURPOSE & AUTHORITATIVE PRICING VALIDATION (Never trust client-supplied status or amount)
-        let expectedAmount = 6.0;
-        if (purpose === "ads_promotion") {
-          const planId = (payload.planId || payload.plan_id || "plan-monthly") as AdsPlanId;
-          const plan = PRICING_CONFIG.ADS_PROMOTION[planId];
-          expectedAmount = plan ? plan.price : 300.0;
-        } else if (purpose !== "premium_video_upload") {
-          return jsonResponse(
-            {
-              verified: false,
-              error: "Unsupported payment purpose.",
-            },
-            400,
-          );
-        }
-
-        if (requestedAmount !== undefined && Math.abs(requestedAmount - expectedAmount) > 0.01) {
-          return jsonResponse(
-            {
-              verified: false,
-              error: `Payment amount ₹${requestedAmount} does not match expected fee of ₹${expectedAmount.toFixed(2)}.`,
-            },
-            400,
-          );
-        }
-
+        // 3. SET FINAL AUTHORITATIVE AMOUNT
         const amount = expectedAmount;
 
         // 4. VIDEO OWNERSHIP & ELIGIBILITY VERIFICATION
@@ -1543,7 +1715,9 @@ export async function handleApiRequest(
         filtered = filtered.filter((v) => v.content_type === contentType);
       }
       if (category && category !== "All") {
-        filtered = filtered.filter((v) => v.category.toLowerCase() === category.toLowerCase());
+        filtered = filtered.filter(
+          (v) => (v.category || "General").toLowerCase() === category.toLowerCase(),
+        );
       }
       if (search) {
         const s = search.toLowerCase();

@@ -20,6 +20,8 @@ export type Video = {
 };
 
 export const VIDEO_CATEGORIES = [
+  "Cartoon",
+  "Agriculture",
   "Motivational",
   "Comedy",
   "Blog",
@@ -38,6 +40,34 @@ export type VideoCategory = (typeof VIDEO_CATEGORIES)[number];
 export const categories = ["All", ...VIDEO_CATEGORIES];
 
 export const recommended: Video[] = [
+  {
+    id: "v-cartoon-01",
+    category: "Cartoon",
+    description:
+      "Classic animated adventure featuring funny cartoon characters, slapstick comedy, and heartwarming moments for all ages.",
+    title: "The Great Forest Mystery — Animated Cartoon Adventure",
+    channel: "Animation Studio X",
+    initials: "AX",
+    views: "1.8M views",
+    age: "1 day ago",
+    duration: "14:20",
+    thumb: thumb4,
+    tint: "oklch(0.55 0.22 30)",
+  },
+  {
+    id: "v-agri-01",
+    category: "Agriculture",
+    description:
+      "Modern agricultural technologies, organic drip irrigation, soil health management, and sustainable crop cultivation techniques.",
+    title: "Smart Organic Farming & High-Yield Agriculture Techniques",
+    channel: "Green Earth Agri",
+    initials: "GA",
+    views: "720K views",
+    age: "3 days ago",
+    duration: "21:45",
+    thumb: thumb5,
+    tint: "oklch(0.5 0.18 140)",
+  },
   {
     id: "v1",
     category: "Coding",

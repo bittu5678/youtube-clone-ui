@@ -5,6 +5,7 @@ import {
   Wallet,
   CornerDownRight,
   ChevronDown,
+  ChevronRight,
   Compass,
   Clapperboard,
   History,
@@ -19,6 +20,10 @@ import {
   LogOut,
   Megaphone,
   ScrollText,
+  Sparkles,
+  LayoutGrid,
+  Sprout,
+  Smile,
 } from "lucide-react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
@@ -51,8 +56,16 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 
   const [incomeExpanded, setIncomeExpanded] = useState(false);
   const [yourVideosExpanded, setYourVideosExpanded] = useState(false);
+  const [categoriesExpanded, setCategoriesExpanded] = useState(false);
 
-  const isHomeActive = currentPath === "/";
+  const searchParams = routerState.location.search as Record<string, unknown> | undefined;
+  const currentCategory = (searchParams?.category as string) || "";
+  const isCartoonActive = currentPath === "/" && currentCategory.toLowerCase() === "cartoon";
+  const isAgricultureActive =
+    currentPath === "/" && currentCategory.toLowerCase() === "agriculture";
+  const isCategoriesActive = isCartoonActive || isAgricultureActive;
+
+  const isHomeActive = currentPath === "/" && !currentCategory;
 
   const handleLogout = async () => {
     onNavigate?.();
@@ -501,7 +514,86 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       </div>
 
-      {/* 11. Wallet Balance */}
+      {/* 11. Video Categories (Expandable / Collapsible) */}
+      <div className="flex flex-col">
+        <button
+          type="button"
+          aria-expanded={categoriesExpanded}
+          onClick={() => setCategoriesExpanded((prev) => !prev)}
+          className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-all ${
+            isCategoriesActive && !categoriesExpanded
+              ? "bg-brand text-white shadow-sm font-bold"
+              : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+          }`}
+        >
+          <div className="flex items-center gap-3 truncate">
+            <LayoutGrid
+              className={`h-[18px] w-[18px] shrink-0 ${
+                isCategoriesActive && !categoriesExpanded ? "text-white stroke-[2.4]" : ""
+              }`}
+            />
+            <span className="truncate">Video Categories</span>
+          </div>
+          <ChevronRight
+            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ease-in-out ${
+              categoriesExpanded ? "rotate-90 text-foreground" : ""
+            } ${isCategoriesActive && !categoriesExpanded ? "text-white" : ""}`}
+          />
+        </button>
+
+        {/* Indented Submenu Items */}
+        <div
+          className={`grid transition-all duration-300 ease-in-out ${
+            categoriesExpanded
+              ? "grid-rows-[1fr] opacity-100"
+              : "grid-rows-[0fr] opacity-0 pointer-events-none"
+          }`}
+        >
+          <div className="overflow-hidden">
+            <div className="ml-4 flex flex-col gap-1 border-l-2 border-border/60 py-1 pl-3 my-0.5">
+              {/* 1. Cartoon */}
+              <Link
+                to="/"
+                search={{ category: "Cartoon" }}
+                onClick={onNavigate}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
+                  isCartoonActive
+                    ? "bg-brand text-white shadow-sm font-bold"
+                    : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+                }`}
+              >
+                <Smile
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    isCartoonActive ? "text-white stroke-[2.4]" : "text-amber-500"
+                  }`}
+                />
+                <span className="truncate">Cartoon</span>
+              </Link>
+
+              {/* 2. Agriculture */}
+              <Link
+                to="/"
+                search={{ category: "Agriculture" }}
+                onClick={onNavigate}
+                className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-xs transition-all ${
+                  isAgricultureActive
+                    ? "bg-brand text-white shadow-sm font-bold"
+                    : "text-foreground/75 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+                }`}
+              >
+                <Sprout
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    isAgricultureActive ? "text-white stroke-[2.4]" : "text-emerald-500"
+                  }`}
+                />
+                <span className="truncate">Agriculture</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 12. Wallet Balance */}
       <Link
         to="/wallet-balance"
         onClick={onNavigate}
@@ -641,6 +733,15 @@ export function Sidebar({
       >
         <NavList />
         <div className="px-6 pb-8 text-xs leading-relaxed text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("facetube:replay-splash"))}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground/80 hover:text-brand transition-colors mb-3 cursor-pointer"
+            title="Replay animated FaceTube splash screen"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-brand" />
+            Replay Splash Screen
+          </button>
           <p>About · Terms · Privacy</p>
           <p className="mt-2">© 2026 FaceTube</p>
         </div>
@@ -673,7 +774,22 @@ export function Sidebar({
               <X className="h-5 w-5" />
             </button>
           </div>
-          <NavList onNavigate={onClose} />
+          <div className="overflow-y-auto max-h-[calc(100vh-60px)]">
+            <NavList onNavigate={onClose} />
+            <div className="px-5 py-4 border-t border-border mt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  window.dispatchEvent(new CustomEvent("facetube:replay-splash"));
+                }}
+                className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-brand transition-colors cursor-pointer"
+              >
+                <Sparkles className="h-4 w-4 text-brand" />
+                Replay Splash Screen
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </>
