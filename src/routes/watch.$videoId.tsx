@@ -18,7 +18,7 @@ import { Navbar } from "@/components/videohub/Navbar";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { VideoCard } from "@/components/videohub/VideoCard";
 import { ImageCard } from "@/components/videohub/ImageCard";
-import { allVideos, findVideo } from "@/data/videos";
+import { allVideos, findVideo, findVideoAsync } from "@/data/videos";
 import { useAuth } from "@/lib/auth-context";
 import {
   fetchUploadedImages,
@@ -28,8 +28,8 @@ import {
 } from "@/lib/image-service";
 
 export const Route = createFileRoute("/watch/$videoId")({
-  loader: ({ params }) => {
-    const video = findVideo(params.videoId);
+  loader: async ({ params }) => {
+    const video = await findVideoAsync(params.videoId);
     if (!video) throw notFound();
     return { video };
   },

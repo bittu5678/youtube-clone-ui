@@ -1,4 +1,6 @@
 import { api } from "./api";
+import { resolveVideoThumbnail, getCategoryFallbackThumbnail } from "./thumbnail-service";
+import type { Video } from "@/data/videos";
 
 export type VideoType = "free" | "premium";
 export type ContentType = "short" | "long";
@@ -283,21 +285,49 @@ export function saveStoredVideos(videos: UploadedVideo[]): void {
   }
 }
 
+export interface FetchVideosOptions {
+  userId?: string;
+  videoType?: VideoType;
+  contentType?: ContentType;
+  category?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
 /**
- * Fetches all videos or user-specific uploaded videos
+ * Fetches videos from the production PHP REST API / MySQL database.
+ * Falls back to local stored cache if offline, and syncs newly retrieved items.
  */
-export async function fetchUploadedVideos(userId?: string): Promise<UploadedVideo[]> {
+export async function fetchUploadedVideos(
+  optionsOrUserId?: string | FetchVideosOptions,
+): Promise<UploadedVideo[]> {
+  const opts: FetchVideosOptions =
+    typeof optionsOrUserId === "string" ? { userId: optionsOrUserId } : optionsOrUserId || {};
+
   try {
-    const res = await api.videos.list({ userId });
-    if (res && res.videos && res.videos.length > 0) {
-      return res.videos.map((d: any) => ({
-        id: d.id,
-        userId: d.user_id || d.userId,
-        creatorName: d.creator_name || d.creatorName || "Creator",
-        title: d.title,
+    const res = await api.videos.list({
+      userId: opts.userId,
+      videoType: opts.videoType,
+      contentType: opts.contentType,
+      category: opts.category,
+      search: opts.search,
+      limit: opts.limit,
+      offset: opts.offset,
+    });
+
+    if (res && res.videos && Array.isArray(res.videos)) {
+      const mapped = res.videos.map((d: any) => ({
+        id: String(d.id),
+        userId: d.user_id || d.userId || "FT102857",
+        creatorName: d.creator_name || d.creatorName || "FaceTube Creator",
+        title: d.title || "Untitled Video",
         description: d.description || "",
         videoUrl: d.video_url || d.videoUrl || "",
-        thumbnailUrl: d.thumbnail_url || d.thumbnailUrl || "",
+        thumbnailUrl: resolveVideoThumbnail({
+          thumbnailUrl: d.thumbnail_url || d.thumbnailUrl,
+          category: d.category,
+        }),
         videoType: (d.video_type || d.videoType || "free") as VideoType,
         contentType: (d.content_type || d.contentType || "long") as ContentType,
         category: d.category || "General",
@@ -312,18 +342,46 @@ export async function fetchUploadedVideos(userId?: string): Promise<UploadedVide
         isPromoted: Boolean(d.is_promoted ?? d.isPromoted),
         promotionPlan: d.promotion_plan || d.promotionPlan,
         promotionExpiresAt: d.promotion_expires_at || d.promotionExpiresAt,
-        createdAt: d.created_at || d.createdAt,
-        updatedAt: d.updated_at || d.updatedAt || d.created_at || d.createdAt,
+        createdAt: d.created_at || d.createdAt || new Date().toISOString(),
+        updatedAt: d.updated_at || d.updatedAt || d.created_at || new Date().toISOString(),
       }));
+
+      // Cache into local storage
+      if (mapped.length > 0 && !opts.videoType && !opts.contentType && !opts.category && !opts.search) {
+        saveStoredVideos(mapped);
+      }
+
+      return mapped;
     }
-  } catch (_e) {
-    // fallback to local cache
+  } catch (err) {
+    console.warn("fetchUploadedVideos API warning, reading local cache:", err);
   }
 
-  const all = getStoredVideos();
-  if (userId) {
-    const norm = userId.trim().toUpperCase();
-    return all.filter((v) => v.userId.trim().toUpperCase() === norm);
+  // Fallback to local stored videos cache
+  let all = getStoredVideos();
+  if (opts.userId) {
+    const norm = opts.userId.trim().toUpperCase();
+    all = all.filter((v) => v.userId.trim().toUpperCase() === norm);
+  }
+  if (opts.videoType) {
+    all = all.filter((v) => v.videoType === opts.videoType);
+  }
+  if (opts.contentType) {
+    all = all.filter((v) => v.contentType === opts.contentType);
+  }
+  if (opts.category && opts.category !== "All") {
+    all = all.filter(
+      (v) => (v.category || "General").toLowerCase() === opts.category!.toLowerCase(),
+    );
+  }
+  if (opts.search) {
+    const s = opts.search.toLowerCase();
+    all = all.filter(
+      (v) =>
+        v.title.toLowerCase().includes(s) ||
+        v.description.toLowerCase().includes(s) ||
+        v.creatorName.toLowerCase().includes(s),
+    );
   }
   return all;
 }
@@ -497,4 +555,38 @@ export async function markVideoPromoted(params: {
   }
 
   return true;
+}
+
+/**
+ * Converts an UploadedVideo into standard catalog Video format, ensuring
+ * safe thumbnail URLs, playback links, and display attributes.
+ */
+export function convertUploadedToCatalogVideo(v: UploadedVideo): Video {
+  const thumbUrl = resolveVideoThumbnail({
+    thumbnailUrl: v.thumbnailUrl,
+    thumbnail_url: (v as any).thumbnail_url,
+    category: v.category,
+  });
+
+  const rawVideoUrl = v.videoUrl || (v as any).video_url || "";
+
+  return {
+    id: String(v.id),
+    title: v.title || "Untitled Video",
+    channel: v.creatorName || "FaceTube Creator",
+    initials: (v.creatorName || "FC").slice(0, 2).toUpperCase(),
+    views: `${(Number(v.views) || 0).toLocaleString()} views`,
+    age: v.createdAt ? new Date(v.createdAt).toLocaleDateString() : "Recently uploaded",
+    duration: v.duration || "0:00",
+    thumb: thumbUrl,
+    thumbnail: thumbUrl,
+    thumbnailUrl: thumbUrl,
+    tint: v.videoType === "premium" ? "oklch(0.6 0.22 45)" : "oklch(0.5 0.18 20)",
+    category: v.category || "General",
+    description: v.description || "",
+    videoUrl: rawVideoUrl,
+    videoType: v.videoType || "free",
+    contentType: v.contentType || "long",
+    isPromoted: Boolean(v.isPromoted),
+  };
 }

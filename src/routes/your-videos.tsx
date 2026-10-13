@@ -30,6 +30,7 @@ import {
   type UploadedVideo,
   type VideoCategoryCounts,
 } from "@/lib/video-service";
+import { resolveVideoThumbnail, SVG_FALLBACK_THUMBNAIL } from "@/lib/thumbnail-service";
 
 export const Route = createFileRoute("/your-videos")({
   head: () => ({
@@ -283,19 +284,31 @@ function YourVideosPage() {
                     <tr key={vid.id} className="transition hover:bg-secondary/20">
                       {/* Video Title & Thumbnail */}
                       <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-3">
+                        <Link
+                          to="/watch/$videoId"
+                          params={{ videoId: vid.id }}
+                          className="flex items-center gap-3 group/link"
+                        >
                           <img
-                            src={vid.thumbnailUrl}
+                            src={resolveVideoThumbnail(vid)}
                             alt={vid.title}
-                            className="h-10 w-16 rounded-lg object-cover shrink-0"
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              if (target.src !== SVG_FALLBACK_THUMBNAIL) {
+                                target.src = SVG_FALLBACK_THUMBNAIL;
+                              }
+                            }}
+                            className="h-10 w-16 rounded-lg object-cover shrink-0 bg-secondary"
                           />
                           <div className="min-w-0 max-w-xs">
-                            <div className="font-bold text-foreground truncate">{vid.title}</div>
+                            <div className="font-bold text-foreground truncate group-hover/link:text-brand transition-colors">
+                              {vid.title}
+                            </div>
                             <div className="text-[10px] font-mono text-muted-foreground">
                               {vid.id}
                             </div>
                           </div>
-                        </div>
+                        </Link>
                       </td>
 
                       {/* User ID */}

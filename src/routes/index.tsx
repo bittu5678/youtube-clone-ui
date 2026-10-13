@@ -25,6 +25,11 @@ import {
   IMAGE_FEED_INTERVAL,
   type UploadedImage,
 } from "@/lib/image-service";
+import {
+  fetchUploadedVideos,
+  convertUploadedToCatalogVideo,
+  type UploadedVideo,
+} from "@/lib/video-service";
 
 export const Route = createFileRoute("/")({
   validateSearch: (search: Record<string, unknown>): { q?: string; category?: string } => ({
@@ -81,6 +86,7 @@ function Index() {
   const [activeCategory, setActiveCategory] = useState(searchParams.category || "All");
   const [query, setQuery] = useState(searchParams.q || "");
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [uploadedVideos, setUploadedVideos] = useState<UploadedVideo[]>([]);
 
   useEffect(() => {
     if (searchParams.q !== undefined) {
@@ -105,7 +111,7 @@ function Index() {
     });
   };
 
-  // Load uploaded images from storage/database
+  // Load uploaded images & videos from database
   useEffect(() => {
     fetchUploadedImages()
       .then((imgs) => {
@@ -114,15 +120,45 @@ function Index() {
         }
       })
       .catch((err) => console.error("Error loading feed images:", err));
+
+    fetchUploadedVideos()
+      .then((vids) => {
+        if (vids && vids.length > 0) {
+          setUploadedVideos(vids);
+        }
+      })
+      .catch((err) => console.error("Error loading feed videos:", err));
   }, []);
+
+  // Combined video catalog: uploaded videos from DB + baseline static catalog
+  const allCombinedVideos: Video[] = useMemo(() => {
+    const fromDb = uploadedVideos.map(convertUploadedToCatalogVideo);
+    const seen = new Set<string>();
+    const list: Video[] = [];
+
+    // Promoted and newly uploaded videos first
+    for (const v of fromDb) {
+      if (!seen.has(v.id)) {
+        seen.add(v.id);
+        list.push(v);
+      }
+    }
+    for (const v of allVideos) {
+      if (!seen.has(v.id)) {
+        seen.add(v.id);
+        list.push(v);
+      }
+    }
+    return list;
+  }, [uploadedVideos]);
 
   const isFiltering = query.trim().length > 0 || activeCategory !== "All";
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     const seen = new Set<string>();
-    return allVideos.filter((v) => {
-      if (seen.has(v.title)) return false;
+    return allCombinedVideos.filter((v) => {
+      if (seen.has(v.id)) return false;
       const vCat = (v.category || "General").trim();
       const matchesCategory =
         activeCategory === "All" || vCat.toLowerCase() === activeCategory.toLowerCase();
@@ -133,15 +169,21 @@ function Index() {
         (vCat && vCat.toLowerCase().includes(q)) ||
         (v.description && v.description.toLowerCase().includes(q));
       if (!matchesCategory || !matchesQuery) return false;
-      seen.add(v.title);
+      seen.add(v.id);
       return true;
     });
-  }, [query, activeCategory]);
+  }, [allCombinedVideos, query, activeCategory]);
+
+  const recommendedCombined = useMemo(() => {
+    // Put uploaded videos at front of recommended
+    const fromDb = uploadedVideos.map(convertUploadedToCatalogVideo);
+    return [...fromDb, ...recommended];
+  }, [uploadedVideos]);
 
   // Requirement 2: Interleave feed with images after every 5 videos
   const interleavedRecommended = useMemo(() => {
-    return interleaveFeedWithImages(recommended, uploadedImages, IMAGE_FEED_INTERVAL);
-  }, [uploadedImages]);
+    return interleaveFeedWithImages(recommendedCombined, uploadedImages, IMAGE_FEED_INTERVAL);
+  }, [recommendedCombined, uploadedImages]);
 
   const interleavedTrending = useMemo(() => {
     return interleaveFeedWithImages(trending, uploadedImages, IMAGE_FEED_INTERVAL);

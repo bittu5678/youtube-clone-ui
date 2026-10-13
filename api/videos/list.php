@@ -35,8 +35,8 @@ if (!empty($contentType) && in_array($contentType, ['short', 'long'], true)) {
     $params[] = $contentType;
 }
 
-if (!empty($category) && $category !== 'All') {
-    $where[] = 'category = ?';
+if (!empty($category) && strcasecmp($category, 'All') !== 0) {
+    $where[] = 'LOWER(category) = LOWER(?)';
     $params[] = $category;
 }
 

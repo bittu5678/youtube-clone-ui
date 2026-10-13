@@ -38,6 +38,11 @@ import {
   type UploadedVideo,
   VIDEO_CATEGORIES,
 } from "@/lib/video-service";
+import {
+  captureVideoThumbnail,
+  getCategoryFallbackThumbnail,
+  resolveVideoThumbnail,
+} from "@/lib/thumbnail-service";
 import { recordNewImageUpload, type UploadedImage } from "@/lib/image-service";
 import { initiatePremiumVideoPayment, initiateAdsPromotionPayment } from "@/lib/razorpay-service";
 import { getUserWallet, type UserWallet } from "@/lib/ledger-service";
@@ -499,6 +504,7 @@ function FreeVideoUploadView({
   const [category, setCategory] = useState<string>("Coding");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [capturedThumbnail, setCapturedThumbnail] = useState<string>("");
   const [detectedDuration, setDetectedDuration] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -528,6 +534,11 @@ function FreeVideoUploadView({
     if (!title.trim()) {
       setTitle(file.name.replace(/\.[^/.]+$/, ""));
     }
+
+    // Capture real snapshot thumbnail frame from video
+    captureVideoThumbnail(file).then((thumb) => {
+      if (thumb) setCapturedThumbnail(thumb);
+    });
 
     // Attempt duration detection via temporary video element
     const tempVideo = document.createElement("video");
@@ -566,6 +577,10 @@ function FreeVideoUploadView({
     if (!title.trim()) {
       setTitle(file.name.replace(/\.[^/.]+$/, ""));
     }
+
+    captureVideoThumbnail(file).then((thumb) => {
+      if (thumb) setCapturedThumbnail(thumb);
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -588,12 +603,14 @@ function FreeVideoUploadView({
       }
 
       // 2. Persist video metadata to database through server API
+      const posterUrl = capturedThumbnail || getCategoryFallbackThumbnail(category);
       const newVideo = await recordNewVideoUpload({
         userId,
         creatorName,
         title: title.trim(),
         description: description.trim(),
         videoUrl: uploadRes.url,
+        thumbnailUrl: posterUrl,
         videoType: "free",
         contentType: format,
         category,
@@ -665,6 +682,7 @@ function FreeVideoUploadView({
           </button>
           <Link
             to="/free-videos"
+            search={{ refresh: Date.now() }}
             className="rounded-xl bg-secondary px-6 py-2.5 text-xs font-bold text-foreground hover:bg-secondary/80 transition"
           >
             View Free Videos
@@ -882,6 +900,7 @@ function PremiumVideoUploadView({
   const [category, setCategory] = useState<string>("Coding");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [capturedThumbnail, setCapturedThumbnail] = useState<string>("");
   const [detectedDuration, setDetectedDuration] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -910,6 +929,10 @@ function PremiumVideoUploadView({
     if (!title.trim()) {
       setTitle(file.name.replace(/\.[^/.]+$/, ""));
     }
+
+    captureVideoThumbnail(file).then((thumb) => {
+      if (thumb) setCapturedThumbnail(thumb);
+    });
 
     const tempVideo = document.createElement("video");
     tempVideo.preload = "metadata";
@@ -947,6 +970,10 @@ function PremiumVideoUploadView({
     if (!title.trim()) {
       setTitle(file.name.replace(/\.[^/.]+$/, ""));
     }
+
+    captureVideoThumbnail(file).then((thumb) => {
+      if (thumb) setCapturedThumbnail(thumb);
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -969,6 +996,7 @@ function PremiumVideoUploadView({
       }
 
       const vidId = `vid-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      const posterUrl = capturedThumbnail || getCategoryFallbackThumbnail(category);
 
       // 2. Initiate Razorpay ₹6 payment flow with server verification
       await initiatePremiumVideoPayment({
@@ -979,6 +1007,7 @@ function PremiumVideoUploadView({
         videoTitle: title.trim(),
         description: description.trim(),
         videoUrl: uploadRes.url,
+        thumbnailUrl: posterUrl,
         category,
         contentType: format,
         directReferrerId: referrerId,
@@ -1033,6 +1062,7 @@ function PremiumVideoUploadView({
           </button>
           <Link
             to="/premium-videos"
+            search={{ refresh: Date.now() }}
             className="rounded-xl bg-secondary px-6 py-2.5 text-xs font-bold text-foreground hover:bg-secondary/80 transition"
           >
             View Premium Videos

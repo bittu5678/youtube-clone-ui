@@ -4,6 +4,7 @@ import thumb3 from "@/assets/thumb-3.jpg";
 import thumb4 from "@/assets/thumb-4.jpg";
 import thumb5 from "@/assets/thumb-5.jpg";
 import thumb6 from "@/assets/thumb-6.jpg";
+import { resolveVideoThumbnail } from "@/lib/thumbnail-service";
 
 export type Video = {
   id: string;
@@ -14,10 +15,16 @@ export type Video = {
   age: string;
   duration: string;
   thumb: string;
+  thumbnail?: string;
+  thumbnailUrl?: string;
   tint: string;
   category: string;
   description: string;
   videoUrl?: string;
+  videoType?: "free" | "premium";
+  contentType?: "short" | "long";
+  isPromoted?: boolean;
+  uploadedAt?: string;
 };
 
 export const VIDEO_CATEGORIES = [
@@ -206,7 +213,13 @@ export const allVideos: Video[] = [...recommended, ...trending, ...recent];
 
 export const findVideo = (id: string): Video | undefined => {
   const staticFound = allVideos.find((v) => v.id === id);
-  if (staticFound) return staticFound;
+  if (staticFound) {
+    return {
+      ...staticFound,
+      thumbnail: staticFound.thumb,
+      thumbnailUrl: staticFound.thumb,
+    };
+  }
 
   if (typeof window !== "undefined") {
     try {
@@ -216,19 +229,33 @@ export const findVideo = (id: string): Video | undefined => {
         if (Array.isArray(list)) {
           const match = list.find((v: any) => v.id === id);
           if (match) {
+            const thumbUrl = resolveVideoThumbnail({
+              thumbnailUrl: match.thumbnailUrl || match.thumbnail_url,
+              category: match.category,
+            });
+            const created = match.createdAt || match.created_at;
+            const parsedAge = created
+              ? new Date(created.includes("T") ? created : created.replace(" ", "T") + "Z").toLocaleDateString()
+              : "Recently uploaded";
+
             return {
               id: match.id,
               title: match.title,
-              channel: match.creatorName || "FaceTube Creator",
-              initials: (match.creatorName || "FC").slice(0, 2).toUpperCase(),
-              views: `${match.views || 0} views`,
-              age: "Recently uploaded",
+              channel: match.creatorName || match.creator_name || "FaceTube Creator",
+              initials: (match.creatorName || match.creator_name || "FC").slice(0, 2).toUpperCase(),
+              views: `${(Number(match.views) || 0).toLocaleString()} views`,
+              age: parsedAge,
               duration: match.duration || "0:00",
-              thumb: match.thumbnailUrl || thumb1,
-              tint: "oklch(0.5 0.18 20)",
+              thumb: thumbUrl,
+              thumbnail: thumbUrl,
+              thumbnailUrl: thumbUrl,
+              tint: match.videoType === "premium" ? "oklch(0.6 0.22 45)" : "oklch(0.5 0.18 20)",
               category: match.category || "General",
               description: match.description || "",
-              videoUrl: match.videoUrl,
+              videoUrl: match.videoUrl || match.video_url,
+              videoType: match.videoType || match.video_type || "free",
+              contentType: match.contentType || match.content_type || "long",
+              isPromoted: Boolean(match.isPromoted || match.is_promoted),
             };
           }
         }
@@ -240,3 +267,52 @@ export const findVideo = (id: string): Video | undefined => {
 
   return undefined;
 };
+
+/**
+ * Asynchronously locates a video by ID, querying the live PHP REST API / MySQL database
+ * if the video is not present in local static assets or cache.
+ */
+export async function findVideoAsync(id: string): Promise<Video | undefined> {
+  const localMatch = findVideo(id);
+  if (localMatch) return localMatch;
+
+  try {
+    const { api } = await import("@/lib/api");
+    const res = await api.videos.get(id);
+    if (res && res.success && res.video) {
+      const v = res.video;
+      const thumbUrl = resolveVideoThumbnail({
+        thumbnailUrl: v.thumbnail_url || v.thumbnailUrl,
+        category: v.category,
+      });
+      const created = v.created_at || v.createdAt;
+      const parsedAge = created
+        ? new Date(created.includes("T") ? created : created.replace(" ", "T") + "Z").toLocaleDateString()
+        : "Recently uploaded";
+
+      return {
+        id: String(v.id),
+        title: v.title || "Untitled Video",
+        channel: v.creator_name || v.creatorName || "FaceTube Creator",
+        initials: (v.creator_name || v.creatorName || "FC").slice(0, 2).toUpperCase(),
+        views: `${(Number(v.views) || 0).toLocaleString()} views`,
+        age: parsedAge,
+        duration: v.duration || "0:00",
+        thumb: thumbUrl,
+        thumbnail: thumbUrl,
+        thumbnailUrl: thumbUrl,
+        tint: v.video_type === "premium" ? "oklch(0.6 0.22 45)" : "oklch(0.5 0.18 20)",
+        category: v.category || "General",
+        description: v.description || "",
+        videoUrl: v.video_url || v.videoUrl,
+        videoType: v.video_type || v.videoType || "free",
+        contentType: v.content_type || v.contentType || "long",
+        isPromoted: Boolean(v.is_promoted || v.isPromoted),
+      };
+    }
+  } catch (err) {
+    console.warn("findVideoAsync database lookup failed:", err);
+  }
+
+  return undefined;
+}

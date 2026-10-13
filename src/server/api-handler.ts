@@ -1944,17 +1944,39 @@ export async function handleApiRequest(
         return jsonResponse({ success: false, error: "Video URL is required." }, 400);
       }
 
+      let finalThumbnailUrl =
+        body.thumbnail_url ||
+        body.thumbnailUrl ||
+        "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60";
+
+      const vidId = body.id || `vid-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+      // Save base64 thumbnail to physical disk if provided
+      if (finalThumbnailUrl.startsWith("data:image/")) {
+        try {
+          const parts = finalThumbnailUrl.split(",");
+          if (parts.length === 2) {
+            const buffer = Buffer.from(parts[1], "base64");
+            const imgUploadDir = path.resolve(process.cwd(), "uploads", "images");
+            await fs.promises.mkdir(imgUploadDir, { recursive: true });
+            const safeVidId = vidId.replace(/[^a-zA-Z0-9_-]/g, "_");
+            const imgFileName = `thumb_${safeVidId}.jpg`;
+            await fs.promises.writeFile(path.join(imgUploadDir, imgFileName), buffer);
+            finalThumbnailUrl = `/uploads/images/${imgFileName}`;
+          }
+        } catch (imgErr) {
+          console.warn("Base64 thumbnail save error:", imgErr);
+        }
+      }
+
       const newVideo = {
-        id: body.id || `vid-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        user_id: body.user_id || body.userId || "FT102857",
+        id: vidId,
+        user_id: body.user_id || body.userId || "FT483921",
         creator_name: body.creator_name || body.creatorName || "FaceTube Creator",
         title,
         description: (body.description || "").trim(),
         video_url: videoUrl,
-        thumbnail_url:
-          body.thumbnail_url ||
-          body.thumbnailUrl ||
-          "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60",
+        thumbnail_url: finalThumbnailUrl,
         video_type: (body.video_type || body.videoType || "free") as "free" | "premium",
         content_type: (body.content_type || body.contentType || "long") as "short" | "long",
         category: body.category || "General",
@@ -1980,7 +2002,20 @@ export async function handleApiRequest(
               video_type, content_type, category, duration, views, likes,
               payment_status, payment_id, payment_amount, is_promoted,
               created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, NOW(), NOW())`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE
+              title = VALUES(title),
+              description = VALUES(description),
+              video_url = VALUES(video_url),
+              thumbnail_url = VALUES(thumbnail_url),
+              video_type = VALUES(video_type),
+              content_type = VALUES(content_type),
+              category = VALUES(category),
+              duration = VALUES(duration),
+              payment_status = VALUES(payment_status),
+              payment_id = VALUES(payment_id),
+              payment_amount = VALUES(payment_amount),
+              updated_at = NOW()`,
             [
               newVideo.id,
               newVideo.user_id,

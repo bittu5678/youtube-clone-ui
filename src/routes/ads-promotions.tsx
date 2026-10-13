@@ -27,6 +27,12 @@ import {
 import { toast } from "sonner";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
 import { useAuth } from "@/lib/auth-context";
+import {
+  fetchUploadedVideos,
+  markVideoPromoted,
+  type UploadedVideo,
+} from "@/lib/video-service";
+import { resolveVideoThumbnail, SVG_FALLBACK_THUMBNAIL } from "@/lib/thumbnail-service";
 
 export const Route = createFileRoute("/ads-promotions")({
   head: () => ({
@@ -187,8 +193,17 @@ function AdsPromotionsPage() {
     user?.user_metadata?.name ||
     "Alex Rivera";
 
+  const effectiveUserId =
+    profile?.user_id || dbUser?.user_id || user?.email?.split("@")[0] || "FT483921";
+
   const sponsorId = "FT810492"; // Direct sponsor ID
   const sponsorName = "Samantha Chen";
+
+  // Real channel published videos
+  const [userVideos, setUserVideos] = useState<UploadedVideo[]>([]);
+  const [loadingUserVideos, setLoadingUserVideos] = useState(true);
+  const [videoSelectionMode, setVideoSelectionMode] = useState<"channel" | "upload">("channel");
+  const [selectedVideoId, setSelectedVideoId] = useState<string>("");
 
   // Selected Plan State
   const [selectedPlanId, setSelectedPlanId] = useState<string>("plan-monthly");
@@ -209,6 +224,23 @@ function AdsPromotionsPage() {
   const [paymentMethod, setPaymentMethod] = useState<"wallet" | "upi" | "card">("wallet");
   const [isActivating, setIsActivating] = useState(false);
 
+  // Load authenticated user's published videos from the production API
+  useEffect(() => {
+    setLoadingUserVideos(true);
+    fetchUploadedVideos(effectiveUserId)
+      .then((vids) => {
+        setUserVideos(vids);
+        if (vids && vids.length > 0) {
+          setSelectedVideoId(vids[0].id);
+          setCampaignTitle(vids[0].title);
+          setVideoPreviewUrl(vids[0].videoUrl);
+          setCategory(vids[0].category || "Entertainment");
+        }
+      })
+      .catch((err) => console.warn("Failed to load channel videos:", err))
+      .finally(() => setLoadingUserVideos(false));
+  }, [effectiveUserId]);
+
   // Active Promotions State (Stored in localStorage)
   const [campaigns, setCampaigns] = useState<ActiveCampaign[]>(() => {
     try {
@@ -223,6 +255,14 @@ function AdsPromotionsPage() {
   useEffect(() => {
     localStorage.setItem("facetube_ad_promotions_v1", JSON.stringify(campaigns));
   }, [campaigns]);
+
+  const handleSelectChannelVideo = (vid: UploadedVideo) => {
+    setSelectedVideoId(vid.id);
+    setCampaignTitle(vid.title);
+    setVideoPreviewUrl(vid.videoUrl);
+    setCategory(vid.category || "General");
+    toast.info(`Selected "${vid.title}" for promotion.`);
+  };
 
   // Video File Upload Handler
   const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -242,6 +282,7 @@ function AdsPromotionsPage() {
     setVideoFile(file);
     const objectUrl = URL.createObjectURL(file);
     setVideoPreviewUrl(objectUrl);
+    setSelectedVideoId("");
     if (!campaignTitle || campaignTitle === "NextGen AI Video Creation Engine") {
       setCampaignTitle(file.name.replace(/\.[^/.]+$/, ""));
     }
@@ -267,22 +308,36 @@ function AdsPromotionsPage() {
     try {
       const { initiateAdsPromotionPayment } = await import("@/lib/razorpay-service");
       await initiateAdsPromotionPayment({
-        userId: profile?.user_id || dbUser?.user_id || "FT483921",
+        userId: effectiveUserId,
         userName,
         userEmail: user?.email || undefined,
         userMobile: profile?.mobile || dbUser?.mobile || undefined,
-        videoId: `camp-vid-${Date.now()}`,
+        videoId: selectedVideoId || `camp-vid-${Date.now()}`,
         planId: selectedPlan.id as "plan-7-days" | "plan-15-days" | "plan-monthly" | "plan-yearly",
         planName: selectedPlan.name,
         durationDays: selectedPlan.days,
         price: selectedPlan.price,
         directReferrerId: sponsorId,
-        onSuccess: (res: unknown) => {
+        onSuccess: async (res: unknown) => {
           const now = new Date();
           const startDate = now.toISOString().split("T")[0];
           const expiryDate = calculateExpiryDate(selectedPlan.days);
           const commission = Math.round(selectedPlan.price * 0.1);
           const paymentResult = res as { paymentId?: string } | undefined;
+
+          // Call server-side promotion activation to persist is_promoted, promotion_plan, promotion_expires_at
+          if (selectedVideoId) {
+            try {
+              await markVideoPromoted({
+                videoId: selectedVideoId,
+                planId: selectedPlan.id,
+                durationDays: selectedPlan.days,
+                paymentId: paymentResult?.paymentId || `pay_rzp_promo_${Date.now()}`,
+              });
+            } catch (promoteErr) {
+              console.warn("markVideoPromoted API call error:", promoteErr);
+            }
+          }
 
           const newCampaign: ActiveCampaign = {
             id: `camp-${Date.now().toString().slice(-4)}`,

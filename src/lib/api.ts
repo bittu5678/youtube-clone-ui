@@ -57,7 +57,13 @@ export async function apiFetch<T = unknown>(
   }
 
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
-  const url = `${API_BASE_URL}${cleanEndpoint}`;
+  let url = `${API_BASE_URL}${cleanEndpoint}`;
+
+  // When running on the server (SSR / Node.js runtime), fetch requires an absolute URL with protocol and host
+  if (typeof window === "undefined" && !url.startsWith("http://") && !url.startsWith("https://")) {
+    const port = process.env.PORT || 3000;
+    url = `http://127.0.0.1:${port}${url.startsWith("/") ? "" : "/"}${url}`;
+  }
 
   const res = await fetch(url, {
     ...options,
