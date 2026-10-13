@@ -14,6 +14,7 @@ import {
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
 import { useAuth } from "@/lib/auth-context";
 import { fetchUploadedImages, type UploadedImage } from "@/lib/image-service";
+import { SVG_FALLBACK_THUMBNAIL } from "@/lib/thumbnail-service";
 
 export const Route = createFileRoute("/images-uploaded")({
   head: () => ({
@@ -127,6 +128,12 @@ export function ImagesUploadedPage() {
                 <img
                   src={img.imageUrl}
                   alt={img.title}
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (target.src !== SVG_FALLBACK_THUMBNAIL) {
+                      target.src = SVG_FALLBACK_THUMBNAIL;
+                    }
+                  }}
                   className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                   referrerPolicy="no-referrer"
                 />

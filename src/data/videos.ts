@@ -61,7 +61,7 @@ export const recommended: Video[] = [
     duration: "14:20",
     thumb: thumb4,
     tint: "oklch(0.55 0.22 30)",
-    videoUrl: "/uploads/videos/vid_sample_animation.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
   },
   {
     id: "v-agri-01",
@@ -76,7 +76,7 @@ export const recommended: Video[] = [
     duration: "21:45",
     thumb: thumb5,
     tint: "oklch(0.5 0.18 140)",
-    videoUrl: "/uploads/videos/vid_sample_nature.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
   },
   {
     id: "v1",
@@ -91,7 +91,7 @@ export const recommended: Video[] = [
     duration: "24:18",
     thumb: thumb1,
     tint: "oklch(0.45 0.15 27)",
-    videoUrl: "/uploads/videos/vid_sample_coding.mp4",
+    videoUrl: "https://vjs.zencdn.net/v/oceans.mp4",
   },
   {
     id: "v2",
@@ -136,7 +136,7 @@ export const recommended: Video[] = [
     duration: "11:37",
     thumb: thumb4,
     tint: "oklch(0.4 0.16 300)",
-    videoUrl: "/uploads/videos/vid_sample_animation.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
   },
   {
     id: "v5",
@@ -166,7 +166,7 @@ export const recommended: Video[] = [
     duration: "1:04:22",
     thumb: thumb6,
     tint: "oklch(0.45 0.19 15)",
-    videoUrl: "/uploads/videos/vid_sample_nature.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
   },
   {
     id: "v7",
@@ -181,7 +181,7 @@ export const recommended: Video[] = [
     duration: "27:44",
     thumb: thumb1,
     tint: "oklch(0.45 0.15 27)",
-    videoUrl: "/uploads/videos/vid_sample_coding.mp4",
+    videoUrl: "https://vjs.zencdn.net/v/oceans.mp4",
   },
   {
     id: "v8",
@@ -237,7 +237,7 @@ export const seedVideos: Video[] = [
     tint: "oklch(0.5 0.18 20)",
     category: "Coding",
     description: "Lightning-fast developer workflow hacks in under 45 seconds.",
-    videoUrl: "/uploads/videos/vid_sample_coding.mp4",
+    videoUrl: "https://vjs.zencdn.net/v/oceans.mp4",
     videoType: "free",
     contentType: "short",
   },
@@ -259,7 +259,7 @@ export const seedVideos: Video[] = [
     category: "Coding",
     description:
       "Deep-dive 45-minute comprehensive architectural masterclass covering scalable backend and modern UI.",
-    videoUrl: "/uploads/videos/vid_sample_nature.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
     videoType: "free",
     contentType: "long",
   },
@@ -281,7 +281,7 @@ export const seedVideos: Video[] = [
     category: "Business",
     description:
       "Exclusive creator strategy breakdown for maximum algorithmic engagement and monetization yield.",
-    videoUrl: "/uploads/videos/vid_sample_animation.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
     videoType: "premium",
     contentType: "short",
   },
@@ -367,7 +367,7 @@ export const seedVideos: Video[] = [
     category: "Cartoon",
     description:
       "Classic animated adventure featuring funny cartoon characters, slapstick comedy, and heartwarming moments for all ages.",
-    videoUrl: "/uploads/videos/vid_sample_animation.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
     videoType: "free",
     contentType: "long",
   },
@@ -389,7 +389,7 @@ export const seedVideos: Video[] = [
     category: "Agriculture",
     description:
       "Modern agricultural technologies, organic drip irrigation, soil health management, and sustainable crop cultivation techniques.",
-    videoUrl: "/uploads/videos/vid_sample_nature.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
     videoType: "free",
     contentType: "long",
   },

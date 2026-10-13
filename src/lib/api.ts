@@ -97,7 +97,7 @@ export async function apiFetch<T = unknown>(
 
   if (!res.ok) {
     const errorMsg =
-      (typeof data === "object" && data?.error) ||
+      (typeof data === "object" && (data?.error || data?.message || data?.msg)) ||
       (typeof data === "string" && data) ||
       `HTTP error ${res.status}: ${res.statusText}`;
     throw new Error(errorMsg);

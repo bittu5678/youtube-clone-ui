@@ -42,9 +42,22 @@ export async function serveUploadFile(request: Request): Promise<Response | null
     });
   }
 
+  const DEMO_SAMPLE_FALLBACKS: Record<string, string> = {
+    "vid_sample_coding.mp4": "https://vjs.zencdn.net/v/oceans.mp4",
+    "vid_sample_nature.mp4":
+      "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    "vid_sample_animation.mp4":
+      "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
+  };
+
   try {
     const stats = await fs.promises.stat(fullPath);
     if (!stats.isFile()) {
+      const fileName = path.basename(fullPath);
+      const fallbackUrl = DEMO_SAMPLE_FALLBACKS[fileName];
+      if (fallbackUrl) {
+        return Response.redirect(fallbackUrl, 302);
+      }
       return new Response(JSON.stringify({ error: "File not found" }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
@@ -138,6 +151,11 @@ export async function serveUploadFile(request: Request): Promise<Response | null
     });
   } catch (err: any) {
     if (err?.code === "ENOENT") {
+      const fileName = path.basename(fullPath);
+      const fallbackUrl = DEMO_SAMPLE_FALLBACKS[fileName];
+      if (fallbackUrl) {
+        return Response.redirect(fallbackUrl, 302);
+      }
       return new Response(JSON.stringify({ error: "File not found on server storage" }), {
         status: 404,
         headers: { "Content-Type": "application/json" },

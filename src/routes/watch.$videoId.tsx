@@ -127,11 +127,13 @@ function WatchPage() {
     ...allVideos,
   ];
   const seenRelatedIds = new Set<string>([video.id]);
-  const related = allAvailableVideos.filter((v) => {
-    if (seenRelatedIds.has(v.id)) return false;
-    seenRelatedIds.add(v.id);
-    return true;
-  }).slice(0, 10);
+  const related = allAvailableVideos
+    .filter((v) => {
+      if (seenRelatedIds.has(v.id)) return false;
+      seenRelatedIds.add(v.id);
+      return true;
+    })
+    .slice(0, 10);
 
   const interleavedRelated = interleaveFeedWithImages(related, uploadedImages, IMAGE_FEED_INTERVAL);
 

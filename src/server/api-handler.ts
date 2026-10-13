@@ -149,7 +149,7 @@ function getInitialStore(): ServerStore {
         creator_name: "Alex Rivera",
         title: "10 Coding Shortcuts Every React Dev Must Know #Shorts",
         description: "Lightning-fast developer workflow hacks in under 45 seconds.",
-        video_url: "/uploads/videos/vid_sample_coding.mp4",
+        video_url: "https://vjs.zencdn.net/v/oceans.mp4",
         thumbnail_url:
           "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60",
         video_type: "free",
@@ -170,7 +170,7 @@ function getInitialStore(): ServerStore {
         creator_name: "Alex Rivera",
         title: "Full Stack App Architecture from Scratch: Zero to Production",
         description: "Complete guide to modern multi-tenant cloud application development.",
-        video_url: "/uploads/videos/vid_sample_nature.mp4",
+        video_url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
         thumbnail_url:
           "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&auto=format&fit=crop&q=60",
         video_type: "free",
@@ -191,7 +191,7 @@ function getInitialStore(): ServerStore {
         creator_name: "Maya Lin",
         title: "How to Build a 6-Figure YouTube Channel in 2026 #Shorts",
         description: "Creator monetization secrets revealed in under 60 seconds.",
-        video_url: "/uploads/videos/vid_sample_animation.mp4",
+        video_url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
         thumbnail_url:
           "https://images.unsplash.com/photo-1579202673506-ca3ce28943ef?w=800&auto=format&fit=crop&q=60",
         video_type: "premium",
@@ -238,7 +238,7 @@ function getInitialStore(): ServerStore {
         title: "The Great Forest Mystery — Animated Cartoon Adventure",
         description:
           "Classic animated adventure featuring funny cartoon characters, slapstick comedy, and heartwarming moments for all ages.",
-        video_url: "/uploads/videos/vid_sample_animation.mp4",
+        video_url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
         thumbnail_url:
           "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=60",
         video_type: "free",
@@ -260,7 +260,7 @@ function getInitialStore(): ServerStore {
         title: "Smart Organic Farming & High-Yield Agriculture Techniques",
         description:
           "Modern agricultural technologies, organic drip irrigation, soil health management, and sustainable crop cultivation techniques.",
-        video_url: "/uploads/videos/vid_sample_nature.mp4",
+        video_url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
         thumbnail_url:
           "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=800&auto=format&fit=crop&q=60",
         video_type: "free",
@@ -2350,7 +2350,7 @@ export async function handleApiRequest(
           const sql = userId
             ? "SELECT * FROM uploaded_images WHERE UPPER(user_id) = UPPER(?) ORDER BY created_at DESC"
             : "SELECT * FROM uploaded_images ORDER BY created_at DESC";
-          const [rows] = ((await pool.query(sql, userId ? [userId.trim()] : [])) as any);
+          const [rows] = (await pool.query(sql, userId ? [userId.trim()] : [])) as any;
           if (Array.isArray(rows) && rows.length > 0) {
             const mapped = rows.map((r: any) => ({
               id: String(r.id),

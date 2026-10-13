@@ -70,7 +70,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     creatorName: "Alex Rivera",
     title: "10 Coding Shortcuts Every React Dev Must Know #Shorts",
     description: "Lightning-fast developer workflow hacks in under 45 seconds.",
-    videoUrl: "/uploads/videos/vid_sample_coding.mp4",
+    videoUrl: "https://vjs.zencdn.net/v/oceans.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60",
     videoType: "free",
@@ -93,7 +93,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     title: "Full Stack App Architecture from Scratch: Zero to Production",
     description:
       "Deep-dive 45-minute comprehensive architectural masterclass covering scalable backend and modern UI.",
-    videoUrl: "/uploads/videos/vid_sample_nature.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&auto=format&fit=crop&q=60",
     videoType: "free",
@@ -116,7 +116,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     title: "Pro Monetization Hack: Unlocking High-CPM Niches #Shorts",
     description:
       "Exclusive creator strategy breakdown for maximum algorithmic engagement and monetization yield.",
-    videoUrl: "/uploads/videos/vid_sample_animation.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=800&auto=format&fit=crop&q=60",
     videoType: "premium",
@@ -211,7 +211,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     title: "The Great Forest Mystery — Animated Cartoon Adventure",
     description:
       "Classic animated adventure featuring funny cartoon characters, slapstick comedy, and heartwarming moments for all ages.",
-    videoUrl: "/uploads/videos/vid_sample_animation.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=60",
     videoType: "free",
@@ -234,7 +234,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     title: "Smart Organic Farming & High-Yield Agriculture Techniques",
     description:
       "Modern agricultural technologies, organic drip irrigation, soil health management, and sustainable crop cultivation techniques.",
-    videoUrl: "/uploads/videos/vid_sample_nature.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=800&auto=format&fit=crop&q=60",
     videoType: "free",

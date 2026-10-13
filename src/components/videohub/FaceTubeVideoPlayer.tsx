@@ -298,7 +298,8 @@ export function FaceTubeVideoPlayer({
           <div>
             <h3 className="text-lg font-bold text-white">Playback Error</h3>
             <p className="mt-1 text-xs text-zinc-300 leading-relaxed">
-              {errorMessage || "The media file could not be played. The source URL may be offline or in an unsupported format."}
+              {errorMessage ||
+                "The media file could not be played. The source URL may be offline or in an unsupported format."}
             </p>
             <p className="mt-2 text-[11px] font-mono text-zinc-400 truncate max-w-md mx-auto bg-black/60 px-3 py-1 rounded-md border border-zinc-800">
               Source: {cleanSrc}
@@ -370,6 +371,23 @@ export function FaceTubeVideoPlayer({
           onEnded?.();
         }}
         onError={(_e) => {
+          const demoFallbacks: Record<string, string> = {
+            vid_sample_coding: "https://vjs.zencdn.net/v/oceans.mp4",
+            vid_sample_nature:
+              "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+            vid_sample_animation:
+              "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
+          };
+          const matchedKey = Object.keys(demoFallbacks).find((k) => cleanSrc.includes(k));
+          if (matchedKey && videoRef.current) {
+            const fallbackUrl = demoFallbacks[matchedKey]!;
+            if (videoRef.current.src !== fallbackUrl) {
+              videoRef.current.src = fallbackUrl;
+              videoRef.current.load();
+              videoRef.current.play().catch(() => {});
+              return;
+            }
+          }
           setIsLoading(false);
           setIsBuffering(false);
           setHasError(true);

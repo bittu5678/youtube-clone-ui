@@ -600,9 +600,18 @@ function FreeVideoUploadView({
       // 1. Upload the actual video file to production storage
       const uploadRes = await api.uploads.uploadVideo(videoFile);
       if (!uploadRes || !uploadRes.url) {
-        throw new Error(
-          (uploadRes as any)?.error || "Failed to upload video file to server storage.",
-        );
+        const serverError =
+          (uploadRes as any)?.error ||
+          (uploadRes as any)?.message ||
+          (uploadRes as any)?.msg ||
+          (!uploadRes
+            ? "Server returned an empty upload response."
+            : typeof uploadRes === "string"
+              ? uploadRes
+              : (uploadRes as any)?.success === false
+                ? "Server rejected video upload without providing an error message."
+                : "Server storage upload succeeded with HTTP 200 but did not return a valid video URL.");
+        throw new Error(serverError);
       }
 
       // 2. Persist video thumbnail to server storage or graceful category fallback
@@ -1017,7 +1026,18 @@ function PremiumVideoUploadView({
       // 1. Upload video file to server storage first
       const uploadRes = await api.uploads.uploadVideo(videoFile);
       if (!uploadRes || !uploadRes.url) {
-        throw new Error((uploadRes as any)?.error || "Failed to upload video file to storage.");
+        const serverError =
+          (uploadRes as any)?.error ||
+          (uploadRes as any)?.message ||
+          (uploadRes as any)?.msg ||
+          (!uploadRes
+            ? "Server returned an empty upload response."
+            : typeof uploadRes === "string"
+              ? uploadRes
+              : (uploadRes as any)?.success === false
+                ? "Server rejected video upload without providing an error message."
+                : "Server storage upload succeeded with HTTP 200 but did not return a valid video URL.");
+        throw new Error(serverError);
       }
 
       const vidId = `vid-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -1679,9 +1699,18 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
       // 1. Upload the image file to real persistent server storage
       const uploadRes = await api.uploads.uploadImage(imageFile);
       if (!uploadRes || !uploadRes.success || !uploadRes.url) {
-        throw new Error(
-          (uploadRes as any)?.error || "Failed to upload image file to server storage.",
-        );
+        const serverError =
+          (uploadRes as any)?.error ||
+          (uploadRes as any)?.message ||
+          (uploadRes as any)?.msg ||
+          (!uploadRes
+            ? "Server returned an empty upload response."
+            : typeof uploadRes === "string"
+              ? uploadRes
+              : (uploadRes as any)?.success === false
+                ? "Server rejected image upload without providing an error message."
+                : "Server storage upload succeeded with HTTP 200 but did not return a valid image URL.");
+        throw new Error(serverError);
       }
 
       // 2. Format and file size from server response or validated file
@@ -1691,8 +1720,7 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
       else if (uploadRes.format === "jpeg" || imageFile.name.toLowerCase().endsWith(".jpeg"))
         format = "jpeg";
 
-      const fileSize =
-        uploadRes.fileSize || `${(imageFile.size / (1024 * 1024)).toFixed(2)} MB`;
+      const fileSize = uploadRes.fileSize || `${(imageFile.size / (1024 * 1024)).toFixed(2)} MB`;
 
       // 3. Persist image metadata with persistent URL to database
       const created = await recordNewImageUpload({
