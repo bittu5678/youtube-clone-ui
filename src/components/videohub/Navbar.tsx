@@ -375,7 +375,7 @@ export function Navbar({
       : "AK";
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md pt-[env(safe-area-inset-top,0px)]">
       {/* Mobile Search Overlay */}
       {mobileSearchOpen ? (
         <div

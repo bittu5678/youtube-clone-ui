@@ -114,21 +114,34 @@ export function saveStoredImages(images: UploadedImage[]): void {
 export async function fetchUploadedImages(userId?: string): Promise<UploadedImage[]> {
   try {
     const res = await api.images.list({ userId });
-    if (res && res.images && res.images.length > 0) {
-      return res.images.map((item: any) => ({
-        id: item.id,
-        userId: item.user_id || item.userId,
-        creatorName: item.creator_name || item.creatorName,
-        title: item.title,
+    if (res && res.images && Array.isArray(res.images)) {
+      const serverImages: UploadedImage[] = res.images.map((item: any) => ({
+        id: String(item.id),
+        userId: item.user_id || item.userId || "FT102857",
+        creatorName: item.creator_name || item.creatorName || "FaceTube Creator",
+        title: item.title || "Uploaded Image",
         description: item.description || "",
         imageUrl: item.image_url || item.imageUrl,
-        format: item.format || "jpg",
+        format: (item.format || "jpg") as "jpg" | "jpeg" | "png" | "webp",
         fileSize: item.file_size || item.fileSize || "1.0 MB",
         category: item.category || "Entertainment",
         views: Number(item.views) || 0,
         likes: Number(item.likes) || 0,
-        createdAt: item.created_at || item.createdAt,
+        createdAt: item.created_at || item.createdAt || new Date().toISOString(),
       }));
+
+      // Merge with stored local images so newly uploaded images never disappear
+      const stored = getStoredImages();
+      const serverIds = new Set(serverImages.map((img) => img.id));
+      const notInServer = stored.filter((img) => !serverIds.has(img.id));
+      const combined = [...notInServer, ...serverImages];
+      saveStoredImages(combined);
+
+      if (userId) {
+        const norm = userId.trim().toUpperCase();
+        return combined.filter((img) => img.userId.trim().toUpperCase() === norm);
+      }
+      return combined;
     }
   } catch (_e) {
     // fallback to local storage

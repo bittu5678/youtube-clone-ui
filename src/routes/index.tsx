@@ -213,7 +213,7 @@ function Index() {
 
         <main className="min-w-0 flex-1 pb-24 lg:pb-10">
           {/* Category chips with the 11 updated categories */}
-          <div className="sticky top-16 z-30 border-b border-border bg-background/90 backdrop-blur-md">
+          <div className="sticky top-[calc(4rem+env(safe-area-inset-top,0px))] z-30 border-b border-border bg-background/90 backdrop-blur-md">
             <div className="px-4 pt-3 md:hidden">
               <div className="flex h-10 items-center rounded-full border border-border bg-secondary/60 px-4 focus-within:border-brand/50">
                 <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />

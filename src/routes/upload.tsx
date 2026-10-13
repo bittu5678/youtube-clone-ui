@@ -40,6 +40,7 @@ import {
 } from "@/lib/video-service";
 import {
   captureVideoThumbnail,
+  captureAndUploadThumbnail,
   getCategoryFallbackThumbnail,
   resolveVideoThumbnail,
 } from "@/lib/thumbnail-service";
@@ -599,11 +600,20 @@ function FreeVideoUploadView({
       // 1. Upload the actual video file to production storage
       const uploadRes = await api.uploads.uploadVideo(videoFile);
       if (!uploadRes || !uploadRes.url) {
-        throw new Error((uploadRes as any)?.error || "Failed to upload video file to server storage.");
+        throw new Error(
+          (uploadRes as any)?.error || "Failed to upload video file to server storage.",
+        );
       }
 
-      // 2. Persist video metadata to database through server API
-      const posterUrl = capturedThumbnail || getCategoryFallbackThumbnail(category);
+      // 2. Persist video thumbnail to server storage or graceful category fallback
+      let posterUrl = "";
+      try {
+        posterUrl = await captureAndUploadThumbnail(videoFile, category);
+      } catch (_e) {
+        posterUrl = capturedThumbnail || getCategoryFallbackThumbnail(category);
+      }
+
+      // 3. Persist video metadata to database through server API
       const newVideo = await recordNewVideoUpload({
         userId,
         creatorName,
@@ -657,15 +667,28 @@ function FreeVideoUploadView({
               src={publishedVideo.videoUrl}
             />
             <div className="p-3 text-left">
-              <div className="text-xs font-bold text-foreground truncate">{publishedVideo.title}</div>
+              <div className="text-xs font-bold text-foreground truncate">
+                {publishedVideo.title}
+              </div>
               <div className="text-[10px] text-muted-foreground mt-0.5 font-mono uppercase">
-                {publishedVideo.contentType} video · {publishedVideo.category} · Duration: {publishedVideo.duration}
+                {publishedVideo.contentType} video · {publishedVideo.category} · Duration:{" "}
+                {publishedVideo.duration}
               </div>
             </div>
           </div>
         )}
 
-        <div className="flex items-center justify-center gap-3 pt-4">
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+          {publishedVideo && (
+            <Link
+              to="/watch/$videoId"
+              params={{ videoId: publishedVideo.id }}
+              className="rounded-xl bg-brand px-6 py-2.5 text-xs font-bold text-white hover:bg-brand-dark transition shadow-lift inline-flex items-center gap-1.5"
+            >
+              <Play className="h-3.5 w-3.5 fill-current" />
+              Watch Video Now
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -676,7 +699,7 @@ function FreeVideoUploadView({
               setPublishedVideo(null);
               setUploadSuccess(false);
             }}
-            className="rounded-xl bg-sky-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-sky-500 transition"
+            className="rounded-xl bg-secondary border border-border px-6 py-2.5 text-xs font-bold text-foreground hover:bg-secondary/80 transition"
           >
             Upload Another Free Video
           </button>
@@ -787,7 +810,9 @@ function FreeVideoUploadView({
                   {detectedDuration ? ` · ${detectedDuration}` : ""})
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">Click or drop another file to change video</p>
+              <p className="text-[11px] text-muted-foreground">
+                Click or drop another file to change video
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -996,7 +1021,12 @@ function PremiumVideoUploadView({
       }
 
       const vidId = `vid-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      const posterUrl = capturedThumbnail || getCategoryFallbackThumbnail(category);
+      let posterUrl = "";
+      try {
+        posterUrl = await captureAndUploadThumbnail(videoFile, category);
+      } catch (_e) {
+        posterUrl = capturedThumbnail || getCategoryFallbackThumbnail(category);
+      }
 
       // 2. Initiate Razorpay ₹6 payment flow with server verification
       await initiatePremiumVideoPayment({
@@ -1010,6 +1040,7 @@ function PremiumVideoUploadView({
         thumbnailUrl: posterUrl,
         category,
         contentType: format,
+        duration: detectedDuration || (format === "short" ? "0:45" : "14:20"),
         directReferrerId: referrerId,
         onSuccess: async () => {
           setUploading(false);
@@ -1167,7 +1198,9 @@ function PremiumVideoUploadView({
                   {detectedDuration ? ` · ${detectedDuration}` : ""})
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">Click or drop another file to change video</p>
+              <p className="text-[11px] text-muted-foreground">
+                Click or drop another file to change video
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -1294,7 +1327,14 @@ function AdPromotionUploadView({
   const referrerId = profile?.referral_code || dbUser?.referral_code || undefined;
 
   const DURATION_PLANS = [
-    { id: "plan-7-days", name: "7_days", label: "7 Days", days: 7, price: 100, rateText: "₹14.28/day" },
+    {
+      id: "plan-7-days",
+      name: "7_days",
+      label: "7 Days",
+      days: 7,
+      price: 100,
+      rateText: "₹14.28/day",
+    },
     {
       id: "plan-15-days",
       name: "15_days",
@@ -1625,6 +1665,10 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!imageFile) {
+      toast.error("Please select an image file to upload.");
+      return;
+    }
     if (!title.trim()) {
       toast.error("Please enter an image title.");
       return;
@@ -1632,26 +1676,31 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
 
     setUploading(true);
     try {
-      // Determine format
-      let format: "jpg" | "jpeg" | "png" | "webp" = "jpg";
-      if (imageFile) {
-        if (imageFile.type === "image/png") format = "png";
-        else if (imageFile.type === "image/webp") format = "webp";
-        else if (imageFile.name.endsWith(".jpeg")) format = "jpeg";
+      // 1. Upload the image file to real persistent server storage
+      const uploadRes = await api.uploads.uploadImage(imageFile);
+      if (!uploadRes || !uploadRes.success || !uploadRes.url) {
+        throw new Error(
+          (uploadRes as any)?.error || "Failed to upload image file to server storage.",
+        );
       }
 
-      const imageUrl =
-        previewUrl ||
-        "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&auto=format&fit=crop&q=80";
+      // 2. Format and file size from server response or validated file
+      let format: "jpg" | "jpeg" | "png" | "webp" = "jpg";
+      if (uploadRes.format === "png" || imageFile.type === "image/png") format = "png";
+      else if (uploadRes.format === "webp" || imageFile.type === "image/webp") format = "webp";
+      else if (uploadRes.format === "jpeg" || imageFile.name.toLowerCase().endsWith(".jpeg"))
+        format = "jpeg";
 
-      const fileSize = imageFile ? `${(imageFile.size / (1024 * 1024)).toFixed(2)} MB` : "1.2 MB";
+      const fileSize =
+        uploadRes.fileSize || `${(imageFile.size / (1024 * 1024)).toFixed(2)} MB`;
 
+      // 3. Persist image metadata with persistent URL to database
       const created = await recordNewImageUpload({
         userId,
         creatorName,
         title: title.trim(),
         description: description.trim(),
-        imageUrl,
+        imageUrl: uploadRes.url,
         format,
         fileSize,
         category,
@@ -1659,8 +1708,9 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
 
       setUploadedImage(created);
       toast.success("🎉 Image uploaded successfully! Saved to your media library.");
-    } catch (err) {
-      toast.error("Failed to upload image.");
+    } catch (err: any) {
+      console.error("Image upload failed:", err);
+      toast.error(err?.message || "Failed to upload image.");
     } finally {
       setUploading(false);
     }
@@ -1852,9 +1902,16 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
           <button
             type="submit"
             disabled={uploading}
-            className="rounded-xl bg-teal-600 px-8 py-3 text-xs font-bold text-white hover:bg-teal-500 transition shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-8 py-3 text-xs font-bold text-white hover:bg-teal-500 transition shadow-sm disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
           >
-            {uploading ? "Saving Image..." : "Upload Image"}
+            {uploading ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Uploading Image to Server...
+              </>
+            ) : (
+              "Upload Image"
+            )}
           </button>
         </div>
       </form>

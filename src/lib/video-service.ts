@@ -70,8 +70,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     creatorName: "Alex Rivera",
     title: "10 Coding Shortcuts Every React Dev Must Know #Shorts",
     description: "Lightning-fast developer workflow hacks in under 45 seconds.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    videoUrl: "/uploads/videos/vid_sample_coding.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60",
     videoType: "free",
@@ -94,7 +93,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     title: "Full Stack App Architecture from Scratch: Zero to Production",
     description:
       "Deep-dive 45-minute comprehensive architectural masterclass covering scalable backend and modern UI.",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    videoUrl: "/uploads/videos/vid_sample_nature.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&auto=format&fit=crop&q=60",
     videoType: "free",
@@ -117,8 +116,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     title: "Pro Monetization Hack: Unlocking High-CPM Niches #Shorts",
     description:
       "Exclusive creator strategy breakdown for maximum algorithmic engagement and monetization yield.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+    videoUrl: "/uploads/videos/vid_sample_animation.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=800&auto=format&fit=crop&q=60",
     videoType: "premium",
@@ -144,8 +142,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     title: "Executive Masterclass: Building $10K/Month Video Funnels",
     description:
       "Full 1-hour verified premium course with step-by-step case studies and downloadable resources.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+    videoUrl: "https://vjs.zencdn.net/v/oceans.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=800&auto=format&fit=crop&q=60",
     videoType: "premium",
@@ -168,7 +165,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     creatorName: "Maya Lin",
     title: "Cinematic Color Grading in 30 Seconds #Shorts",
     description: "LUT color correction tricks for mobile videographers.",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=800&auto=format&fit=crop&q=60",
     videoType: "free",
@@ -190,8 +187,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     creatorName: "Maya Lin",
     title: "Secret Lighting Setup for 4K Vertical Video #Shorts",
     description: "Lighting angles and diffusers used by professional film studios.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=800&auto=format&fit=crop&q=60",
     videoType: "premium",
@@ -215,7 +211,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     title: "The Great Forest Mystery — Animated Cartoon Adventure",
     description:
       "Classic animated adventure featuring funny cartoon characters, slapstick comedy, and heartwarming moments for all ages.",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    videoUrl: "/uploads/videos/vid_sample_animation.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=60",
     videoType: "free",
@@ -238,8 +234,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     title: "Smart Organic Farming & High-Yield Agriculture Techniques",
     description:
       "Modern agricultural technologies, organic drip irrigation, soil health management, and sustainable crop cultivation techniques.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+    videoUrl: "/uploads/videos/vid_sample_nature.mp4",
     thumbnailUrl:
       "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=800&auto=format&fit=crop&q=60",
     videoType: "free",
@@ -347,7 +342,13 @@ export async function fetchUploadedVideos(
       }));
 
       // Cache into local storage
-      if (mapped.length > 0 && !opts.videoType && !opts.contentType && !opts.category && !opts.search) {
+      if (
+        mapped.length > 0 &&
+        !opts.videoType &&
+        !opts.contentType &&
+        !opts.category &&
+        !opts.search
+      ) {
         saveStoredVideos(mapped);
       }
 
@@ -457,7 +458,9 @@ export async function recordNewVideoUpload(params: {
   const isPremium = params.videoType === "premium";
 
   if (!params.videoUrl || !params.videoUrl.trim()) {
-    throw new Error("Cannot publish video: videoUrl is missing. Video must be uploaded to storage first.");
+    throw new Error(
+      "Cannot publish video: videoUrl is missing. Video must be uploaded to storage first.",
+    );
   }
 
   const videoId = params.id || `vid-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -506,7 +509,9 @@ export async function recordNewVideoUpload(params: {
   });
 
   if (!apiRes || !apiRes.success) {
-    throw new Error((apiRes as any)?.error || "Server rejected video creation. Video was not published.");
+    throw new Error(
+      (apiRes as any)?.error || "Server rejected video creation. Video was not published.",
+    );
   }
 
   // 2. Cache newly confirmed video in local store for rapid UI transitions

@@ -18,8 +18,14 @@ import { Navbar } from "@/components/videohub/Navbar";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { VideoCard } from "@/components/videohub/VideoCard";
 import { ImageCard } from "@/components/videohub/ImageCard";
-import { allVideos, findVideo, findVideoAsync } from "@/data/videos";
+import { FaceTubeVideoPlayer } from "@/components/videohub/FaceTubeVideoPlayer";
+import { allVideos, findVideo, findVideoAsync, type Video } from "@/data/videos";
 import { useAuth } from "@/lib/auth-context";
+import {
+  fetchUploadedVideos,
+  convertUploadedToCatalogVideo,
+  type UploadedVideo,
+} from "@/lib/video-service";
 import {
   fetchUploadedImages,
   interleaveFeedWithImages,
@@ -99,16 +105,33 @@ function WatchPage() {
     },
   ]);
 
-  const related = allVideos.filter((v) => v.id !== video.id).slice(0, 8);
+  const [uploadedVideos, setUploadedVideos] = useState<UploadedVideo[]>([]);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
 
   useEffect(() => {
+    fetchUploadedVideos()
+      .then((vids) => {
+        if (vids && vids.length > 0) setUploadedVideos(vids);
+      })
+      .catch((err) => console.error("Error loading videos for related feed:", err));
+
     fetchUploadedImages()
       .then((imgs) => {
         if (imgs && imgs.length > 0) setUploadedImages(imgs);
       })
       .catch((err) => console.error("Error loading images for related feed:", err));
   }, []);
+
+  const allAvailableVideos: Video[] = [
+    ...uploadedVideos.map(convertUploadedToCatalogVideo),
+    ...allVideos,
+  ];
+  const seenRelatedIds = new Set<string>([video.id]);
+  const related = allAvailableVideos.filter((v) => {
+    if (seenRelatedIds.has(v.id)) return false;
+    seenRelatedIds.add(v.id);
+    return true;
+  }).slice(0, 10);
 
   const interleavedRelated = interleaveFeedWithImages(related, uploadedImages, IMAGE_FEED_INTERVAL);
 
@@ -166,54 +189,14 @@ function WatchPage() {
 
       <main className="mx-auto grid max-w-[1600px] gap-8 px-4 py-6 pb-24 sm:px-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:pb-10">
         <div className="min-w-0">
-          <div className="relative overflow-hidden rounded-2xl bg-black shadow-lift">
-            {video.videoUrl ? (
-              <video
-                controls
-                autoPlay
-                playsInline
-                poster={video.thumb}
-                className="aspect-video w-full object-contain bg-black"
-                src={video.videoUrl}
-              >
-                <source src={video.videoUrl} type="video/mp4" />
-                Your browser does not support the video tag.
-              </video>
-            ) : (
-              <>
-                <img
-                  src={video.thumb}
-                  alt={video.title}
-                  width={1280}
-                  height={720}
-                  className="aspect-video w-full object-cover opacity-55"
-                />
-                <button
-                  type="button"
-                  aria-label="Play video"
-                  className="absolute inset-0 grid place-items-center"
-                >
-                  <span className="grid h-20 w-20 place-items-center rounded-full bg-brand text-brand-foreground shadow-lift transition hover:scale-105">
-                    <Play className="h-9 w-9 translate-x-[2px] fill-current" />
-                  </span>
-                </button>
-
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-4 pb-3 pt-10">
-                  <div className="h-1 w-full overflow-hidden rounded-full bg-white/25">
-                    <div className="h-full w-1/3 rounded-full bg-brand" />
-                  </div>
-                  <div className="mt-2 flex items-center gap-3 text-white/90">
-                    <Play className="h-4 w-4 fill-current" />
-                    <Volume2 className="h-4 w-4" />
-                    <span className="text-xs tabular-nums">00:00 / {video.duration}</span>
-                    <span className="ml-auto flex items-center gap-3">
-                      <Settings className="h-4 w-4" />
-                      <Maximize2 className="h-4 w-4" />
-                    </span>
-                  </div>
-                </div>
-              </>
-            )}
+          <div className="overflow-hidden rounded-2xl bg-black shadow-lift">
+            <FaceTubeVideoPlayer
+              src={video.videoUrl}
+              poster={video.thumb || video.thumbnailUrl}
+              title={video.title}
+              duration={video.duration}
+              autoPlay={true}
+            />
           </div>
 
           <h1 className="mt-4 text-xl font-extrabold leading-snug tracking-tight sm:text-2xl">

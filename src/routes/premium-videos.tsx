@@ -23,9 +23,7 @@ import {
 import { resolveVideoThumbnail, SVG_FALLBACK_THUMBNAIL } from "@/lib/thumbnail-service";
 
 export const Route = createFileRoute("/premium-videos")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { mode?: string; refresh?: number } => ({
+  validateSearch: (search: Record<string, unknown>): { mode?: string; refresh?: number } => ({
     mode: typeof search.mode === "string" ? search.mode : undefined,
     refresh: typeof search.refresh === "number" ? search.refresh : undefined,
   }),
@@ -87,7 +85,8 @@ export function PremiumVideosPage() {
       thumbnail: resolveVideoThumbnail(v),
       thumbnailUrl: resolveVideoThumbnail(v),
       videoType: "premium" as const,
-      contentType: (v.duration && v.duration.startsWith("0:") ? "short" : "long") as "short" | "long",
+      contentType: (v.duration && v.duration.startsWith("0:") ? "short" : "long") as
+        "short" | "long",
     }));
   }, []);
 
@@ -161,7 +160,8 @@ export function PremiumVideosPage() {
                 </span>
               </div>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Gated subscriber-exclusive content, courses, and high-tier masterclasses verified on Hostinger MySQL
+                Gated subscriber-exclusive content, courses, and high-tier masterclasses verified on
+                Hostinger MySQL
               </p>
             </div>
           </div>
@@ -281,7 +281,8 @@ export function PremiumVideosPage() {
             <Sparkles className="h-10 w-10 text-muted-foreground mx-auto" />
             <h3 className="text-base font-bold text-foreground">No premium videos found</h3>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              There are currently no verified premium videos matching the selected format or category.
+              There are currently no verified premium videos matching the selected format or
+              category.
             </p>
             <Link
               to="/upload"
@@ -358,11 +359,7 @@ export function PremiumVideosPage() {
                   {/* Metadata area: clearly positioned below thumbnail with zero overlap */}
                   <div className="p-4 flex flex-col justify-between flex-1 space-y-2.5">
                     <div>
-                      <Link
-                        to="/watch/$videoId"
-                        params={{ videoId: video.id }}
-                        className="block"
-                      >
+                      <Link to="/watch/$videoId" params={{ videoId: video.id }} className="block">
                         <h3 className="line-clamp-2 text-xs sm:text-sm font-bold text-foreground leading-snug group-hover:text-amber-400 transition-colors">
                           {video.title}
                         </h3>

@@ -25,7 +25,7 @@ export function VideoCard({ video }: { video: Video }) {
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-          
+
           {/* Top badges */}
           <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
             {video.isPromoted && (
@@ -38,11 +38,12 @@ export function VideoCard({ video }: { video: Video }) {
                 <Lock className="h-2.5 w-2.5" /> ₹6 Premium
               </span>
             )}
-            {video.videoType === "free" && (video.id.startsWith("vid-") || video.id.startsWith("vid_")) && (
-              <span className="rounded-md bg-sky-500/90 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm flex items-center gap-1">
-                <Globe className="h-2.5 w-2.5" /> Free
-              </span>
-            )}
+            {video.videoType === "free" &&
+              (video.id.startsWith("vid-") || video.id.startsWith("vid_")) && (
+                <span className="rounded-md bg-sky-500/90 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm flex items-center gap-1">
+                  <Globe className="h-2.5 w-2.5" /> Free
+                </span>
+              )}
           </div>
 
           <span className="absolute bottom-2 right-2 rounded-md bg-black/80 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white z-10">

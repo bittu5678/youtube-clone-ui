@@ -14,8 +14,7 @@ export const CATEGORY_THUMBNAILS: Record<string, string> = {
     "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&auto=format&fit=crop&q=80",
   Comedy:
     "https://images.unsplash.com/photo-1514306191717-452ec28c7814?w=800&auto=format&fit=crop&q=80",
-  Blog:
-    "https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=800&auto=format&fit=crop&q=80",
+  Blog: "https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=800&auto=format&fit=crop&q=80",
   Movie:
     "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800&auto=format&fit=crop&q=80",
   Entertainment:
@@ -62,11 +61,7 @@ export function resolveVideoThumbnail(video?: {
   category?: string;
 }): string {
   if (!video) return CATEGORY_THUMBNAILS["General"];
-  const rawCand =
-    video.thumbnailUrl ||
-    video.thumbnail_url ||
-    video.thumb ||
-    video.thumbnail;
+  const rawCand = video.thumbnailUrl || video.thumbnail_url || video.thumb || video.thumbnail;
 
   if (rawCand && typeof rawCand === "string") {
     const trimmed = rawCand.trim();
@@ -168,10 +163,7 @@ export async function captureVideoThumbnail(file: File): Promise<string> {
  * returning the persistent URL (e.g. /uploads/images/img_xxxx.jpg).
  * Falls back to category fallback thumbnail if upload fails or is unavailable.
  */
-export async function captureAndUploadThumbnail(
-  file: File,
-  category?: string,
-): Promise<string> {
+export async function captureAndUploadThumbnail(file: File, category?: string): Promise<string> {
   const fallback = getCategoryFallbackThumbnail(category);
   try {
     const dataUrl = await captureVideoThumbnail(file);

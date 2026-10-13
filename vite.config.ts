@@ -26,6 +26,46 @@ function facetubeApiDevPlugin(): Plugin {
     name: "facetube-api-dev-server",
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        if (req.url && req.url.startsWith("/uploads/")) {
+          try {
+            const fullUrl = new URL(req.url, `http://${req.headers.host || "localhost:3000"}`);
+            const headers = new Headers();
+            for (const [key, value] of Object.entries(req.headers)) {
+              if (value) {
+                if (Array.isArray(value)) value.forEach((v) => headers.append(key, v));
+                else headers.set(key, value);
+              }
+            }
+            const webReq = new Request(fullUrl.toString(), {
+              method: req.method || "GET",
+              headers,
+            });
+            const { serveUploadFile } = await import("./src/server/uploads-handler");
+            const response = await serveUploadFile(webReq);
+            if (response) {
+              res.statusCode = response.status;
+              response.headers.forEach((val, key) => {
+                res.setHeader(key, val);
+              });
+              if (response.body) {
+                const reader = response.body.getReader();
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  res.write(value);
+                }
+                res.end();
+              } else {
+                res.end();
+              }
+              return;
+            }
+          } catch (e) {
+            console.error("[Uploads Dev Server Error]", e);
+          }
+          return next();
+        }
+
         if (!req.url || !req.url.startsWith("/api")) {
           return next();
         }

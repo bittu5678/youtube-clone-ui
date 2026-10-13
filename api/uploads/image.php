@@ -19,7 +19,22 @@ if (!is_dir($uploadDir)) {
 if (!empty($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
     $tmpName = $_FILES['image']['tmp_name'];
     $origName = basename($_FILES['image']['name']);
-    $ext = pathinfo($origName, PATHINFO_EXTENSION);
+    $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+    $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+    if (!in_array($ext, $allowedExts, true)) {
+        jsonResponse([
+            'success' => false,
+            'error' => 'Unsupported image format ".' . htmlspecialchars($ext) . '". Supported formats are JPG, JPEG, PNG, WEBP.'
+        ], 400);
+    }
+
+    if ($_FILES['image']['size'] > 25 * 1024 * 1024) {
+        jsonResponse([
+            'success' => false,
+            'error' => 'Image file size exceeds maximum permitted limit (25MB).'
+        ], 400);
+    }
+
     $fileName = 'img_' . time() . '_' . substr(md5(random_bytes(6)), 0, 6) . '.' . ($ext ?: 'jpg');
     $target = $uploadDir . $fileName;
 
@@ -30,15 +45,16 @@ if (!empty($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
             'fileName' => $fileName,
             'format' => $ext,
             'fileSize' => round($_FILES['image']['size'] / (1024 * 1024), 2) . ' MB'
-        ]);
+        ], 201);
+    } else {
+        jsonResponse([
+            'success' => false,
+            'error' => 'Failed to write uploaded image to server storage.'
+        ], 500);
     }
 }
 
-// Default fallback return
 jsonResponse([
-    'success' => true,
-    'url' => '/src/assets/hero.jpg',
-    'fileName' => 'image_upload.jpg',
-    'format' => 'jpg',
-    'fileSize' => '1.2 MB'
-]);
+    'success' => false,
+    'error' => 'No image file uploaded. Field "image" is required (JPG, JPEG, PNG, or WEBP).'
+], 400);

@@ -71,6 +71,8 @@ interface ServerStore {
     description: string;
     image_url: string;
     thumbnail_url: string;
+    format?: string;
+    file_size?: string;
     category: string;
     views: number;
     likes: number;
@@ -147,8 +149,7 @@ function getInitialStore(): ServerStore {
         creator_name: "Alex Rivera",
         title: "10 Coding Shortcuts Every React Dev Must Know #Shorts",
         description: "Lightning-fast developer workflow hacks in under 45 seconds.",
-        video_url:
-          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+        video_url: "/uploads/videos/vid_sample_coding.mp4",
         thumbnail_url:
           "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60",
         video_type: "free",
@@ -169,8 +170,7 @@ function getInitialStore(): ServerStore {
         creator_name: "Alex Rivera",
         title: "Full Stack App Architecture from Scratch: Zero to Production",
         description: "Complete guide to modern multi-tenant cloud application development.",
-        video_url:
-          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+        video_url: "/uploads/videos/vid_sample_nature.mp4",
         thumbnail_url:
           "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&auto=format&fit=crop&q=60",
         video_type: "free",
@@ -191,8 +191,7 @@ function getInitialStore(): ServerStore {
         creator_name: "Maya Lin",
         title: "How to Build a 6-Figure YouTube Channel in 2026 #Shorts",
         description: "Creator monetization secrets revealed in under 60 seconds.",
-        video_url:
-          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+        video_url: "/uploads/videos/vid_sample_animation.mp4",
         thumbnail_url:
           "https://images.unsplash.com/photo-1579202673506-ca3ce28943ef?w=800&auto=format&fit=crop&q=60",
         video_type: "premium",
@@ -214,8 +213,7 @@ function getInitialStore(): ServerStore {
         creator_name: "Maya Lin",
         title: "Masterclass: High-Ticket Creator Monetization & Brand Deals",
         description: "Comprehensive blueprint for closing 5-figure creator sponsor deals.",
-        video_url:
-          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+        video_url: "https://vjs.zencdn.net/v/oceans.mp4",
         thumbnail_url:
           "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=800&auto=format&fit=crop&q=60",
         video_type: "premium",
@@ -240,8 +238,7 @@ function getInitialStore(): ServerStore {
         title: "The Great Forest Mystery — Animated Cartoon Adventure",
         description:
           "Classic animated adventure featuring funny cartoon characters, slapstick comedy, and heartwarming moments for all ages.",
-        video_url:
-          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+        video_url: "/uploads/videos/vid_sample_animation.mp4",
         thumbnail_url:
           "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=60",
         video_type: "free",
@@ -263,8 +260,7 @@ function getInitialStore(): ServerStore {
         title: "Smart Organic Farming & High-Yield Agriculture Techniques",
         description:
           "Modern agricultural technologies, organic drip irrigation, soil health management, and sustainable crop cultivation techniques.",
-        video_url:
-          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+        video_url: "/uploads/videos/vid_sample_nature.mp4",
         thumbnail_url:
           "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=800&auto=format&fit=crop&q=60",
         video_type: "free",
@@ -1852,10 +1848,9 @@ export async function handleApiRequest(
       const pool = getMysqlPool();
       if (pool) {
         try {
-          const [rows] = (await pool.query(
-            "SELECT * FROM uploaded_videos WHERE id = ? LIMIT 1",
-            [id],
-          )) as any;
+          const [rows] = (await pool.query("SELECT * FROM uploaded_videos WHERE id = ? LIMIT 1", [
+            id,
+          ])) as any;
           if (Array.isArray(rows) && rows.length > 0) {
             const r = rows[0];
             return jsonResponse({
@@ -1983,7 +1978,9 @@ export async function handleApiRequest(
         duration: body.duration || "1:00",
         views: 0,
         likes: 0,
-        payment_status: (body.payment_status || body.paymentStatus || (body.video_type === "premium" ? "pending" : "not_required")) as
+        payment_status: (body.payment_status ||
+          body.paymentStatus ||
+          (body.video_type === "premium" ? "pending" : "not_required")) as
           "not_required" | "pending" | "paid" | "failed",
         payment_id: body.payment_id || body.paymentId || undefined,
         payment_amount: Number(body.payment_amount || body.paymentAmount) || 0,
@@ -2056,8 +2053,12 @@ export async function handleApiRequest(
         const pool = getMysqlPool();
         if (pool) {
           try {
-            await pool.query("UPDATE uploaded_videos SET likes = likes + 1 WHERE id = ?", [body.videoId]);
-          } catch (_e) {}
+            await pool.query("UPDATE uploaded_videos SET likes = likes + 1 WHERE id = ?", [
+              body.videoId,
+            ]);
+          } catch (_e) {
+            // Ignore error if MySQL is unreachable
+          }
         }
 
         return jsonResponse({ success: true, liked: true, likes: vid.likes });
@@ -2150,7 +2151,10 @@ export async function handleApiRequest(
 
         if (!file || typeof file === "string") {
           return jsonResponse(
-            { success: false, error: "No video file found in upload request. Field 'video' is required." },
+            {
+              success: false,
+              error: "No video file found in upload request. Field 'video' is required.",
+            },
             400,
           );
         }
@@ -2172,7 +2176,10 @@ export async function handleApiRequest(
 
         const maxSizeBytes = 250 * 1024 * 1024; // 250 MB
         if (videoFile.size <= 0) {
-          return jsonResponse({ success: false, error: "Uploaded video file is empty (0 bytes)." }, 400);
+          return jsonResponse(
+            { success: false, error: "Uploaded video file is empty (0 bytes)." },
+            400,
+          );
         }
         if (videoFile.size > maxSizeBytes) {
           return jsonResponse(
@@ -2206,7 +2213,11 @@ export async function handleApiRequest(
       } catch (uploadErr: any) {
         console.error("Video upload server error:", uploadErr);
         return jsonResponse(
-          { success: false, error: "Server failed to process video upload: " + (uploadErr?.message || "Unknown error") },
+          {
+            success: false,
+            error:
+              "Server failed to process video upload: " + (uploadErr?.message || "Unknown error"),
+          },
           500,
         );
       }
@@ -2221,7 +2232,10 @@ export async function handleApiRequest(
 
         if (!file || typeof file === "string") {
           return jsonResponse(
-            { success: false, error: "No image file found in upload request. Field 'image' is required." },
+            {
+              success: false,
+              error: "No image file found in upload request. Field 'image' is required.",
+            },
             400,
           );
         }
@@ -2277,7 +2291,11 @@ export async function handleApiRequest(
       } catch (uploadErr: any) {
         console.error("Image upload server error:", uploadErr);
         return jsonResponse(
-          { success: false, error: "Server failed to process image upload: " + (uploadErr?.message || "Unknown error") },
+          {
+            success: false,
+            error:
+              "Server failed to process image upload: " + (uploadErr?.message || "Unknown error"),
+          },
           500,
         );
       }
@@ -2326,32 +2344,129 @@ export async function handleApiRequest(
   if (route === "images/list") {
     if (method === "GET") {
       const userId = url.searchParams.get("userId");
+      const pool = getMysqlPool();
+      if (pool) {
+        try {
+          const sql = userId
+            ? "SELECT * FROM uploaded_images WHERE UPPER(user_id) = UPPER(?) ORDER BY created_at DESC"
+            : "SELECT * FROM uploaded_images ORDER BY created_at DESC";
+          const [rows] = ((await pool.query(sql, userId ? [userId.trim()] : [])) as any);
+          if (Array.isArray(rows) && rows.length > 0) {
+            const mapped = rows.map((r: any) => ({
+              id: String(r.id),
+              userId: r.user_id,
+              user_id: r.user_id,
+              creatorName: r.creator_name,
+              creator_name: r.creator_name,
+              title: r.title,
+              description: r.description || "",
+              imageUrl: r.image_url,
+              image_url: r.image_url,
+              thumbnailUrl: r.thumbnail_url || r.image_url,
+              thumbnail_url: r.thumbnail_url || r.image_url,
+              format: r.format || "jpg",
+              fileSize: r.file_size || "1.0 MB",
+              file_size: r.file_size || "1.0 MB",
+              category: r.category || "General",
+              views: Number(r.views) || 0,
+              likes: Number(r.likes) || 0,
+              createdAt: r.created_at,
+              created_at: r.created_at,
+            }));
+            return jsonResponse({ success: true, images: mapped, total: mapped.length });
+          }
+        } catch (_dbErr) {
+          // fallback to store.images
+        }
+      }
+
       const imgs = userId
         ? store.images.filter((i) => i.user_id.toUpperCase() === userId.trim().toUpperCase())
         : store.images;
-      return jsonResponse({ success: true, images: imgs, total: imgs.length });
+      return jsonResponse({
+        success: true,
+        images: imgs.map((i) => ({
+          ...i,
+          userId: i.user_id,
+          creatorName: i.creator_name,
+          imageUrl: i.image_url,
+          thumbnailUrl: i.thumbnail_url || i.image_url,
+          fileSize: i.file_size || "1.0 MB",
+          createdAt: i.created_at,
+        })),
+        total: imgs.length,
+      });
     }
   }
 
   if (route === "images/create") {
     if (method === "POST") {
       const body = await request.json();
+      const rawImageUrl = (body.imageUrl || body.image_url || "").trim();
+      if (!rawImageUrl) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Image URL is required. Please upload the image file to storage first.",
+          },
+          400,
+        );
+      }
+
+      const imgId = body.id || `img-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const newImage = {
-        id: body.id || `img-${Date.now()}`,
+        id: imgId,
         user_id: body.userId || body.user_id || "FT102857",
         creator_name: body.creatorName || body.creator_name || "Creator",
-        title: body.title || "Uploaded Image",
-        description: body.description || "",
-        image_url: body.imageUrl || body.image_url || "/src/assets/hero.jpg",
-        thumbnail_url: body.thumbnailUrl || body.thumbnail_url || "/src/assets/hero.jpg",
-        category: body.category || "General",
+        title: (body.title || "Uploaded Image").trim(),
+        description: (body.description || "").trim(),
+        image_url: rawImageUrl,
+        thumbnail_url: (body.thumbnailUrl || body.thumbnail_url || rawImageUrl).trim(),
+        format: (body.format || "jpg").toLowerCase(),
+        file_size: body.fileSize || body.file_size || "1.2 MB",
+        category: body.category || "Entertainment",
         views: 0,
         likes: 0,
         created_at: new Date().toISOString(),
       };
+
+      const pool = getMysqlPool();
+      if (pool) {
+        try {
+          await pool.query(
+            `INSERT INTO uploaded_images (id, user_id, creator_name, title, description, image_url, format, file_size, category, views, likes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NOW())`,
+            [
+              newImage.id,
+              newImage.user_id,
+              newImage.creator_name,
+              newImage.title,
+              newImage.description,
+              newImage.image_url,
+              newImage.format,
+              newImage.file_size,
+              newImage.category,
+            ],
+          );
+        } catch (_dbErr) {
+          // ignore error if MySQL is unreachable
+        }
+      }
+
       store.images.unshift(newImage);
       saveStore(store);
-      return jsonResponse({ success: true, image: newImage });
+      return jsonResponse({
+        success: true,
+        image: {
+          ...newImage,
+          userId: newImage.user_id,
+          creatorName: newImage.creator_name,
+          imageUrl: newImage.image_url,
+          thumbnailUrl: newImage.thumbnail_url,
+          fileSize: newImage.file_size,
+          createdAt: newImage.created_at,
+        },
+      });
     }
   }
 

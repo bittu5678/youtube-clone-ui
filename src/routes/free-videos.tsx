@@ -22,9 +22,7 @@ import {
 import { resolveVideoThumbnail, SVG_FALLBACK_THUMBNAIL } from "@/lib/thumbnail-service";
 
 export const Route = createFileRoute("/free-videos")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { mode?: string; refresh?: number } => ({
+  validateSearch: (search: Record<string, unknown>): { mode?: string; refresh?: number } => ({
     mode: typeof search.mode === "string" ? search.mode : undefined,
     refresh: typeof search.refresh === "number" ? search.refresh : undefined,
   }),
@@ -84,7 +82,8 @@ export function FreeVideosPage() {
       thumbnail: resolveVideoThumbnail(v),
       thumbnailUrl: resolveVideoThumbnail(v),
       videoType: "free" as const,
-      contentType: (v.duration && v.duration.startsWith("0:") ? "short" : "long") as "short" | "long",
+      contentType: (v.duration && v.duration.startsWith("0:") ? "short" : "long") as
+        "short" | "long",
     }));
 
     // Deduplicate by ID
@@ -152,7 +151,8 @@ export function FreeVideosPage() {
                 </span>
               </div>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Public Free Short &amp; Long videos available to all viewers without subscription fees
+                Public Free Short &amp; Long videos available to all viewers without subscription
+                fees
               </p>
             </div>
           </div>
@@ -272,7 +272,8 @@ export function FreeVideosPage() {
             <Video className="h-10 w-10 text-muted-foreground mx-auto" />
             <h3 className="text-base font-bold text-foreground">No free videos found</h3>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              There are currently no free videos matching the selected format or category. Upload a free video to get started.
+              There are currently no free videos matching the selected format or category. Upload a
+              free video to get started.
             </p>
             <Link
               to="/upload"
@@ -349,11 +350,7 @@ export function FreeVideosPage() {
                   {/* Metadata area: clearly positioned below thumbnail with zero overlap */}
                   <div className="p-4 flex flex-col justify-between flex-1 space-y-2.5">
                     <div>
-                      <Link
-                        to="/watch/$videoId"
-                        params={{ videoId: video.id }}
-                        className="block"
-                      >
+                      <Link to="/watch/$videoId" params={{ videoId: video.id }} className="block">
                         <h3 className="line-clamp-2 text-xs sm:text-sm font-bold text-foreground leading-snug group-hover:text-brand transition-colors">
                           {video.title}
                         </h3>

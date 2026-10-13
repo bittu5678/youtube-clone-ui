@@ -48,6 +48,12 @@ export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const url = new URL(request.url);
+      if (url.pathname.startsWith("/uploads/")) {
+        const { serveUploadFile } = await import("./server/uploads-handler");
+        const uploadRes = await serveUploadFile(request);
+        if (uploadRes) return uploadRes;
+      }
+
       if (url.pathname.startsWith("/api")) {
         const { handleApiRequest } = await import("./server/api-handler");
         const apiResponse = await handleApiRequest(

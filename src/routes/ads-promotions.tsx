@@ -27,11 +27,7 @@ import {
 import { toast } from "sonner";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
 import { useAuth } from "@/lib/auth-context";
-import {
-  fetchUploadedVideos,
-  markVideoPromoted,
-  type UploadedVideo,
-} from "@/lib/video-service";
+import { fetchUploadedVideos, markVideoPromoted, type UploadedVideo } from "@/lib/video-service";
 import { resolveVideoThumbnail, SVG_FALLBACK_THUMBNAIL } from "@/lib/thumbnail-service";
 
 export const Route = createFileRoute("/ads-promotions")({

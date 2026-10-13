@@ -61,6 +61,7 @@ export const recommended: Video[] = [
     duration: "14:20",
     thumb: thumb4,
     tint: "oklch(0.55 0.22 30)",
+    videoUrl: "/uploads/videos/vid_sample_animation.mp4",
   },
   {
     id: "v-agri-01",
@@ -75,6 +76,7 @@ export const recommended: Video[] = [
     duration: "21:45",
     thumb: thumb5,
     tint: "oklch(0.5 0.18 140)",
+    videoUrl: "/uploads/videos/vid_sample_nature.mp4",
   },
   {
     id: "v1",
@@ -89,6 +91,7 @@ export const recommended: Video[] = [
     duration: "24:18",
     thumb: thumb1,
     tint: "oklch(0.45 0.15 27)",
+    videoUrl: "/uploads/videos/vid_sample_coding.mp4",
   },
   {
     id: "v2",
@@ -103,6 +106,7 @@ export const recommended: Video[] = [
     duration: "18:02",
     thumb: thumb2,
     tint: "oklch(0.4 0.18 340)",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
   },
   {
     id: "v3",
@@ -117,6 +121,7 @@ export const recommended: Video[] = [
     duration: "42:55",
     thumb: thumb3,
     tint: "oklch(0.42 0.17 20)",
+    videoUrl: "https://vjs.zencdn.net/v/oceans.mp4",
   },
   {
     id: "v4",
@@ -131,6 +136,7 @@ export const recommended: Video[] = [
     duration: "11:37",
     thumb: thumb4,
     tint: "oklch(0.4 0.16 300)",
+    videoUrl: "/uploads/videos/vid_sample_animation.mp4",
   },
   {
     id: "v5",
@@ -145,6 +151,7 @@ export const recommended: Video[] = [
     duration: "32:09",
     thumb: thumb5,
     tint: "oklch(0.7 0.02 260)",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
   },
   {
     id: "v6",
@@ -159,6 +166,7 @@ export const recommended: Video[] = [
     duration: "1:04:22",
     thumb: thumb6,
     tint: "oklch(0.45 0.19 15)",
+    videoUrl: "/uploads/videos/vid_sample_nature.mp4",
   },
   {
     id: "v7",
@@ -173,6 +181,7 @@ export const recommended: Video[] = [
     duration: "27:44",
     thumb: thumb1,
     tint: "oklch(0.45 0.15 27)",
+    videoUrl: "/uploads/videos/vid_sample_coding.mp4",
   },
   {
     id: "v8",
@@ -187,6 +196,7 @@ export const recommended: Video[] = [
     duration: "15:31",
     thumb: thumb2,
     tint: "oklch(0.4 0.18 340)",
+    videoUrl: "https://vjs.zencdn.net/v/oceans.mp4",
   },
 ];
 
@@ -209,15 +219,191 @@ export const creators = [
   { name: "Signal & Noise", initials: "SN", subs: "775K subscribers", tag: "Podcasts" },
 ];
 
-export const allVideos: Video[] = [...recommended, ...trending, ...recent];
+export const seedVideos: Video[] = [
+  {
+    id: "vid-seed-001",
+    title: "10 Coding Shortcuts Every React Dev Must Know #Shorts",
+    channel: "Alex Rivera",
+    initials: "AR",
+    views: "45.2K views",
+    age: "12 days ago",
+    duration: "0:42",
+    thumb:
+      "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60",
+    thumbnail:
+      "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60",
+    tint: "oklch(0.5 0.18 20)",
+    category: "Coding",
+    description: "Lightning-fast developer workflow hacks in under 45 seconds.",
+    videoUrl: "/uploads/videos/vid_sample_coding.mp4",
+    videoType: "free",
+    contentType: "short",
+  },
+  {
+    id: "vid-seed-002",
+    title: "Full Stack App Architecture from Scratch: Zero to Production",
+    channel: "Alex Rivera",
+    initials: "AR",
+    views: "98.4K views",
+    age: "10 days ago",
+    duration: "42:15",
+    thumb:
+      "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&auto=format&fit=crop&q=60",
+    thumbnail:
+      "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&auto=format&fit=crop&q=60",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&auto=format&fit=crop&q=60",
+    tint: "oklch(0.5 0.18 20)",
+    category: "Coding",
+    description:
+      "Deep-dive 45-minute comprehensive architectural masterclass covering scalable backend and modern UI.",
+    videoUrl: "/uploads/videos/vid_sample_nature.mp4",
+    videoType: "free",
+    contentType: "long",
+  },
+  {
+    id: "vid-seed-003",
+    title: "Pro Monetization Hack: Unlocking High-CPM Niches #Shorts",
+    channel: "Alex Rivera",
+    initials: "AR",
+    views: "62.1K views",
+    age: "5 days ago",
+    duration: "0:58",
+    thumb:
+      "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=800&auto=format&fit=crop&q=60",
+    thumbnail:
+      "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=800&auto=format&fit=crop&q=60",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=800&auto=format&fit=crop&q=60",
+    tint: "oklch(0.6 0.22 45)",
+    category: "Business",
+    description:
+      "Exclusive creator strategy breakdown for maximum algorithmic engagement and monetization yield.",
+    videoUrl: "/uploads/videos/vid_sample_animation.mp4",
+    videoType: "premium",
+    contentType: "short",
+  },
+  {
+    id: "vid-seed-004",
+    title: "Executive Masterclass: Building $10K/Month Video Funnels",
+    channel: "Alex Rivera",
+    initials: "AR",
+    views: "31.4K views",
+    age: "2 days ago",
+    duration: "58:30",
+    thumb:
+      "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=800&auto=format&fit=crop&q=60",
+    thumbnail:
+      "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=800&auto=format&fit=crop&q=60",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=800&auto=format&fit=crop&q=60",
+    tint: "oklch(0.6 0.22 45)",
+    category: "Business",
+    description:
+      "Full 1-hour verified premium course with step-by-step case studies and downloadable resources.",
+    videoUrl: "https://vjs.zencdn.net/v/oceans.mp4",
+    videoType: "premium",
+    contentType: "long",
+  },
+  {
+    id: "vid-seed-005",
+    title: "Cinematic Color Grading in 30 Seconds #Shorts",
+    channel: "Maya Lin",
+    initials: "ML",
+    views: "18.2K views",
+    age: "6 days ago",
+    duration: "0:30",
+    thumb:
+      "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=800&auto=format&fit=crop&q=60",
+    thumbnail:
+      "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=800&auto=format&fit=crop&q=60",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=800&auto=format&fit=crop&q=60",
+    tint: "oklch(0.5 0.18 20)",
+    category: "Film",
+    description: "LUT color correction tricks for mobile videographers.",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    videoType: "free",
+    contentType: "short",
+  },
+  {
+    id: "vid-seed-006",
+    title: "Secret Lighting Setup for 4K Vertical Video #Shorts",
+    channel: "Maya Lin",
+    initials: "ML",
+    views: "29.5K views",
+    age: "3 days ago",
+    duration: "0:45",
+    thumb:
+      "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=800&auto=format&fit=crop&q=60",
+    thumbnail:
+      "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=800&auto=format&fit=crop&q=60",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=800&auto=format&fit=crop&q=60",
+    tint: "oklch(0.6 0.22 45)",
+    category: "Film",
+    description: "Lighting angles and diffusers used by professional film studios.",
+    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
+    videoType: "premium",
+    contentType: "short",
+  },
+  {
+    id: "vid-seed-007",
+    title: "The Great Forest Mystery — Animated Cartoon Adventure",
+    channel: "Animation Studio X",
+    initials: "AX",
+    views: "89K views",
+    age: "2 days ago",
+    duration: "14:20",
+    thumb:
+      "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=60",
+    thumbnail:
+      "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=60",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=60",
+    tint: "oklch(0.5 0.18 20)",
+    category: "Cartoon",
+    description:
+      "Classic animated adventure featuring funny cartoon characters, slapstick comedy, and heartwarming moments for all ages.",
+    videoUrl: "/uploads/videos/vid_sample_animation.mp4",
+    videoType: "free",
+    contentType: "long",
+  },
+  {
+    id: "vid-seed-008",
+    title: "Smart Organic Farming & High-Yield Agriculture Techniques",
+    channel: "Green Earth Agri",
+    initials: "GA",
+    views: "54K views",
+    age: "1 day ago",
+    duration: "21:45",
+    thumb:
+      "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=800&auto=format&fit=crop&q=60",
+    thumbnail:
+      "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=800&auto=format&fit=crop&q=60",
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=800&auto=format&fit=crop&q=60",
+    tint: "oklch(0.5 0.18 20)",
+    category: "Agriculture",
+    description:
+      "Modern agricultural technologies, organic drip irrigation, soil health management, and sustainable crop cultivation techniques.",
+    videoUrl: "/uploads/videos/vid_sample_nature.mp4",
+    videoType: "free",
+    contentType: "long",
+  },
+];
+
+export const allVideos: Video[] = [...recommended, ...trending, ...recent, ...seedVideos];
 
 export const findVideo = (id: string): Video | undefined => {
   const staticFound = allVideos.find((v) => v.id === id);
   if (staticFound) {
     return {
       ...staticFound,
-      thumbnail: staticFound.thumb,
-      thumbnailUrl: staticFound.thumb,
+      thumbnail: staticFound.thumb || staticFound.thumbnail,
+      thumbnailUrl: staticFound.thumb || staticFound.thumbnailUrl,
     };
   }
 
@@ -235,7 +421,9 @@ export const findVideo = (id: string): Video | undefined => {
             });
             const created = match.createdAt || match.created_at;
             const parsedAge = created
-              ? new Date(created.includes("T") ? created : created.replace(" ", "T") + "Z").toLocaleDateString()
+              ? new Date(
+                  created.includes("T") ? created : created.replace(" ", "T") + "Z",
+                ).toLocaleDateString()
               : "Recently uploaded";
 
             return {
@@ -287,7 +475,9 @@ export async function findVideoAsync(id: string): Promise<Video | undefined> {
       });
       const created = v.created_at || v.createdAt;
       const parsedAge = created
-        ? new Date(created.includes("T") ? created : created.replace(" ", "T") + "Z").toLocaleDateString()
+        ? new Date(
+            created.includes("T") ? created : created.replace(" ", "T") + "Z",
+          ).toLocaleDateString()
         : "Recently uploaded";
 
       return {
@@ -312,6 +502,18 @@ export async function findVideoAsync(id: string): Promise<Video | undefined> {
     }
   } catch (err) {
     console.warn("findVideoAsync database lookup failed:", err);
+  }
+
+  // Fallback to local stored videos cache
+  try {
+    const { getStoredVideos, convertUploadedToCatalogVideo } = await import("@/lib/video-service");
+    const storedList = getStoredVideos();
+    const storedMatch = storedList.find((v) => v.id === id);
+    if (storedMatch) {
+      return convertUploadedToCatalogVideo(storedMatch);
+    }
+  } catch (_e) {
+    // ignore
   }
 
   return undefined;

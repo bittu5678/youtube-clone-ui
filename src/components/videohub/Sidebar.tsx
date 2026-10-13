@@ -727,7 +727,7 @@ export function Sidebar({
     <>
       {/* Desktop rail */}
       <aside
-        className={`sticky top-16 hidden h-[calc(100vh-4rem)] shrink-0 overflow-y-auto border-r border-border bg-background transition-[width] duration-300 lg:block ${
+        className={`sticky top-[calc(4rem+env(safe-area-inset-top,0px))] hidden h-[calc(100vh-4rem-env(safe-area-inset-top,0px))] shrink-0 overflow-y-auto border-r border-border bg-background transition-[width] duration-300 lg:block ${
           open ? "w-60" : "w-0 overflow-hidden border-r-0"
         }`}
       >
@@ -759,7 +759,7 @@ export function Sidebar({
           }`}
         />
         <div
-          className={`absolute inset-y-0 left-0 w-64 bg-background shadow-2xl transition-transform duration-300 ${
+          className={`absolute inset-y-0 left-0 w-64 bg-background shadow-2xl transition-transform duration-300 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] ${
             drawerOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
