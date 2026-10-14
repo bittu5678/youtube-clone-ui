@@ -240,6 +240,7 @@ export interface PaymentVerifyRequest {
   videoId?: string;
   userName?: string;
   purpose: "premium_video_upload" | "ads_promotion";
+  planId?: AdsPlanId | string;
   referrerUserId?: string | null;
   metadata?: Record<string, unknown>;
 }
@@ -261,6 +262,7 @@ export interface PaymentVerifyResult {
     eligibleMembersCount: number;
     perMemberShare: number;
   };
+  duplicate?: boolean;
   error?: string;
 }
 
@@ -431,11 +433,11 @@ export async function verifyServerPayment(
   }
 
   // Determine expected amount in subunits
+  const rawPlanId = (req.planId || req.metadata?.["planId"] || "plan-monthly") as AdsPlanId;
   const expectedAmount =
     req.purpose === "premium_video_upload"
       ? PRICING_CONFIG.PREMIUM_VIDEO.TOTAL_PRICE // ₹6.00
-      : PRICING_CONFIG.ADS_PROMOTION[(req.metadata?.["planId"] as AdsPlanId) || "plan-monthly"]
-          ?.price || 300;
+      : PRICING_CONFIG.ADS_PROMOTION[rawPlanId]?.price || 300;
   const expectedPaise = Math.round(expectedAmount * 100);
 
   // 2. Real Razorpay API Confirmation
@@ -582,6 +584,7 @@ export async function verifyServerPayment(
           eligibleMembersCount: isSpec ? 0 : eligibleCount,
           perMemberShare,
         },
+        duplicate: true,
         error: "Payment has already been processed (idempotent duplicate request)",
       };
     }
@@ -661,9 +664,32 @@ export async function verifyServerPayment(
     }
 
     // 3. ADS PROMOTION PROCESSING
-    const planId = (req.metadata?.["planId"] as AdsPlanId) || "plan-monthly";
-    const amount = PRICING_CONFIG.ADS_PROMOTION[planId]?.price || 100;
+    const plan =
+      PRICING_CONFIG.ADS_PROMOTION[rawPlanId] || PRICING_CONFIG.ADS_PROMOTION["plan-monthly"];
+    const amount = plan.price;
     const refId = (referrerUserId || req.referrerUserId || null)?.trim().toUpperCase() || null;
+
+    // Create persistent transaction record for ads promotion to enforce idempotency
+    const adsRecord: PersistentPremiumTxRecord = {
+      txNumber: state.lastTxNumber,
+      paymentId: req.paymentId,
+      orderId: req.orderId,
+      videoId: req.videoId || req.metadata?.["videoId"]?.toString() || "",
+      userId: req.userId,
+      userName: req.userName || req.metadata?.["userName"]?.toString() || "FaceTube Creator",
+      referrerId: refId,
+      amount,
+      transactionType: "premium_upload", // compatible with PersistentPremiumTxRecord
+      isSpecial: false,
+      specialTag: "NORMAL_PREMIUM",
+      referralCommission: refId ? Math.round(amount * 0.1) : 0,
+      adminAllocation: amount * 0.9,
+      globalPoolAllocation: 0,
+      createdAt: new Date().toISOString(),
+    };
+
+    state.transactions.unshift(adsRecord);
+    savePersistentState(state);
 
     return {
       verified: true,

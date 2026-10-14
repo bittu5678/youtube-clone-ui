@@ -347,6 +347,7 @@ export async function initiateAdsPromotionPayment(params: {
           signature,
           userId: params.userId,
           purpose: "ads_promotion",
+          planId: params.planId,
           referrerUserId: params.directReferrerId,
           metadata: { planId: params.planId },
         });

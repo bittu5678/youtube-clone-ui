@@ -532,6 +532,22 @@ describe("Razorpay Real Order Creation & Gateway Verification Tests", () => {
     assert.equal(ads7Days.amount, 100.0);
     assert.equal(ads7Days.amountInSubunits, 10000);
 
+    // Ads promotion: 15 days = ₹200 / 20000 paise
+    const ads15Days = await createServerPaymentOrder(
+      {
+        purpose: "ads_promotion",
+        userId: "FT483921",
+        planId: "plan-15-days",
+      },
+      {
+        RAZORPAY_KEY_ID: testKeyId,
+        RAZORPAY_KEY_SECRET: testSecret,
+        RAZORPAY_SKIP_REMOTE_CHECK: "true",
+      },
+    );
+    assert.equal(ads15Days.amount, 200.0);
+    assert.equal(ads15Days.amountInSubunits, 20000);
+
     // Ads promotion: monthly = ₹300 / 30000 paise
     const adsMonthly = await createServerPaymentOrder(
       {
@@ -547,6 +563,22 @@ describe("Razorpay Real Order Creation & Gateway Verification Tests", () => {
     );
     assert.equal(adsMonthly.amount, 300.0);
     assert.equal(adsMonthly.amountInSubunits, 30000);
+
+    // Ads promotion: yearly = ₹30,000 / 3000000 paise
+    const adsYearly = await createServerPaymentOrder(
+      {
+        purpose: "ads_promotion",
+        userId: "FT483921",
+        planId: "plan-yearly",
+      },
+      {
+        RAZORPAY_KEY_ID: testKeyId,
+        RAZORPAY_KEY_SECRET: testSecret,
+        RAZORPAY_SKIP_REMOTE_CHECK: "true",
+      },
+    );
+    assert.equal(adsYearly.amount, 30000.0);
+    assert.equal(adsYearly.amountInSubunits, 3000000);
   });
 
   it("3. API create-order route returns 503 when credentials missing", async () => {
@@ -568,5 +600,218 @@ describe("Razorpay Real Order Creation & Gateway Verification Tests", () => {
     assert.equal(res.status, 503);
     const body = await res.json();
     assert.match(body.error || "", /credentials.*not configured/i);
+  });
+
+  it("4. Verifies all four ads promotion tiers with exact authoritative pricing via metadata or planId", async () => {
+    const testCases: Array<{
+      planId: "plan-7-days" | "plan-15-days" | "plan-monthly" | "plan-yearly";
+      expectedAmount: number;
+    }> = [
+      { planId: "plan-7-days", expectedAmount: 100.0 },
+      { planId: "plan-15-days", expectedAmount: 200.0 },
+      { planId: "plan-monthly", expectedAmount: 300.0 },
+      { planId: "plan-yearly", expectedAmount: 30000.0 },
+    ];
+
+    for (const { planId, expectedAmount } of testCases) {
+      const orderId = `ord_test_ads_${planId}_${Date.now()}`;
+      const paymentId = `pay_test_ads_${planId}_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`;
+      const signature = crypto
+        .createHmac("sha256", testSecret)
+        .update(`${orderId}|${paymentId}`)
+        .digest("hex");
+
+      // Verify sending planId inside metadata (as frontend ads-promotions.tsx does)
+      const req = new Request("http://localhost:3000/api/payments/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          paymentId,
+          signature,
+          userId: "FT483921",
+          purpose: "ads_promotion",
+          metadata: { planId },
+          amount: expectedAmount,
+        }),
+      });
+
+      const res = await handleApiRequest(req, {
+        RAZORPAY_KEY_ID: testKeyId,
+        RAZORPAY_KEY_SECRET: testSecret,
+        RAZORPAY_SKIP_REMOTE_CHECK: "true",
+      });
+
+      assert.ok(res);
+      assert.equal(res.status, 200, `Plan ${planId} verification should return 200`);
+      const body = await res.json();
+      assert.equal(body.verified, true, `Plan ${planId} should be verified`);
+      assert.equal(
+        body.amount,
+        expectedAmount,
+        `Plan ${planId} should charge exactly ₹${expectedAmount}`,
+      );
+    }
+
+    // Verify amount mismatch rejection: e.g. claiming ₹100 for yearly ₹30,000 plan
+    const badOrderId = `ord_test_mismatch_${Date.now()}`;
+    const badPayId = `pay_test_mismatch_${Date.now()}`;
+    const badSig = crypto
+      .createHmac("sha256", testSecret)
+      .update(`${badOrderId}|${badPayId}`)
+      .digest("hex");
+
+    const mismatchReq = new Request("http://localhost:3000/api/payments/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId: badOrderId,
+        paymentId: badPayId,
+        signature: badSig,
+        userId: "FT483921",
+        purpose: "ads_promotion",
+        metadata: { planId: "plan-yearly" },
+        amount: 100.0, // Fraudulent claim: ₹100 instead of ₹30,000
+      }),
+    });
+
+    const mismatchRes = await handleApiRequest(mismatchReq, {
+      RAZORPAY_KEY_ID: testKeyId,
+      RAZORPAY_KEY_SECRET: testSecret,
+      RAZORPAY_SKIP_REMOTE_CHECK: "true",
+    });
+
+    assert.ok(mismatchRes);
+    assert.equal(mismatchRes.status, 400, "Mismatched amount must return 400");
+    const mismatchBody = await mismatchRes.json();
+    assert.equal(mismatchBody.verified, false);
+    assert.match(mismatchBody.error, /does not match expected fee of ₹30000\.00/i);
+  });
+
+  it("5. Rejects unauthorized video promotion order creation by non-owner user with 403", async () => {
+    // Log in as Maya Lin (FT900431)
+    const loginReq = new Request("http://localhost:3000/api/auth/login.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier: "maya@facetube.com",
+        password: "password",
+      }),
+    });
+    const loginRes = await handleApiRequest(loginReq);
+    assert.ok(loginRes);
+    const loginData = await loginRes.json();
+    const token = loginData.token;
+
+    // Maya attempts to initiate an ad promotion for Alex's video (vid-seed-001, owned by FT483921)
+    const req = new Request("http://localhost:3000/api/payments/create-order", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        purpose: "ads_promotion",
+        videoId: "vid-seed-001", // Alex's video
+        userId: "FT900431", // Maya's ID
+        planId: "plan-monthly",
+      }),
+    });
+
+    const res = await handleApiRequest(req, {
+      RAZORPAY_KEY_ID: testKeyId,
+      RAZORPAY_KEY_SECRET: testSecret,
+      RAZORPAY_SKIP_REMOTE_CHECK: "true",
+    });
+
+    assert.ok(res);
+    assert.equal(res.status, 403, "Non-owner promotion order must be rejected with 403");
+    const body = await res.json();
+    assert.equal(body.success, false);
+    assert.match(body.error, /only initiate promotion for your own uploaded videos/i);
+  });
+
+  it("6. Activates promotion with renewal logic and prevents duplicate re-extension on repeated verification", async () => {
+    const orderId = `ord_test_renewal_${Date.now()}`;
+    const paymentId = `pay_test_renewal_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const signature = crypto
+      .createHmac("sha256", testSecret)
+      .update(`${orderId}|${paymentId}`)
+      .digest("hex");
+
+    // First verification (Alex promotes his own video vid-seed-002 for 7 days)
+    const verifyReq1 = new Request("http://localhost:3000/api/payments/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId,
+        paymentId,
+        signature,
+        userId: "FT483921",
+        videoId: "vid-seed-002",
+        purpose: "ads_promotion",
+        planId: "plan-7-days",
+        amount: 100.0,
+      }),
+    });
+
+    const res1 = await handleApiRequest(verifyReq1, {
+      RAZORPAY_KEY_ID: testKeyId,
+      RAZORPAY_KEY_SECRET: testSecret,
+      RAZORPAY_SKIP_REMOTE_CHECK: "true",
+    });
+
+    assert.ok(res1);
+    assert.equal(res1.status, 200);
+    const body1 = await res1.json();
+    assert.equal(body1.verified, true);
+
+    // Read video's recorded promotion expiry after 1st verification
+    const vidReq1 = new Request("http://localhost:3000/api/videos/get.php?id=vid-seed-002");
+    const vidRes1 = await handleApiRequest(vidReq1);
+    assert.ok(vidRes1);
+    const vidData1 = await vidRes1.json();
+    assert.equal(vidData1.video.isPromoted, true);
+    const firstExpiry = vidData1.video.promotionExpiresAt;
+    assert.ok(firstExpiry, "Expiry date must be set");
+
+    // Second repeated verification of the exact same paymentId
+    const verifyReq2 = new Request("http://localhost:3000/api/payments/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId,
+        paymentId,
+        signature,
+        userId: "FT483921",
+        videoId: "vid-seed-002",
+        purpose: "ads_promotion",
+        planId: "plan-7-days",
+        amount: 100.0,
+      }),
+    });
+
+    const res2 = await handleApiRequest(verifyReq2, {
+      RAZORPAY_KEY_ID: testKeyId,
+      RAZORPAY_KEY_SECRET: testSecret,
+      RAZORPAY_SKIP_REMOTE_CHECK: "true",
+    });
+
+    assert.ok(res2);
+    assert.equal(res2.status, 200);
+    const body2 = await res2.json();
+    assert.equal(body2.verified, true);
+    assert.equal(body2.duplicate, true, "Must be flagged as idempotent duplicate");
+
+    // Re-verify that expiry date was NOT extended again on duplicate call
+    const vidReq2 = new Request("http://localhost:3000/api/videos/get.php?id=vid-seed-002");
+    const vidRes2 = await handleApiRequest(vidReq2);
+    assert.ok(vidRes2);
+    const vidData2 = await vidRes2.json();
+    assert.equal(
+      vidData2.video.promotionExpiresAt,
+      firstExpiry,
+      "Duplicate verification must NOT extend promotion expiry date again",
+    );
   });
 });

@@ -601,7 +601,53 @@ export async function handleApiRequest(
     if (method === "POST") {
       try {
         const payload = await request.json();
-        const result = await createServerPaymentOrder(payload, env);
+        const pool = getMysqlPool();
+        const authUser = await getAuthUserFromRequest(request, store, pool);
+        const reqUserId = String(payload.userId || payload.user_id || "")
+          .trim()
+          .toUpperCase();
+        let effectiveUserId = authUser ? authUser.user_id : reqUserId;
+
+        if (authUser && reqUserId && reqUserId !== authUser.user_id.toUpperCase()) {
+          if (authUser.role !== "admin") {
+            return jsonResponse(
+              {
+                success: false,
+                error: "Unauthorized: Cannot create payment orders for another user account.",
+              },
+              403,
+            );
+          }
+          effectiveUserId = reqUserId;
+        }
+
+        const videoId = String(payload.videoId || payload.video_id || "").trim();
+        const purpose = String(payload.purpose || "premium_video_upload").trim();
+        if (purpose === "ads_promotion" && videoId) {
+          const v = store.videos.find((vid) => vid.id === videoId);
+          if (v) {
+            const isOwner = v.user_id.toUpperCase() === effectiveUserId.toUpperCase();
+            const isAdmin = authUser?.role === "admin";
+            if (!isOwner && !isAdmin) {
+              return jsonResponse(
+                {
+                  success: false,
+                  error:
+                    "Unauthorized: You can only initiate promotion for your own uploaded videos.",
+                },
+                403,
+              );
+            }
+          }
+        }
+
+        const result = await createServerPaymentOrder(
+          {
+            ...payload,
+            userId: effectiveUserId,
+          },
+          env,
+        );
         return jsonResponse(result);
       } catch (err: any) {
         const msg = err?.message || "Failed to create payment order";
@@ -624,6 +670,9 @@ export async function handleApiRequest(
         const userName = String(payload.userName || payload.user_name || "Creator").trim();
         const videoId = String(payload.videoId || payload.video_id || "").trim();
         const purpose = String(payload.purpose || "premium_video_upload").trim();
+        const planId = String(
+          payload.planId || payload.plan_id || payload.metadata?.planId || "plan-monthly",
+        ).trim() as AdsPlanId;
         const requestedAmount = payload.amount !== undefined ? Number(payload.amount) : undefined;
 
         if (!orderId || !paymentId) {
@@ -684,7 +733,6 @@ export async function handleApiRequest(
         // Authoritative pricing check before gateway verification
         let expectedAmount = 6.0;
         if (purpose === "ads_promotion") {
-          const planId = (payload.planId || payload.plan_id || "plan-monthly") as AdsPlanId;
           const plan = PRICING_CONFIG.ADS_PROMOTION[planId];
           expectedAmount = plan ? plan.price : 300.0;
         } else if (purpose !== "premium_video_upload") {
@@ -882,7 +930,10 @@ export async function handleApiRequest(
                     403,
                   );
                 }
-                if (String(vid.video_type).toLowerCase() === "free") {
+                if (
+                  purpose === "premium_video_upload" &&
+                  String(vid.video_type).toLowerCase() === "free"
+                ) {
                   return jsonResponse(
                     {
                       verified: false,
@@ -907,7 +958,7 @@ export async function handleApiRequest(
                   403,
                 );
               }
-              if (vid.video_type === "free") {
+              if (purpose === "premium_video_upload" && vid.video_type === "free") {
                 return jsonResponse(
                   {
                     verified: false,
@@ -1071,12 +1122,35 @@ export async function handleApiRequest(
               );
             }
 
-            // 4. Update uploaded_videos payment status
+            // 4. Update uploaded_videos payment status & promotion activation
             if (videoId) {
-              await conn.query(
-                `UPDATE uploaded_videos SET payment_status = 'paid', payment_id = ?, payment_amount = ? WHERE id = ?`,
-                [paymentId, amount, videoId],
-              );
+              if (purpose === "ads_promotion") {
+                const planDurations: Record<string, number> = {
+                  "plan-7-days": 7,
+                  "plan-15-days": 15,
+                  "plan-monthly": 30,
+                  "plan-yearly": 365,
+                };
+                const durationDays = planDurations[planId] || 30;
+                await conn.query(
+                  `UPDATE uploaded_videos 
+                   SET is_promoted = 1,
+                       promotion_plan = ?,
+                       promotion_expires_at = IF(
+                         promotion_expires_at IS NOT NULL AND promotion_expires_at > NOW(),
+                         DATE_ADD(promotion_expires_at, INTERVAL ? DAY),
+                         DATE_ADD(NOW(), INTERVAL ? DAY)
+                       ),
+                       updated_at = NOW()
+                   WHERE id = ?`,
+                  [planId, durationDays, durationDays, videoId],
+                );
+              } else {
+                await conn.query(
+                  `UPDATE uploaded_videos SET payment_status = 'paid', payment_id = ?, payment_amount = ?, updated_at = NOW() WHERE id = ?`,
+                  [paymentId, amount, videoId],
+                );
+              }
             }
 
             await conn.commit();
@@ -1141,6 +1215,11 @@ export async function handleApiRequest(
               videoId,
               purpose: purpose as any,
               referrerUserId: verifiedReferrerId,
+              metadata:
+                payload.metadata ||
+                (payload.planId || payload.plan_id
+                  ? { planId: payload.planId || payload.plan_id }
+                  : undefined),
             },
             ["FT483921", "FT900431"],
             verifiedReferrerId,
@@ -1205,19 +1284,42 @@ export async function handleApiRequest(
             });
           }
 
-          // Update video payment status in store
-          if (result.verified && videoId) {
+          // Update video payment status & promotion activation in store (only on initial verification, never on duplicate)
+          if (result.verified && !isDuplicate && videoId) {
             const v = store.videos.find((vid) => vid.id === videoId);
             if (v) {
-              v.payment_status = "paid";
-              v.payment_id = paymentId;
-              v.payment_amount = amount;
+              if (purpose === "ads_promotion") {
+                const planDurations: Record<string, number> = {
+                  "plan-7-days": 7,
+                  "plan-15-days": 15,
+                  "plan-monthly": 30,
+                  "plan-yearly": 365,
+                };
+                const durationDays = planDurations[planId] || 30;
+                v.is_promoted = true;
+                v.promotion_plan = planId;
+                const now = Date.now();
+                const currentExpiry = v.promotion_expires_at
+                  ? new Date(v.promotion_expires_at).getTime()
+                  : 0;
+                const baseTime = currentExpiry > now ? currentExpiry : now;
+                v.promotion_expires_at = new Date(
+                  baseTime + durationDays * 24 * 60 * 60 * 1000,
+                ).toISOString();
+              } else {
+                v.payment_status = "paid";
+                v.payment_id = paymentId;
+                v.payment_amount = amount;
+              }
               v.updated_at = new Date().toISOString();
             }
           }
 
           saveStore(store);
-          return jsonResponse(result);
+          return jsonResponse({
+            ...result,
+            duplicate: isDuplicate,
+          });
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);

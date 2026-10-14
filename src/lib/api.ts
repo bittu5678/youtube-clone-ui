@@ -423,6 +423,9 @@ export const api = {
       videoId?: string;
       purpose: "premium_video_upload" | "ads_promotion";
       referrerUserId?: string | null;
+      planId?: string;
+      amount?: number;
+      metadata?: Record<string, unknown>;
     }) => {
       return apiFetch<{
         verified: boolean;
