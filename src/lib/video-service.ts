@@ -1,5 +1,6 @@
 import { api } from "./api";
 import { resolveVideoThumbnail, getCategoryFallbackThumbnail } from "./thumbnail-service";
+import { resolveMediaUrl } from "./media-url";
 import type { Video } from "@/data/videos";
 
 export type VideoType = "free" | "premium";
@@ -318,7 +319,7 @@ export async function fetchUploadedVideos(
         creatorName: d.creator_name || d.creatorName || "FaceTube Creator",
         title: d.title || "Untitled Video",
         description: d.description || "",
-        videoUrl: d.video_url || d.videoUrl || "",
+        videoUrl: resolveMediaUrl(d.video_url || d.videoUrl || ""),
         thumbnailUrl: resolveVideoThumbnail({
           thumbnailUrl: d.thumbnail_url || d.thumbnailUrl,
           category: d.category,
@@ -573,7 +574,7 @@ export function convertUploadedToCatalogVideo(v: UploadedVideo): Video {
     category: v.category,
   });
 
-  const rawVideoUrl = v.videoUrl || (v as any).video_url || "";
+  const rawVideoUrl = resolveMediaUrl(v.videoUrl || (v as any).video_url || "");
 
   return {
     id: String(v.id),

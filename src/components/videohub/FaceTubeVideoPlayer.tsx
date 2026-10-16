@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { resolveMediaUrl } from "@/lib/media-url";
 
 interface FaceTubeVideoPlayerProps {
   src?: string | undefined;
@@ -64,7 +65,8 @@ export function FaceTubeVideoPlayer({
   const [showControls, setShowControls] = useState(true);
   const controlsTimeoutRef = useRef<number | null>(null);
 
-  const cleanSrc = src?.trim() || "";
+  const cleanSrc = resolveMediaUrl(src);
+  const cleanPoster = resolveMediaUrl(poster);
 
   // Reset states when source URL changes
   useEffect(() => {
@@ -140,12 +142,16 @@ export function FaceTubeVideoPlayer({
     }
   }, [cleanSrc]);
 
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     if (!videoRef.current) return;
-    const nextMuted = !isMuted;
-    videoRef.current.muted = nextMuted;
-    setIsMuted(nextMuted);
-  };
+    setIsMuted((prev) => {
+      const nextMuted = !prev;
+      if (videoRef.current) {
+        videoRef.current.muted = nextMuted;
+      }
+      return nextMuted;
+    });
+  }, []);
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVol = parseFloat(e.target.value);
@@ -237,15 +243,15 @@ export function FaceTubeVideoPlayer({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [togglePlay, duration]);
+  }, [togglePlay, toggleMute, duration]);
 
   // Case 1: Empty / Missing video URL
   if (!cleanSrc) {
     return (
       <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black border border-border shadow-lift flex flex-col items-center justify-center p-6 text-center select-none">
-        {poster && (
+        {cleanPoster && (
           <img
-            src={poster}
+            src={cleanPoster}
             alt={title}
             className="absolute inset-0 h-full w-full object-cover opacity-20 filter blur-xs"
           />
@@ -284,9 +290,9 @@ export function FaceTubeVideoPlayer({
   if (hasError) {
     return (
       <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-zinc-950 border border-red-500/30 shadow-lift flex flex-col items-center justify-center p-6 text-center select-none">
-        {poster && (
+        {cleanPoster && (
           <img
-            src={poster}
+            src={cleanPoster}
             alt={title}
             className="absolute inset-0 h-full w-full object-cover opacity-15 filter blur-sm"
           />
@@ -340,7 +346,7 @@ export function FaceTubeVideoPlayer({
       <video
         ref={videoRef}
         playsInline
-        poster={poster}
+        poster={cleanPoster}
         preload="metadata"
         onClick={togglePlay}
         onLoadStart={() => {

@@ -53,15 +53,7 @@ export async function serveUploadFile(request: Request): Promise<Response | null
   try {
     const stats = await fs.promises.stat(fullPath);
     if (!stats.isFile()) {
-      const fileName = path.basename(fullPath);
-      const fallbackUrl = DEMO_SAMPLE_FALLBACKS[fileName];
-      if (fallbackUrl) {
-        return Response.redirect(fallbackUrl, 302);
-      }
-      return new Response(JSON.stringify({ error: "File not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.redirect(`https://api.facetube.online/uploads/${relPath}`, 302);
     }
 
     const ext = path.extname(fullPath).toLowerCase();
@@ -156,10 +148,7 @@ export async function serveUploadFile(request: Request): Promise<Response | null
       if (fallbackUrl) {
         return Response.redirect(fallbackUrl, 302);
       }
-      return new Response(JSON.stringify({ error: "File not found on server storage" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
+      return Response.redirect(`https://api.facetube.online/uploads/${relPath}`, 302);
     }
     console.error("[serveUploadFile error]", err);
     return new Response(JSON.stringify({ error: "Failed to read storage file" }), {

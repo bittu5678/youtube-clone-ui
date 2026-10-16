@@ -25,6 +25,9 @@ if (empty($imageUrl)) {
     jsonResponse(['success' => false, 'error' => 'Image URL is required.'], 400);
 }
 
+$imageUrl = toAbsoluteMediaUrl($imageUrl, 'images');
+$thumbnailUrl = toAbsoluteMediaUrl($thumbnailUrl, 'images');
+
 $pdo = getDatabaseConnection();
 
 try {

@@ -125,3 +125,122 @@ function requireAuthUser($pdo, $requestedUserId = null) {
     return [$authUser, $effectiveUserId];
 }
 
+/**
+ * Returns the public base URL for the FaceTube API / Media server.
+ * Uses environment variables, incoming request headers, or falls back to production domain.
+ */
+function getApiBaseUrl() {
+    $envBase = getenv('FACETUBE_API_BASE_URL') ?: (getenv('API_BASE_URL') ?: ($_ENV['FACETUBE_API_BASE_URL'] ?? ($_ENV['API_BASE_URL'] ?? null)));
+    if (!empty($envBase)) {
+        return rtrim($envBase, '/');
+    }
+
+    $host = $_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? '');
+    if (!empty($host)) {
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) ? 'https://' : 'http://';
+        if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https') {
+            $protocol = 'https://';
+        }
+        return rtrim($protocol . $host, '/');
+    }
+
+    return 'https://api.facetube.online';
+}
+
+/**
+ * Converts any relative media path (e.g. /uploads/videos/vid_123.mp4)
+ * to an absolute public URL on the API / Media server domain.
+ * Guards against duplicated domains, handles data URIs, and preserves external links.
+ */
+function toAbsoluteMediaUrl($path, $subfolder = 'videos') {
+    if (empty($path) || !is_string($path)) {
+        return '';
+    }
+    $path = trim($path);
+    if ($path === '' || $path === 'null' || $path === 'undefined') {
+        return '';
+    }
+
+    // Already a data URL, blob, or asset
+    if (preg_match('/^(data:|blob:)/i', $path)) {
+        return $path;
+    }
+
+    // Fix accidental double domain prefix: https://api.facetube.onlinehttps://api.facetube.online/...
+    if (preg_match('/^(https?:\/\/[^\/]+)(https?:\/\/.+)$/i', $path, $matches)) {
+        return toAbsoluteMediaUrl($matches[2], $subfolder);
+    }
+
+    // Already an absolute HTTP(S) URL
+    if (preg_match('/^https?:\/\//i', $path)) {
+        return $path;
+    }
+
+    $baseUrl = getApiBaseUrl();
+    $cleanPath = ltrim($path, '/');
+
+    if (str_starts_with($cleanPath, 'uploads/')) {
+        return $baseUrl . '/' . $cleanPath;
+    }
+
+    return $baseUrl . '/uploads/' . $subfolder . '/' . $cleanPath;
+}
+
+/**
+ * Returns an array of physical storage directories for uploaded media.
+ * The first entry is the primary web-accessible location on Hostinger/cPanel.
+ * Other entries serve as mirrors to keep the dev environment and docroots in sync.
+ */
+function getMediaStorageDirectories($subfolder = 'videos') {
+    $dirs = [];
+
+    // 1. Hostinger subdomain docroot: api/uploads/$subfolder/
+    // Since __DIR__ is the api/ directory, __DIR__ . '/uploads/' . $subfolder . '/' is inside docroot.
+    $apiUploadsDir = __DIR__ . '/uploads/' . $subfolder . '/';
+    $dirs[] = $apiUploadsDir;
+
+    // 2. Document root from server if defined
+    if (!empty($_SERVER['DOCUMENT_ROOT'])) {
+        $docRoot = rtrim($_SERVER['DOCUMENT_ROOT'], '/\\');
+        $docUploadsDir = $docRoot . '/uploads/' . $subfolder . '/';
+        if (!in_array($docUploadsDir, $dirs, true)) {
+            $dirs[] = $docUploadsDir;
+        }
+    }
+
+    // 3. Project root uploads/ directory (for local dev server / monorepo layout)
+    $rootUploadsDir = dirname(__DIR__) . '/uploads/' . $subfolder . '/';
+    if (!in_array($rootUploadsDir, $dirs, true)) {
+        $dirs[] = $rootUploadsDir;
+    }
+
+    return $dirs;
+}
+
+/**
+ * Ensures media storage directories exist with safe permissions (0755).
+ * Returns the primary writable directory, or false if creation failed.
+ */
+function ensureMediaStorageDir($subfolder = 'videos') {
+    $dirs = getMediaStorageDirectories($subfolder);
+    $primaryDir = $dirs[0];
+
+    foreach ($dirs as $dir) {
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+    }
+
+    if (!is_dir($primaryDir) || !is_writable($primaryDir)) {
+        // Fallback to any writable directory in the list
+        foreach ($dirs as $dir) {
+            if (is_dir($dir) && is_writable($dir)) {
+                return $dir;
+            }
+        }
+        return false;
+    }
+
+    return $primaryDir;
+}
+

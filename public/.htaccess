@@ -18,3 +18,10 @@ Options -Indexes
 
 # 3. Charset
 AddDefaultCharset UTF-8
+
+# 4. Redirect direct /uploads/ media requests on facetube.online to the API media host
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} ^/uploads/(.*)$ [NC]
+    RewriteRule ^uploads/(.*)$ https://api.facetube.online/uploads/$1 [R=302,L]
+</IfModule>

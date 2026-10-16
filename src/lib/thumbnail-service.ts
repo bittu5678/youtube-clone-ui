@@ -3,6 +3,8 @@
  * Robust poster resolution, client-side video frame capture, and graceful category fallbacks.
  */
 
+import { resolveMediaUrl } from "./media-url";
+
 export const CATEGORY_THUMBNAILS: Record<string, string> = {
   Cartoon:
     "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80",
@@ -73,16 +75,7 @@ export function resolveVideoThumbnail(video?: {
       trimmed !== "NaN" &&
       !trimmed.includes("[object")
     ) {
-      // If it's a relative path without leading slash, prefix it with /
-      if (
-        !trimmed.startsWith("http://") &&
-        !trimmed.startsWith("https://") &&
-        !trimmed.startsWith("data:") &&
-        !trimmed.startsWith("/")
-      ) {
-        return `/${trimmed}`;
-      }
-      return trimmed;
+      return resolveMediaUrl(trimmed);
     }
   }
 

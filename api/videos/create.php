@@ -44,19 +44,25 @@ if (!empty($thumbnailUrl) && str_starts_with($thumbnailUrl, 'data:image/')) {
     if (count($imgData) === 2) {
         $decoded = base64_decode($imgData[1]);
         if ($decoded !== false) {
-            $imgUploadDir = __DIR__ . '/../../uploads/images/';
-            if (!is_dir($imgUploadDir)) {
-                @mkdir($imgUploadDir, 0755, true);
-            }
-            $imgExt = 'jpg';
-            if (str_contains($imgData[0], 'png')) $imgExt = 'png';
-            else if (str_contains($imgData[0], 'webp')) $imgExt = 'webp';
+            $imgUploadDir = ensureMediaStorageDir('images');
+            if ($imgUploadDir) {
+                $imgExt = 'jpg';
+                if (str_contains($imgData[0], 'png')) $imgExt = 'png';
+                else if (str_contains($imgData[0], 'webp')) $imgExt = 'webp';
 
-            $safeVidId = preg_replace('/[^a-zA-Z0-9_-]/', '_', $id);
-            $imgFileName = 'thumb_' . $safeVidId . '.' . $imgExt;
-            $imgPath = $imgUploadDir . $imgFileName;
-            if (@file_put_contents($imgPath, $decoded)) {
-                $thumbnailUrl = '/uploads/images/' . $imgFileName;
+                $safeVidId = preg_replace('/[^a-zA-Z0-9_-]/', '_', $id);
+                $imgFileName = 'thumb_' . $safeVidId . '.' . $imgExt;
+                $imgPath = $imgUploadDir . $imgFileName;
+                if (@file_put_contents($imgPath, $decoded)) {
+                    // Mirror to secondary directories
+                    $allDirs = getMediaStorageDirectories('images');
+                    foreach ($allDirs as $otherDir) {
+                        if ($otherDir !== $imgUploadDir && is_dir($otherDir) && is_writable($otherDir)) {
+                            @copy($imgPath, $otherDir . $imgFileName);
+                        }
+                    }
+                    $thumbnailUrl = toAbsoluteMediaUrl('/uploads/images/' . $imgFileName, 'images');
+                }
             }
         }
     }
@@ -76,6 +82,9 @@ if (empty($thumbnailUrl) || strlen($thumbnailUrl) > 60000) {
         'General' => 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=60',
     ];
     $thumbnailUrl = $categoryThumbnails[$category] ?? $categoryThumbnails['General'];
+} else {
+    // Normalize relative thumbnail paths to absolute URLs
+    $thumbnailUrl = toAbsoluteMediaUrl($thumbnailUrl, 'images');
 }
 
 if (empty($title)) {
@@ -85,6 +94,9 @@ if (empty($title)) {
 if (empty($videoUrl)) {
     jsonResponse(['success' => false, 'error' => 'Video URL or file is required.'], 400);
 }
+
+// Normalize relative video URL to absolute public URL
+$videoUrl = toAbsoluteMediaUrl($videoUrl, 'videos');
 
 try {
     $stmt = $pdo->prepare('

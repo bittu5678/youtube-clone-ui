@@ -5,6 +5,7 @@ import thumb4 from "@/assets/thumb-4.jpg";
 import thumb5 from "@/assets/thumb-5.jpg";
 import thumb6 from "@/assets/thumb-6.jpg";
 import { resolveVideoThumbnail } from "@/lib/thumbnail-service";
+import { resolveMediaUrl } from "@/lib/media-url";
 
 export type Video = {
   id: string;
@@ -440,7 +441,7 @@ export const findVideo = (id: string): Video | undefined => {
               tint: match.videoType === "premium" ? "oklch(0.6 0.22 45)" : "oklch(0.5 0.18 20)",
               category: match.category || "General",
               description: match.description || "",
-              videoUrl: match.videoUrl || match.video_url,
+              videoUrl: resolveMediaUrl(match.videoUrl || match.video_url),
               videoType: match.videoType || match.video_type || "free",
               contentType: match.contentType || match.content_type || "long",
               isPromoted: Boolean(match.isPromoted || match.is_promoted),
@@ -494,7 +495,7 @@ export async function findVideoAsync(id: string): Promise<Video | undefined> {
         tint: v.video_type === "premium" ? "oklch(0.6 0.22 45)" : "oklch(0.5 0.18 20)",
         category: v.category || "General",
         description: v.description || "",
-        videoUrl: v.video_url || v.videoUrl,
+        videoUrl: resolveMediaUrl(v.video_url || v.videoUrl),
         videoType: v.video_type || v.videoType || "free",
         contentType: v.content_type || v.contentType || "long",
         isPromoted: Boolean(v.is_promoted || v.isPromoted),

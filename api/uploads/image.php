@@ -11,9 +11,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // Support direct file upload or multipart
-$uploadDir = __DIR__ . '/../../uploads/images/';
-if (!is_dir($uploadDir)) {
-    @mkdir($uploadDir, 0755, true);
+$uploadDir = ensureMediaStorageDir('images');
+if (!$uploadDir) {
+    jsonResponse([
+        'success' => false,
+        'error' => 'Failed to initialize image upload storage directory on Hostinger.'
+    ], 500);
 }
 
 if (!empty($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
@@ -35,13 +38,30 @@ if (!empty($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
         ], 400);
     }
 
-    $fileName = 'img_' . time() . '_' . substr(md5(random_bytes(6)), 0, 6) . '.' . ($ext ?: 'jpg');
+    $uniqueId = time() . '_' . substr(md5(random_bytes(6)), 0, 6);
+    $counter = 0;
+    $candidateName = 'img_' . $uniqueId . '.' . ($ext ?: 'jpg');
+    while (file_exists($uploadDir . $candidateName)) {
+        $counter++;
+        $candidateName = 'img_' . $uniqueId . '_' . $counter . '.' . ($ext ?: 'jpg');
+    }
+    $fileName = $candidateName;
     $target = $uploadDir . $fileName;
 
     if (@move_uploaded_file($tmpName, $target)) {
+        // Sync to secondary storage directories (e.g. root uploads/)
+        $allDirs = getMediaStorageDirectories('images');
+        foreach ($allDirs as $otherDir) {
+            if ($otherDir !== $uploadDir && is_dir($otherDir) && is_writable($otherDir)) {
+                @copy($target, $otherDir . $fileName);
+            }
+        }
+
+        $publicUrl = toAbsoluteMediaUrl('/uploads/images/' . $fileName, 'images');
+
         jsonResponse([
             'success' => true,
-            'url' => '/uploads/images/' . $fileName,
+            'url' => $publicUrl,
             'fileName' => $fileName,
             'format' => $ext,
             'fileSize' => round($_FILES['image']['size'] / (1024 * 1024), 2) . ' MB'

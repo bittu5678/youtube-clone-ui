@@ -37,7 +37,14 @@ try {
     ";
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
-    $images = $stmt->fetchAll();
+    $rawImages = $stmt->fetchAll();
+    $images = array_map(function ($img) {
+        $img['image_url'] = toAbsoluteMediaUrl($img['image_url'] ?? '', 'images');
+        $img['imageUrl'] = $img['image_url'];
+        $img['thumbnail_url'] = toAbsoluteMediaUrl($img['thumbnail_url'] ?? '', 'images');
+        $img['thumbnailUrl'] = $img['thumbnail_url'];
+        return $img;
+    }, $rawImages);
 
     jsonResponse(['success' => true, 'images' => $images, 'total' => count($images)]);
 } catch (PDOException $e) {

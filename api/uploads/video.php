@@ -10,21 +10,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonResponse(['success' => false, 'error' => 'Method Not Allowed. Use POST to upload video files.'], 405);
 }
 
-// Ensure destination storage directory exists and is writable
-$uploadDir = __DIR__ . '/../../uploads/videos/';
-if (!is_dir($uploadDir)) {
-    if (!@mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
-        jsonResponse([
-            'success' => false,
-            'error' => 'Failed to initialize video upload storage directory. Please verify write permissions on uploads/videos/.'
-        ], 500);
-    }
-}
-
-if (!is_writable($uploadDir)) {
+// Ensure destination storage directory exists and is writable in the public web root
+$uploadDir = ensureMediaStorageDir('videos');
+if (!$uploadDir) {
     jsonResponse([
         'success' => false,
-        'error' => 'Video uploads directory is not writable. Please set directory permissions to 0755 or 0775 on Hostinger.'
+        'error' => 'Failed to initialize video upload storage directory. Please verify write permissions on uploads/videos/ on Hostinger.'
     ], 500);
 }
 
@@ -108,7 +99,13 @@ if (!empty($mime) && !in_array($mime, $allowedMimes, true)) {
 $safeBaseName = preg_replace('/[^a-zA-Z0-9_-]/', '_', pathinfo($origName, PATHINFO_FILENAME));
 $safeBaseName = substr($safeBaseName, 0, 30);
 $uniqueId = time() . '_' . bin2hex(random_bytes(6));
-$fileName = 'vid_' . $uniqueId . '.' . $ext;
+$counter = 0;
+$candidateName = 'vid_' . $uniqueId . '.' . $ext;
+while (file_exists($uploadDir . $candidateName)) {
+    $counter++;
+    $candidateName = 'vid_' . $uniqueId . '_' . $counter . '.' . $ext;
+}
+$fileName = $candidateName;
 $target = $uploadDir . $fileName;
 
 if (!@move_uploaded_file($tmpName, $target)) {
@@ -118,11 +115,20 @@ if (!@move_uploaded_file($tmpName, $target)) {
     ], 500);
 }
 
+// Sync to secondary storage directories (e.g. root uploads/) so both docroots stay consistent
+$allDirs = getMediaStorageDirectories('videos');
+foreach ($allDirs as $otherDir) {
+    if ($otherDir !== $uploadDir && is_dir($otherDir) && is_writable($otherDir)) {
+        @copy($target, $otherDir . $fileName);
+    }
+}
+
 $fileSizeMb = round($fileSize / (1024 * 1024), 2) . ' MB';
+$publicUrl = toAbsoluteMediaUrl('/uploads/videos/' . $fileName, 'videos');
 
 jsonResponse([
     'success' => true,
-    'url' => '/uploads/videos/' . $fileName,
+    'url' => $publicUrl,
     'fileName' => $fileName,
     'format' => $ext,
     'fileSize' => $fileSizeMb,

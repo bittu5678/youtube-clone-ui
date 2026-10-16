@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { resolveMediaUrl } from "./media-url";
 
 export interface UploadedImage {
   id: string;
@@ -121,7 +122,7 @@ export async function fetchUploadedImages(userId?: string): Promise<UploadedImag
         creatorName: item.creator_name || item.creatorName || "FaceTube Creator",
         title: item.title || "Uploaded Image",
         description: item.description || "",
-        imageUrl: item.image_url || item.imageUrl,
+        imageUrl: resolveMediaUrl(item.image_url || item.imageUrl),
         format: (item.format || "jpg") as "jpg" | "jpeg" | "png" | "webp",
         fileSize: item.file_size || item.fileSize || "1.0 MB",
         category: item.category || "Entertainment",
