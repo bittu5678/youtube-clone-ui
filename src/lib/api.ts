@@ -4,11 +4,48 @@
  * Base URL configurable via VITE_API_BASE_URL (defaults to /api)
  */
 
-export const API_BASE_URL = (
-  typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
-    ? import.meta.env.VITE_API_BASE_URL
-    : "/api"
-).replace(/\/+$/, "");
+export const PRODUCTION_API_URL = "https://api.facetube.online";
+
+/**
+ * Returns the base URL for FaceTube PHP API calls.
+ * 1. Explicit override: VITE_API_BASE_URL (if provided)
+ * 2. Production browser: Automatically defaults to https://api.facetube.online on facetube.online
+ * 3. Local development / Preview: Defaults to /api (handled by Vite dev middleware)
+ */
+export function getApiBaseUrl(): string {
+  // 1. Explicit environment variable override
+  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) {
+    const rawApi = String(import.meta.env.VITE_API_BASE_URL)
+      .trim()
+      .replace(/\/+$/, "");
+    // If explicitly pointed to api.facetube.online/api, strip trailing /api since endpoints are at root of subdomain
+    if (
+      rawApi.toLowerCase().includes("api.facetube.online") &&
+      rawApi.toLowerCase().endsWith("/api")
+    ) {
+      return rawApi.replace(/\/api\/?$/i, "");
+    }
+    return rawApi;
+  }
+
+  // 2. Production browser runtime check on facetube.online
+  if (typeof window !== "undefined" && window.location?.hostname) {
+    const host = window.location.hostname.toLowerCase();
+    if (host.includes("facetube.online")) {
+      return PRODUCTION_API_URL;
+    }
+  }
+
+  // 3. In server-side rendering (SSR), default to production API if in production mode
+  if (typeof process !== "undefined" && process.env?.NODE_ENV === "production") {
+    return PRODUCTION_API_URL;
+  }
+
+  // 4. Default to /api for local dev middleware and test environments
+  return "/api";
+}
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export const TOKEN_STORAGE_KEY = "facetube_auth_token";
 
@@ -57,7 +94,8 @@ export async function apiFetch<T = unknown>(
   }
 
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
-  let url = `${API_BASE_URL}${cleanEndpoint}`;
+  const baseUrl = getApiBaseUrl();
+  let url = `${baseUrl}${cleanEndpoint}`;
 
   // When running on the server (SSR / Node.js runtime), fetch requires an absolute URL with protocol and host
   if (typeof window === "undefined" && !url.startsWith("http://") && !url.startsWith("https://")) {
