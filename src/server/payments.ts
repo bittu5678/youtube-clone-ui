@@ -269,6 +269,14 @@ export interface PaymentVerifyResult {
 /**
  * Creates a server-side payment order (compatible with Razorpay Test Mode)
  */
+function sanitizeSecret(val?: string | null): string {
+  if (!val) return "";
+  return String(val)
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .trim();
+}
+
 /**
  * Creates a server-side payment order with Razorpay Orders API
  * Fails closed if real credentials are not configured in environment variables.
@@ -286,8 +294,10 @@ export async function createServerPaymentOrder(
     amount = plan ? plan.price : PRICING_CONFIG.ADS_PROMOTION["plan-monthly"].price;
   }
 
-  const keyId = env?.["RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"];
-  const keySecret = env?.["RAZORPAY_KEY_SECRET"] || process.env["RAZORPAY_KEY_SECRET"];
+  const keyId = sanitizeSecret(env?.["RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"]);
+  const keySecret = sanitizeSecret(
+    env?.["RAZORPAY_KEY_SECRET"] || process.env["RAZORPAY_KEY_SECRET"],
+  );
 
   if (!keyId || !keySecret) {
     throw new Error(
@@ -373,8 +383,10 @@ export async function verifyServerPayment(
   referrerUserId?: string | null,
   env?: Record<string, string | undefined>,
 ): Promise<PaymentVerifyResult> {
-  const keyId = env?.["RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"];
-  const secretKey = env?.["RAZORPAY_KEY_SECRET"] || process.env["RAZORPAY_KEY_SECRET"];
+  const keyId = sanitizeSecret(env?.["RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"]);
+  const secretKey = sanitizeSecret(
+    env?.["RAZORPAY_KEY_SECRET"] || process.env["RAZORPAY_KEY_SECRET"],
+  );
 
   // Strictly fail closed if secret key is missing
   if (!secretKey) {
