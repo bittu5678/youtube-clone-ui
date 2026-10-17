@@ -18,10 +18,9 @@ export interface UploadedImage {
 
 /**
  * Configurable feed threshold:
- * After every 5 video items, 1 uploaded image appears as an additional content item.
- * Changeable here without redesigning the feature.
+ * After every 4 video items, 1 uploaded image appears as an additional content item.
  */
-export const IMAGE_FEED_INTERVAL = 5;
+export const IMAGE_FEED_INTERVAL = 4;
 
 const LOCAL_STORAGE_IMAGES_KEY = "facetube_uploaded_images_v2";
 

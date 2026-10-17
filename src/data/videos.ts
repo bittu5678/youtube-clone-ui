@@ -288,7 +288,7 @@ export const seedVideos: Video[] = [
   },
   {
     id: "vid-seed-004",
-    title: "Executive Masterclass: Building $10K/Month Video Funnels",
+    title: "Executive Masterclass: Building ₹10L/Month Video Funnels",
     channel: "Alex Rivera",
     initials: "AR",
     views: "31.4K views",

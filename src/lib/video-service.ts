@@ -2,6 +2,7 @@ import { api } from "./api";
 import { resolveVideoThumbnail, getCategoryFallbackThumbnail } from "./thumbnail-service";
 import { resolveMediaUrl } from "./media-url";
 import type { Video } from "@/data/videos";
+import type { ShortItem } from "@/data/shorts";
 
 export type VideoType = "free" | "premium";
 export type ContentType = "short" | "long";
@@ -140,7 +141,7 @@ export const INITIAL_SEED_VIDEOS: UploadedVideo[] = [
     id: "vid-seed-004",
     userId: "FT483921",
     creatorName: "Alex Rivera",
-    title: "Executive Masterclass: Building $10K/Month Video Funnels",
+    title: "Executive Masterclass: Building ₹10L/Month Video Funnels",
     description:
       "Full 1-hour verified premium course with step-by-step case studies and downloadable resources.",
     videoUrl: "https://vjs.zencdn.net/v/oceans.mp4",
@@ -592,7 +593,67 @@ export function convertUploadedToCatalogVideo(v: UploadedVideo): Video {
     description: v.description || "",
     videoUrl: rawVideoUrl,
     videoType: v.videoType || "free",
-    contentType: v.contentType || "long",
+    contentType: v.contentType || (isShortVideo({ contentType: v.contentType, duration: v.duration }) ? "short" : "long"),
     isPromoted: Boolean(v.isPromoted),
+  };
+}
+
+/**
+ * Checks whether a video item is a Short video based on metadata or duration (<= 60 seconds).
+ */
+export function isShortVideo(video: { contentType?: string; duration?: string }): boolean {
+  if (video.contentType === "short") return true;
+  if (video.contentType === "long") return false;
+  if (!video.duration) return false;
+  const raw = video.duration.trim();
+  const parts = raw.split(":").map(Number);
+  if (parts.some(isNaN)) return false;
+  if (parts.length === 2) {
+    const [minutes, seconds] = parts;
+    return minutes === 0 && seconds <= 60;
+  }
+  return false;
+}
+
+/**
+ * Checks whether a video item is a Long video.
+ */
+export function isLongVideo(video: { contentType?: string; duration?: string }): boolean {
+  return !isShortVideo(video);
+}
+
+/**
+ * Converts a Video or UploadedVideo into ShortItem format for display in ShortsShelf and /shorts.
+ */
+export function convertVideoToShortItem(v: Video | UploadedVideo): ShortItem {
+  const thumbUrl =
+    (v as any).thumb ||
+    (v as any).thumbnail ||
+    (v as any).thumbnailUrl ||
+    resolveVideoThumbnail({
+      thumbnailUrl: (v as any).thumbnailUrl,
+      category: (v as any).category,
+    });
+  const channel = (v as any).channel || (v as any).creatorName || "FaceTube Creator";
+  const views =
+    typeof (v as any).views === "number"
+      ? `${(v as any).views.toLocaleString()} views`
+      : String((v as any).views || "0 views");
+
+  return {
+    id: String(v.id),
+    title: v.title || "FaceTube Short",
+    creator: channel,
+    creatorHandle: `@${channel.toLowerCase().replace(/[^a-z0-9]/g, "") || "creator"}`,
+    initials: (channel.slice(0, 2) || "FT").toUpperCase(),
+    views: views,
+    likes: (v as any).likes ? `${(v as any).likes.toLocaleString?.() || (v as any).likes}` : "1.2K",
+    comments: "48",
+    shares: "16",
+    soundTrack: `${channel} · Original Audio`,
+    tags: [(v as any).category || "Shorts"],
+    thumb: thumbUrl,
+    aspectColor: "from-blue-900/60 to-purple-900/80",
+    videoUrl: (v as any).videoUrl,
   };
 }

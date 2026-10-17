@@ -28,9 +28,9 @@ export const UPLOAD_OPTIONS_LIST: UploadOptionItem[] = [
   },
   {
     id: "premium",
-    title: "Premium",
-    subtitle: "Premium Short & Long Videos · Fee: ₹6",
-    badge: "Premium · ₹6",
+    title: "Sponsor",
+    subtitle: "Sponsor Short & Long Videos · Fee: ₹6",
+    badge: "Sponsor · ₹6",
     icon: Sparkles,
     isPremium: true,
     accentClass:
@@ -42,9 +42,9 @@ export const UPLOAD_OPTIONS_LIST: UploadOptionItem[] = [
   },
   {
     id: "ad_promotion",
-    title: "Ad Promotion",
-    subtitle: "Short & Long Promotion · 7d ₹100, 15d ₹200...",
-    badge: "Ad Promotion",
+    title: "Ad",
+    subtitle: "Short & Long Video Ad · 7d ₹100, 15d ₹200...",
+    badge: "Ad",
     icon: Megaphone,
     accentClass:
       "border-emerald-500/30 hover:border-emerald-500/60 bg-emerald-500/5 hover:bg-emerald-500/10",
@@ -179,7 +179,7 @@ export function UploadOptionsModal({ isOpen, onClose }: UploadOptionsModalProps)
                       <span className="absolute -inset-1 rounded-full bg-amber-400/35 blur-sm animate-pulse" />
                       <div className="relative flex items-center gap-1 rounded-full border border-amber-400/60 bg-gradient-to-r from-amber-500/25 via-yellow-400/35 to-amber-500/25 px-2 py-0.5 text-[10px] font-black tracking-wide text-amber-300">
                         <Zap className="h-3.5 w-3.5 fill-amber-400 text-amber-300 animate-pulse" />
-                        <span>PREMIUM</span>
+                        <span>SPONSOR</span>
                       </div>
                     </div>
                   )}

@@ -299,16 +299,16 @@ function FourOptionsSelectionView({
           </div>
         </div>
 
-        {/* OPTION 2: Premium */}
+        {/* OPTION 2: Sponsor */}
         <div className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-amber-500/40 bg-gradient-to-b from-amber-500/10 via-card to-card p-6 shadow-card hover:border-amber-500/70 hover:shadow-lg transition-all">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-inner">
                 <Sparkles className="h-6 w-6" />
               </div>
-              {/* Clear Premium Badge */}
+              {/* Clear Sponsor Badge */}
               <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1 text-xs font-black uppercase text-amber-400">
-                Premium · ₹6
+                Sponsor · ₹6
               </span>
             </div>
 
@@ -317,10 +317,10 @@ function FourOptionsSelectionView({
                 Option 2
               </div>
               <h2 className="mt-1 text-xl font-black text-foreground group-hover:text-amber-400 transition-colors">
-                Premium
+                Sponsor
               </h2>
               <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                ₹6 verified payment for monetized content with audit verification.
+                ₹6 verified payment for sponsor monetized content with audit verification.
               </p>
             </div>
 
@@ -336,7 +336,7 @@ function FourOptionsSelectionView({
                   onClick={() => onSelect("premium", "short")}
                   className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-left text-amber-300 hover:bg-amber-500/20 transition flex items-center justify-between"
                 >
-                  <span>Premium Short Video</span>
+                  <span>Sponsor Short Video</span>
                   <ChevronRight className="h-3 w-3" />
                 </button>
                 <button
@@ -344,7 +344,7 @@ function FourOptionsSelectionView({
                   onClick={() => onSelect("premium", "long")}
                   className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-left text-amber-300 hover:bg-amber-500/20 transition flex items-center justify-between"
                 >
-                  <span>Premium Long Video</span>
+                  <span>Sponsor Long Video</span>
                   <ChevronRight className="h-3 w-3" />
                 </button>
               </div>
@@ -357,13 +357,13 @@ function FourOptionsSelectionView({
               onClick={() => onSelect("premium", "short")}
               className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-600 px-4 py-3 text-xs font-bold text-white shadow-sm hover:bg-amber-500 transition active:scale-95"
             >
-              <span>Upload Premium (₹6)</span>
+              <span>Upload Sponsor (₹6)</span>
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {/* OPTION 3: Ad Promotion */}
+        {/* OPTION 3: Ad */}
         <div className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 via-card to-card p-6 shadow-card hover:border-emerald-500/60 hover:shadow-lg transition-all">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -371,7 +371,7 @@ function FourOptionsSelectionView({
                 <Megaphone className="h-6 w-6" />
               </div>
               <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-3 py-1 text-xs font-black uppercase text-emerald-400">
-                Ad Promotion
+                Ad
               </span>
             </div>
 
@@ -380,7 +380,7 @@ function FourOptionsSelectionView({
                 Option 3
               </div>
               <h2 className="mt-1 text-xl font-black text-foreground group-hover:text-emerald-400 transition-colors">
-                Ad Promotion
+                Ad
               </h2>
               <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
                 Targeted algorithmic boost for Short or Long videos. Verified payment campaign.
@@ -416,7 +416,7 @@ function FourOptionsSelectionView({
               onClick={() => onSelect("ad_promotion")}
               className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 transition active:scale-95"
             >
-              <span>Ad Promotion</span>
+              <span>Upload Ad</span>
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
@@ -1066,7 +1066,7 @@ function PremiumVideoUploadView({
           setUploading(false);
           setUploadSuccess(true);
           toast.success(
-            `🎉 Premium ${format === "short" ? "Short" : "Long"} Video uploaded! ₹6 payment verified.`,
+            `🎉 Sponsor ${format === "short" ? "Short" : "Long"} Video uploaded! ₹6 payment verified.`,
           );
           onUploaded?.();
         },
@@ -1081,7 +1081,7 @@ function PremiumVideoUploadView({
       });
     } catch (err: any) {
       setUploading(false);
-      toast.error(err?.message || "Failed to initiate premium upload.");
+      toast.error(err?.message || "Failed to initiate sponsor upload.");
     }
   };
 
@@ -1092,7 +1092,7 @@ function PremiumVideoUploadView({
           <CheckCircle2 className="h-10 w-10" />
         </div>
         <div>
-          <h2 className="text-2xl font-black text-foreground">Premium Video Published!</h2>
+          <h2 className="text-2xl font-black text-foreground">Sponsor Video Published!</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             Payment of ₹6 was verified. Monetized video published with audit ledger protection.
           </p>
@@ -1109,14 +1109,14 @@ function PremiumVideoUploadView({
             }}
             className="rounded-xl bg-amber-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-amber-500 transition"
           >
-            Upload Another Premium Video
+            Upload Another Sponsor Video
           </button>
           <Link
             to="/premium-videos"
             search={{ refresh: Date.now() }}
             className="rounded-xl bg-secondary px-6 py-2.5 text-xs font-bold text-foreground hover:bg-secondary/80 transition"
           >
-            View Premium Videos
+            View Sponsor Videos
           </Link>
         </div>
       </div>
@@ -1139,7 +1139,7 @@ function PremiumVideoUploadView({
             <div className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
               Option 2 · Monetized Video
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-foreground">Premium Video Upload</h1>
+            <h1 className="text-xl sm:text-2xl font-black text-foreground">Sponsor Video Upload</h1>
           </div>
         </div>
 
@@ -1164,7 +1164,7 @@ function PremiumVideoUploadView({
                   : "border-border bg-secondary/40 hover:bg-secondary/80"
               }`}
             >
-              <div className="text-sm font-bold text-foreground">Premium Short Video</div>
+              <div className="text-sm font-bold text-foreground">Sponsor Short Video</div>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Monetized short-form under 60 seconds
               </p>
@@ -1178,7 +1178,7 @@ function PremiumVideoUploadView({
                   : "border-border bg-secondary/40 hover:bg-secondary/80"
               }`}
             >
-              <div className="text-sm font-bold text-foreground">Premium Long Video</div>
+              <div className="text-sm font-bold text-foreground">Sponsor Long Video</div>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Monetized long-form standard video
               </p>
@@ -1290,14 +1290,14 @@ function PremiumVideoUploadView({
         {/* Monetization Verification Notice */}
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs space-y-2">
           <div className="font-bold text-amber-400 flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4" /> ₹6 Premium Upload Verification:
+            <Sparkles className="h-4 w-4" /> ₹6 Sponsor Upload Verification:
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-muted-foreground">
             <div>
               • Monetized Status: <strong className="text-foreground">Active</strong>
             </div>
             <div>
-              • Video Type: <strong className="text-foreground">Premium</strong>
+              • Video Type: <strong className="text-foreground">Sponsor</strong>
             </div>
             <div>
               • Audit Security: <strong className="text-foreground">Ledger Protected</strong>
@@ -1322,7 +1322,7 @@ function PremiumVideoUploadView({
             disabled={uploading}
             className="rounded-xl bg-amber-600 px-8 py-3 text-xs font-bold text-white hover:bg-amber-500 transition shadow-sm disabled:opacity-50"
           >
-            {uploading ? "Uploading & Connecting Gateway..." : `Pay ₹6 & Publish Premium Video`}
+            {uploading ? "Uploading & Connecting Gateway..." : `Pay ₹6 & Publish Sponsor Video`}
           </button>
         </div>
       </form>
@@ -1481,7 +1481,7 @@ function AdPromotionUploadView({
             <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
               Option 3 · Audience Growth
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-foreground">Ad Promotion</h1>
+            <h1 className="text-xl sm:text-2xl font-black text-foreground">Ad Video Campaign</h1>
           </div>
         </div>
 
@@ -1506,7 +1506,7 @@ function AdPromotionUploadView({
                   : "border-border bg-secondary/40 hover:bg-secondary/80"
               }`}
             >
-              <div className="text-sm font-bold text-foreground">Short Video Promotion</div>
+              <div className="text-sm font-bold text-foreground">Short Video Ad</div>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Boost viral short-form video in feed
               </p>
@@ -1520,7 +1520,7 @@ function AdPromotionUploadView({
                   : "border-border bg-secondary/40 hover:bg-secondary/80"
               }`}
             >
-              <div className="text-sm font-bold text-foreground">Long Video Promotion</div>
+              <div className="text-sm font-bold text-foreground">Long Video Ad</div>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Featured placement for standard long videos
               </p>
@@ -1618,7 +1618,7 @@ function AdPromotionUploadView({
           >
             {isProcessing
               ? "Connecting Gateway..."
-              : `Launch Ad Promotion (₹${currentPlan.price.toLocaleString("en-IN")})`}
+              : `Launch Ad Campaign (₹${currentPlan.price.toLocaleString("en-IN")})`}
           </button>
         </div>
       </form>

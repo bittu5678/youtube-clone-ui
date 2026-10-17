@@ -19,6 +19,7 @@ export interface ShortItem {
   tags: string[];
   thumb: string;
   aspectColor: string;
+  videoUrl?: string;
 }
 
 export const SHORTS_LIST: ShortItem[] = [

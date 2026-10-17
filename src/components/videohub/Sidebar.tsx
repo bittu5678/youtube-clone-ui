@@ -410,7 +410,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
                 <span className="truncate">Free Videos</span>
               </Link>
 
-              {/* Premium Videos */}
+              {/* Sponsor Videos */}
               <Link
                 to="/premium-videos"
                 onClick={onNavigate}
@@ -427,7 +427,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
                       : "text-muted-foreground"
                   }`}
                 />
-                <span className="truncate">Premium Videos</span>
+                <span className="truncate">Sponsor Videos</span>
               </Link>
 
               {/* Short Videos */}
