@@ -18,7 +18,6 @@ export function getApiBaseUrl(): string {
     const rawApi = String(import.meta.env.VITE_API_BASE_URL)
       .trim()
       .replace(/\/+$/, "");
-    // If explicitly pointed to api.facetube.online/api, strip trailing /api since endpoints are at root of subdomain
     if (
       rawApi.toLowerCase().includes("api.facetube.online") &&
       rawApi.toLowerCase().endsWith("/api")
@@ -28,20 +27,7 @@ export function getApiBaseUrl(): string {
     return rawApi;
   }
 
-  // 2. Production browser runtime check on facetube.online
-  if (typeof window !== "undefined" && window.location?.hostname) {
-    const host = window.location.hostname.toLowerCase();
-    if (host.includes("facetube.online")) {
-      return PRODUCTION_API_URL;
-    }
-  }
-
-  // 3. In server-side rendering (SSR), default to production API if in production mode
-  if (typeof process !== "undefined" && process.env?.NODE_ENV === "production") {
-    return PRODUCTION_API_URL;
-  }
-
-  // 4. Default to /api for local dev middleware and test environments
+  // 2. Default to relative /api: routes on current origin (facetube.online/api or localhost:3000/api)
   return "/api";
 }
 

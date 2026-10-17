@@ -28,20 +28,7 @@ export function getMediaBaseUrl(): string {
     }
   }
 
-  // 3. Browser runtime check on production domain
-  if (typeof window !== "undefined" && window.location?.hostname) {
-    const host = window.location.hostname.toLowerCase();
-    if (host.includes("facetube.online")) {
-      return PRODUCTION_API_DOMAIN;
-    }
-  }
-
-  // 4. In server-side rendering (SSR), default to production domain if in production mode
-  if (typeof process !== "undefined" && process.env?.NODE_ENV === "production") {
-    return PRODUCTION_API_DOMAIN;
-  }
-
-  // 5. Local development (Vite dev server handles /uploads/)
+  // 3. Default to current host relative paths (e.g. /uploads/...)
   return "";
 }
 
