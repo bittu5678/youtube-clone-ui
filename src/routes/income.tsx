@@ -44,7 +44,7 @@ const incomeStreams = [
   {
     title: "Global Income",
     desc: "Worldwide platform revenue pool distribution for Diamond ranks",
-    balance: "$2,450.00",
+    balance: "₹2,450.00",
     badge: "Global Pool",
     icon: Globe2,
     color: "text-cyan-400 bg-cyan-500/10",
@@ -53,7 +53,7 @@ const incomeStreams = [
   {
     title: "AdSense Income",
     desc: "70% video player pre-roll, mid-roll, and display ad revenue",
-    balance: "$1,890.20",
+    balance: "₹1,890.20",
     badge: "70% Split",
     icon: Tv,
     color: "text-yellow-400 bg-yellow-500/10",
@@ -62,7 +62,7 @@ const incomeStreams = [
   {
     title: "Affiliate Income",
     desc: "Product recommendations, gear commissions, and course referrals",
-    balance: "$940.80",
+    balance: "₹940.80",
     badge: "86 Sales",
     icon: Share2,
     color: "text-indigo-400 bg-indigo-500/10",
@@ -71,7 +71,7 @@ const incomeStreams = [
   {
     title: "Wallet Balance",
     desc: "Current aggregated balance ready for immediate transfer or withdrawal",
-    balance: "$4,280.50",
+    balance: "₹4,280.50",
     badge: "Available",
     icon: Wallet,
     color: "text-emerald-400 bg-emerald-500/10",
@@ -80,7 +80,7 @@ const incomeStreams = [
   {
     title: "Withdrawal Balance",
     desc: "History of completed bank ACH, PayPal, and crypto disbursements",
-    balance: "$3,150.00",
+    balance: "₹3,150.00",
     badge: "Processed",
     icon: ArrowDownToLine,
     color: "text-orange-400 bg-orange-500/10",

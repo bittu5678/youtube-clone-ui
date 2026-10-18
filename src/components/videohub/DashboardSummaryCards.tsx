@@ -63,16 +63,16 @@ export const DASHBOARD_SUMMARY_DATA: SummaryCardItem[] = [
     link: "/free-videos",
     trend: "142.5K views",
   },
-  // 4. Premium Videos
+  // 4. Sponsor Videos
   {
     id: "premium-videos",
-    title: "Premium Videos",
+    title: "Sponsor Videos",
     value: "6",
     subtitle: "Monetized subscriber-only",
     icon: Sparkles,
     color: "text-amber-400 bg-amber-500/10",
     link: "/premium-videos",
-    trend: "$840 ad revenue",
+    trend: "₹840 ad revenue",
     isPositive: true,
   },
   // 5. Short Videos
@@ -173,7 +173,7 @@ export const DASHBOARD_SUMMARY_DATA: SummaryCardItem[] = [
   {
     id: "withdrawal-balance",
     title: "Withdrawal Balance",
-    value: "$3,150.00",
+    value: "₹3,150.00",
     subtitle: "Total successfully paid out",
     icon: ArrowDownToLine,
     color: "text-orange-400 bg-orange-500/10",

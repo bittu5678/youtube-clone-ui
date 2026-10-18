@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState, useEffect, useMemo } from "react";
 import {
   Clapperboard,
   Plus,
@@ -10,7 +11,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
-import { SHORTS_LIST } from "@/data/shorts";
+import { SHORTS_LIST, type ShortItem } from "@/data/shorts";
+import { fetchUploadedVideos, isShortVideo } from "@/lib/video-service";
 
 export const Route = createFileRoute("/short-videos")({
   head: () => ({
@@ -27,6 +29,55 @@ export const Route = createFileRoute("/short-videos")({
 });
 
 function ShortVideosPage() {
+  const [uploadedShorts, setUploadedShorts] = useState<ShortItem[]>([]);
+
+  useEffect(() => {
+    fetchUploadedVideos()
+      .then((videos) => {
+        const mapped = videos
+          .filter((v) => isShortVideo({ contentType: v.contentType, duration: v.duration }))
+          .map(
+            (v): ShortItem => ({
+              id: v.id,
+              title: v.title,
+              creator: v.creatorName || "FaceTube Creator",
+              creatorHandle: `@${(v.creatorName || "creator").toLowerCase().replace(/\s+/g, "")}`,
+              initials: (v.creatorName || "FC").slice(0, 2).toUpperCase(),
+              views: `${(v.views || 0).toLocaleString()} views`,
+              likes: (v.likes || 0).toLocaleString(),
+              comments: "0",
+              shares: "0",
+              soundTrack: `${v.creatorName || "FaceTube"} · Original Audio`,
+              tags: [v.category?.toLowerCase() || "shorts", "facetube"],
+              thumb: v.thumbnailUrl,
+              aspectColor: "from-purple-900/60 to-brand/80",
+              videoUrl: v.videoUrl,
+            }),
+          );
+        if (mapped.length > 0) {
+          setUploadedShorts(mapped);
+        }
+      })
+      .catch((err) => console.warn("Could not fetch shorts from API:", err));
+  }, []);
+
+  const allShorts: ShortItem[] = useMemo(() => {
+    const seen = new Set<string>();
+    const list: ShortItem[] = [];
+    for (const s of uploadedShorts) {
+      if (!seen.has(s.id)) {
+        seen.add(s.id);
+        list.push(s);
+      }
+    }
+    for (const s of SHORTS_LIST) {
+      if (!seen.has(s.id)) {
+        seen.add(s.id);
+        list.push(s);
+      }
+    }
+    return list.length > 0 ? list : SHORTS_LIST;
+  }, [uploadedShorts]);
   return (
     <VideoHubLayout>
       <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">
@@ -83,7 +134,7 @@ function ShortVideosPage() {
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Shorts Bonus Earned</span>
-            <p className="text-2xl font-black text-emerald-400">$340.50</p>
+            <p className="text-2xl font-black text-emerald-400">₹340.50</p>
             <p className="text-[11px] text-muted-foreground">Creator fund payout</p>
           </div>
         </div>

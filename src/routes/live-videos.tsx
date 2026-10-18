@@ -33,7 +33,7 @@ const mockStreams = [
     scheduledFor: "Sep 15, 2026",
     duration: "1h 45m",
     views: "14,200",
-    superchats: "$245.00",
+    superchats: "₹245.00",
     thumbnail:
       "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&auto=format&fit=crop&q=80",
   },
@@ -44,7 +44,7 @@ const mockStreams = [
     scheduledFor: "Sep 08, 2026",
     duration: "2h 10m",
     views: "22,800",
-    superchats: "$410.00",
+    superchats: "₹410.00",
     thumbnail:
       "https://images.unsplash.com/photo-1531482615713-2afd69097998?w=600&auto=format&fit=crop&q=80",
   },
@@ -97,7 +97,7 @@ function LiveVideosPage() {
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">SuperChat Earnings</span>
-            <p className="text-2xl font-black text-foreground">$655.00</p>
+            <p className="text-2xl font-black text-foreground">₹655.00</p>
             <p className="text-[11px] text-emerald-400 font-semibold">Live audience tips</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">

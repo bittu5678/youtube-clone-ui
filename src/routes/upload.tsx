@@ -74,7 +74,7 @@ export const Route = createFileRoute("/upload")({
       {
         name: "description",
         content:
-          "Upload Free Videos, Premium Videos, Ad Promotion campaigns, and high-resolution Images on FaceTube.",
+          "Upload Free Videos, Sponsor Videos, Ad campaigns, and high-resolution Images on FaceTube.",
       },
       { property: "og:title", content: "Upload Studio — FaceTube" },
     ],
@@ -227,7 +227,7 @@ function FourOptionsSelectionView({
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground sm:text-base">
             Choose from the four dedicated publishing pathways below. Publish free videos with ₹0
-            fee, monetized premium content with ₹6 verified share, launch targeted Ad Promotion, or
+            fee, monetized sponsor content with ₹6 verified share, launch targeted Ad campaigns, or
             upload image assets.
           </p>
         </div>

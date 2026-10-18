@@ -593,7 +593,9 @@ export function convertUploadedToCatalogVideo(v: UploadedVideo): Video {
     description: v.description || "",
     videoUrl: rawVideoUrl,
     videoType: v.videoType || "free",
-    contentType: v.contentType || (isShortVideo({ contentType: v.contentType, duration: v.duration }) ? "short" : "long"),
+    contentType:
+      v.contentType ||
+      (isShortVideo({ contentType: v.contentType, duration: v.duration }) ? "short" : "long"),
     isPromoted: Boolean(v.isPromoted),
   };
 }

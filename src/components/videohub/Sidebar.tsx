@@ -487,7 +487,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
                       : "text-muted-foreground"
                   }`}
                 />
-                <span className="truncate">Advertisement Videos</span>
+                <span className="truncate">Ad Videos</span>
               </Link>
 
               {/* Images Uploaded */}

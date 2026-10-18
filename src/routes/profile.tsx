@@ -356,8 +356,8 @@ function ProfilePage() {
                 <span className="text-xs font-medium">Estimated Revenue</span>
                 <DollarSign className="h-4 w-4 text-emerald-500" />
               </div>
-              <p className="mt-2 text-2xl font-black text-foreground">$4,280.50</p>
-              <p className="mt-1 text-[11px] font-semibold text-emerald-500">+$520.20 this month</p>
+              <p className="mt-2 text-2xl font-black text-foreground">₹4,280.50</p>
+              <p className="mt-1 text-[11px] font-semibold text-emerald-500">+₹520.20 this month</p>
             </div>
           </div>
         </section>

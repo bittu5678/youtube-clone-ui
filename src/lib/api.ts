@@ -27,7 +27,15 @@ export function getApiBaseUrl(): string {
     return rawApi;
   }
 
-  // 2. Default to relative /api: routes on current origin (facetube.online/api or localhost:3000/api)
+  // 2. Production browser: Automatically route to live PHP + MySQL backend on facetube.online
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname.toLowerCase();
+    if (host === "facetube.online" || host === "www.facetube.online") {
+      return PRODUCTION_API_URL;
+    }
+  }
+
+  // 3. Local development / Preview fallback (handled by Vite dev middleware)
   return "/api";
 }
 

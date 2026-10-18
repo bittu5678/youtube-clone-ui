@@ -416,7 +416,7 @@ function DashboardPage() {
                   Estimated Revenue
                 </span>
                 <div className="text-2xl font-black text-emerald-400 mt-0.5">
-                  {wallet ? `$${wallet.totalEarned.toFixed(2)}` : "$7,430.50"}
+                  {wallet ? `₹${wallet.totalEarned.toFixed(2)}` : "₹7,430.50"}
                 </div>
               </div>
               <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-0.5">

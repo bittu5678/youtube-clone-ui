@@ -31,7 +31,7 @@ const affiliateLinks = [
     clicks: "1,420",
     sales: "18",
     rate: "6.0%",
-    earned: "$420.00",
+    earned: "₹420.00",
   },
   {
     name: "Shure SM7B Vocal Microphone",
@@ -39,7 +39,7 @@ const affiliateLinks = [
     clicks: "3,180",
     sales: "42",
     rate: "4.0%",
-    earned: "$210.80",
+    earned: "₹210.80",
   },
   {
     name: "Complete UI/UX Design System Course",
@@ -47,7 +47,7 @@ const affiliateLinks = [
     clicks: "890",
     sales: "26",
     rate: "25.0%",
-    earned: "$310.00",
+    earned: "₹310.00",
   },
 ];
 
@@ -78,7 +78,7 @@ function AffiliateIncomePage() {
             <span className="text-xs text-muted-foreground font-medium">
               Total Affiliate Earnings
             </span>
-            <p className="text-2xl font-black text-indigo-400">$940.80</p>
+            <p className="text-2xl font-black text-indigo-400">₹940.80</p>
             <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
               <TrendingUp className="h-3 w-3" /> +12.5% vs August
             </p>
@@ -95,7 +95,7 @@ function AffiliateIncomePage() {
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Average Commission</span>
-            <p className="text-2xl font-black text-emerald-400">$10.94</p>
+            <p className="text-2xl font-black text-emerald-400">₹10.94</p>
             <p className="text-[11px] text-muted-foreground">Per completed checkout</p>
           </div>
         </div>

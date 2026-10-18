@@ -50,7 +50,7 @@ const mockTeamMembers: TeamMember[] = [
     sponsor: "You",
     rank: "Diamond Creator",
     teamSize: 38,
-    monthlyVolume: "$12,400",
+    monthlyVolume: "₹12,400",
     status: "Active",
     access: "Granted",
   },
@@ -62,7 +62,7 @@ const mockTeamMembers: TeamMember[] = [
     sponsor: "You",
     rank: "Gold Creator",
     teamSize: 14,
-    monthlyVolume: "$6,850",
+    monthlyVolume: "₹6,850",
     status: "Active",
     access: "Granted",
   },
@@ -74,7 +74,7 @@ const mockTeamMembers: TeamMember[] = [
     sponsor: "You",
     rank: "Platinum Creator",
     teamSize: 22,
-    monthlyVolume: "$9,200",
+    monthlyVolume: "₹9,200",
     status: "Active",
     access: "Granted",
   },
@@ -86,7 +86,7 @@ const mockTeamMembers: TeamMember[] = [
     sponsor: "Alex Rivera (FT928412)",
     rank: "Silver Creator",
     teamSize: 9,
-    monthlyVolume: "$3,400",
+    monthlyVolume: "₹3,400",
     status: "Active",
     access: "Granted",
   },
@@ -98,7 +98,7 @@ const mockTeamMembers: TeamMember[] = [
     sponsor: "Marcus Vance (FT748190)",
     rank: "Bronze Creator",
     teamSize: 4,
-    monthlyVolume: "$1,890",
+    monthlyVolume: "₹1,890",
     status: "Active",
     access: "Restricted",
   },
@@ -110,7 +110,7 @@ const mockTeamMembers: TeamMember[] = [
     sponsor: "Tariq Mansoor (FT381902)",
     rank: "Rising Star",
     teamSize: 2,
-    monthlyVolume: "$750",
+    monthlyVolume: "₹750",
     status: "Active",
     access: "Granted",
   },
@@ -201,7 +201,7 @@ function TeamMembersPage() {
               <span className="text-xs font-medium">Monthly Team Volume</span>
               <TrendingUp className="h-4 w-4 text-emerald-400" />
             </div>
-            <p className="text-2xl font-black text-emerald-400">$34,490</p>
+            <p className="text-2xl font-black text-emerald-400">₹34,490</p>
             <p className="text-[11px] text-emerald-400 font-semibold">+18.2% vs last month</p>
           </div>
         </div>

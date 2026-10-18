@@ -207,7 +207,7 @@ function GlobalIncomePage() {
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Your Global Income</span>
             <p className="text-2xl font-black text-cyan-400">
-              {wallet ? `$${wallet.globalIncome.toFixed(2)}` : "$2,450.00"}
+              {wallet ? `₹${wallet.globalIncome.toFixed(2)}` : "₹2,450.00"}
             </p>
             <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
               <TrendingUp className="h-3 w-3" /> Eligible creator share
@@ -217,7 +217,7 @@ function GlobalIncomePage() {
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Eligible Creators</span>
             <p className="text-2xl font-black text-foreground">{eligibleCreators.length}</p>
-            <p className="text-[11px] text-muted-foreground">Premium uploaders only</p>
+            <p className="text-[11px] text-muted-foreground">Sponsor uploaders only</p>
           </div>
 
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">

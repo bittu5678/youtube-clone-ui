@@ -30,36 +30,36 @@ const videoAdEarnings = [
     title: "Complete Modern React & TanStack Masterclass",
     views: "84,200",
     monetizedPlays: "72,100",
-    cpm: "$5.20",
-    revenue: "$374.92",
+    cpm: "₹5.20",
+    revenue: "₹374.92",
   },
   {
     title: "Building an Offline-First Audio Synthesizer",
     views: "52,400",
     monetizedPlays: "44,800",
-    cpm: "$4.80",
-    revenue: "$215.04",
+    cpm: "₹4.80",
+    revenue: "₹215.04",
   },
   {
     title: "Next.js 15 Server Actions & Edge Functions",
     views: "112,000",
     monetizedPlays: "98,400",
-    cpm: "$6.10",
-    revenue: "$600.24",
+    cpm: "₹6.10",
+    revenue: "₹600.24",
   },
   {
     title: "Cyberpunk 2077 Night City 4K Ray-Tracing Tour",
     views: "94,500",
     monetizedPlays: "82,000",
-    cpm: "$4.15",
-    revenue: "$340.30",
+    cpm: "₹4.15",
+    revenue: "₹340.30",
   },
   {
     title: "AI Video Generation Workflows in 2026",
     views: "64,100",
     monetizedPlays: "56,200",
-    cpm: "$6.40",
-    revenue: "$359.70",
+    cpm: "₹6.40",
+    revenue: "₹359.70",
   },
 ];
 
@@ -96,14 +96,14 @@ function AdSenseIncomePage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Total AdSense Revenue</span>
-            <p className="text-2xl font-black text-yellow-400">$1,890.20</p>
+            <p className="text-2xl font-black text-yellow-400">₹1,890.20</p>
             <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
               <TrendingUp className="h-3 w-3" /> +18.4% this month
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Average Playback CPM</span>
-            <p className="text-2xl font-black text-foreground">$5.33</p>
+            <p className="text-2xl font-black text-foreground">₹5.33</p>
             <p className="text-[11px] text-muted-foreground">Per 1,000 ad plays</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">

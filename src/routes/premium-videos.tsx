@@ -29,11 +29,11 @@ export const Route = createFileRoute("/premium-videos")({
   }),
   head: () => ({
     meta: [
-      { title: "Premium Videos — Video Hub — FaceTube" },
+      { title: "Sponsor Videos — Video Hub — FaceTube" },
       {
         name: "description",
         content:
-          "Manage and stream members-only, gated, and paywalled premium videos on FaceTube with verified ₹6 monetization.",
+          "Manage and stream members-only, gated, and paywalled sponsor videos on FaceTube with verified ₹6 monetization.",
       },
     ],
   }),
@@ -153,7 +153,7 @@ export function PremiumVideosPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
-                  Premium Videos
+                  Sponsor Videos
                 </h1>
                 <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-bold text-amber-400">
                   ₹6 Verified Monetization
@@ -183,7 +183,7 @@ export function PremiumVideosPage() {
               className="inline-flex items-center justify-center gap-2 rounded-full bg-amber-500 hover:bg-amber-400 text-black px-4 py-2 text-xs font-bold shadow-lift transition active:scale-95"
             >
               <Plus className="h-4 w-4" />
-              Upload Premium Video
+              Upload Sponsor Video
             </Link>
           </div>
         </div>
@@ -191,17 +191,17 @@ export function PremiumVideosPage() {
         {/* Dynamic Metric Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Premium Videos</span>
+            <span className="text-xs text-muted-foreground font-medium">Sponsor Videos</span>
             <p className="text-2xl font-black text-amber-400">{mergedPremiumVideos.length}</p>
             <p className="text-[11px] text-muted-foreground">Monetized catalog items</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Premium Shorts</span>
+            <span className="text-xs text-muted-foreground font-medium">Sponsor Shorts</span>
             <p className="text-2xl font-black text-foreground">{shortCount}</p>
             <p className="text-[11px] text-amber-400 font-semibold">Vertical monetized reels</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Premium Long Videos</span>
+            <span className="text-xs text-muted-foreground font-medium">Sponsor Long Videos</span>
             <p className="text-2xl font-black text-foreground">{longCount}</p>
             <p className="text-[11px] text-muted-foreground">Masterclasses &amp; courses</p>
           </div>
@@ -290,7 +290,7 @@ export function PremiumVideosPage() {
               className="inline-flex items-center gap-2 rounded-xl bg-amber-500 text-black px-4 py-2 text-xs font-bold hover:bg-amber-400 transition"
             >
               <Plus className="h-3.5 w-3.5" />
-              Upload Premium Video (₹6)
+              Upload Sponsor Video (₹6)
             </Link>
           </div>
         ) : (
@@ -329,7 +329,7 @@ export function PremiumVideosPage() {
                     {/* Badges on top of thumbnail */}
                     <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
                       <span className="rounded-md bg-amber-500/95 backdrop-blur-sm px-2 py-0.5 text-[10px] font-black text-black shadow-sm flex items-center gap-1">
-                        <Lock className="h-2.5 w-2.5" /> ₹6 Premium
+                        <Lock className="h-2.5 w-2.5" /> ₹6 Sponsor
                       </span>
                       {video.contentType === "short" && (
                         <span className="rounded-md bg-rose-500/90 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">

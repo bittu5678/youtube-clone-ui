@@ -14,7 +14,7 @@ import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
 export const Route = createFileRoute("/advertisement-videos")({
   head: () => ({
     meta: [
-      { title: "Advertisement Videos — Your Videos — FaceTube" },
+      { title: "Ad Videos — Your Videos — FaceTube" },
       {
         name: "description",
         content:
@@ -31,7 +31,7 @@ const mockAdCampaigns = [
     brand: "NordVPN Cyber Security Integration",
     slotType: "60s Mid-Roll Integration",
     status: "Active",
-    budget: "$1,500.00",
+    budget: "₹1,500.00",
     impressions: "142,000",
     clicks: "3,840",
     ctr: "2.7%",
@@ -43,7 +43,7 @@ const mockAdCampaigns = [
     brand: "Raycon Wireless Earbuds Showcase",
     slotType: "Pre-Roll Dedicated Spot",
     status: "Active",
-    budget: "$1,200.00",
+    budget: "₹1,200.00",
     impressions: "98,400",
     clicks: "2,410",
     ctr: "2.45%",
@@ -55,7 +55,7 @@ const mockAdCampaigns = [
     brand: "Supabase Cloud Database Sponsorship",
     slotType: "End-Screen Partner Card",
     status: "Completed",
-    budget: "$2,000.00",
+    budget: "₹2,000.00",
     impressions: "184,000",
     clicks: "5,120",
     ctr: "2.78%",
@@ -76,7 +76,7 @@ function AdvertisementVideosPage() {
             </div>
             <div>
               <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
-                Advertisement Videos
+                Ad Videos
               </h1>
               <p className="text-sm text-muted-foreground">
                 Sponsor campaigns, pre-roll advert placements, and direct brand partner deliveries
@@ -102,7 +102,7 @@ function AdvertisementVideosPage() {
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Sponsor Revenue</span>
-            <p className="text-2xl font-black text-emerald-400">$4,700.00</p>
+            <p className="text-2xl font-black text-emerald-400">₹4,700.00</p>
             <p className="text-[11px] text-emerald-400 font-semibold">+22% this quarter</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">

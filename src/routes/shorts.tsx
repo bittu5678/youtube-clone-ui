@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   ThumbsUp,
   ThumbsDown,
@@ -23,6 +23,7 @@ import { ThemeToggle } from "@/components/videohub/ThemeToggle";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { SHORTS_LIST, type ShortItem } from "@/data/shorts";
 import { useAuth } from "@/lib/auth-context";
+import { fetchUploadedVideos, isShortVideo } from "@/lib/video-service";
 
 export const Route = createFileRoute("/shorts")({
   validateSearch: (search: Record<string, unknown>): { id?: string } => ({
@@ -44,22 +45,72 @@ export const Route = createFileRoute("/shorts")({
 function ShortsPage() {
   const searchParams = Route.useSearch();
   const { user, profile } = useAuth();
+  const [uploadedShorts, setUploadedShorts] = useState<ShortItem[]>([]);
+
+  useEffect(() => {
+    fetchUploadedVideos()
+      .then((videos) => {
+        const mapped = videos
+          .filter((v) => isShortVideo({ contentType: v.contentType, duration: v.duration }))
+          .map(
+            (v): ShortItem => ({
+              id: v.id,
+              title: v.title,
+              creator: v.creatorName || "FaceTube Creator",
+              creatorHandle: `@${(v.creatorName || "creator").toLowerCase().replace(/\s+/g, "")}`,
+              initials: (v.creatorName || "FC").slice(0, 2).toUpperCase(),
+              views: `${(v.views || 0).toLocaleString()} views`,
+              likes: (v.likes || 0).toLocaleString(),
+              comments: "0",
+              shares: "0",
+              soundTrack: `${v.creatorName || "FaceTube"} · Original Audio`,
+              tags: [v.category?.toLowerCase() || "shorts", "facetube"],
+              thumb: v.thumbnailUrl,
+              aspectColor: "from-purple-900/60 to-brand/80",
+              videoUrl: v.videoUrl,
+            }),
+          );
+        if (mapped.length > 0) {
+          setUploadedShorts(mapped);
+        }
+      })
+      .catch((err) => console.warn("Could not fetch shorts from API:", err));
+  }, []);
+
+  const allShorts: ShortItem[] = useMemo(() => {
+    const seen = new Set<string>();
+    const list: ShortItem[] = [];
+    for (const s of uploadedShorts) {
+      if (!seen.has(s.id)) {
+        seen.add(s.id);
+        list.push(s);
+      }
+    }
+    for (const s of SHORTS_LIST) {
+      if (!seen.has(s.id)) {
+        seen.add(s.id);
+        list.push(s);
+      }
+    }
+    return list.length > 0 ? list : SHORTS_LIST;
+  }, [uploadedShorts]);
+
   const initialIndex = searchParams.id
     ? Math.max(
         0,
-        SHORTS_LIST.findIndex((s) => s.id === searchParams.id),
+        allShorts.findIndex((s) => s.id === searchParams.id),
       )
     : 0;
   const [currentIndex, setCurrentIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
 
   useEffect(() => {
     if (searchParams.id) {
-      const idx = SHORTS_LIST.findIndex((s) => s.id === searchParams.id);
+      const idx = allShorts.findIndex((s) => s.id === searchParams.id);
       if (idx !== -1) {
         setCurrentIndex(idx);
       }
     }
-  }, [searchParams.id]);
+  }, [searchParams.id, allShorts]);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [disliked, setDisliked] = useState<Record<string, boolean>>({});
   const [subscribed, setSubscribed] = useState<Record<string, boolean>>({});
@@ -77,14 +128,14 @@ function ShortsPage() {
   });
 
   const touchStartY = useRef<number | null>(null);
-  const activeShort: ShortItem = SHORTS_LIST[currentIndex] || SHORTS_LIST[0];
+  const activeShort: ShortItem = allShorts[currentIndex] || allShorts[0] || SHORTS_LIST[0];
 
   const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % SHORTS_LIST.length);
+    setCurrentIndex((prev) => (prev + 1) % allShorts.length);
   };
 
   const handlePrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + SHORTS_LIST.length) % SHORTS_LIST.length);
+    setCurrentIndex((prev) => (prev - 1 + allShorts.length) % allShorts.length);
   };
 
   // Keyboard navigation: ArrowUp, ArrowDown, Spacebar
@@ -200,15 +251,27 @@ function ShortsPage() {
             onTouchEnd={handleTouchEnd}
             className="relative w-[340px] xs:w-[380px] sm:w-[420px] aspect-[9/16] max-h-[calc(100vh-160px)] rounded-3xl overflow-hidden bg-black shadow-2xl border border-border/70 flex flex-col justify-between select-none"
           >
-            {/* Background Thumbnail Image with Gradient Accent */}
+            {/* Background Video / Thumbnail with Gradient Accent */}
             <div className="absolute inset-0 z-0">
-              <img
-                src={activeShort.thumb}
-                alt={activeShort.title}
-                className="h-full w-full object-cover opacity-80"
-              />
+              {activeShort.videoUrl ? (
+                <video
+                  src={activeShort.videoUrl}
+                  poster={activeShort.thumb}
+                  autoPlay={isPlaying}
+                  muted={isMuted}
+                  loop
+                  playsInline
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <img
+                  src={activeShort.thumb}
+                  alt={activeShort.title}
+                  className="h-full w-full object-cover opacity-80"
+                />
+              )}
               <div
-                className={`absolute inset-0 bg-gradient-to-t ${activeShort.aspectColor} via-black/30 to-black/70`}
+                className={`absolute inset-0 bg-gradient-to-t ${activeShort.aspectColor} via-black/30 to-black/70 pointer-events-none`}
               />
             </div>
 
@@ -217,7 +280,7 @@ function ShortsPage() {
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-md">
                   <Sparkles className="h-3 w-3 text-red-400" />
-                  {currentIndex + 1} of {SHORTS_LIST.length}
+                  {currentIndex + 1} of {allShorts.length}
                 </span>
               </div>
 

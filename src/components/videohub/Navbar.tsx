@@ -106,8 +106,8 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   {
     id: "notif-4",
     type: "earnings",
-    title: "Premium Earnings",
-    description: "$142.50 earned from ad placements and creator revenue",
+    title: "Sponsor Earnings",
+    description: "₹142.50 earned from ad placements and creator revenue",
     time: "3 hours ago",
     unread: true,
   },

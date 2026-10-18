@@ -46,38 +46,38 @@ const tierStats: TierBreakdown[] = [
     label: "Level 1 (Direct Referrals)",
     membersCount: 24,
     rate: "10.0%",
-    totalVolume: "$10,795.00",
-    earnedIncome: "$1,079.50",
+    totalVolume: "₹10,795.00",
+    earnedIncome: "₹1,079.50",
   },
   {
     level: 2,
     label: "Level 2 (Downline Tier 1)",
     membersCount: 41,
     rate: "5.0%",
-    totalVolume: "$14,320.00",
-    earnedIncome: "$716.00",
+    totalVolume: "₹14,320.00",
+    earnedIncome: "₹716.00",
   },
   {
     level: 3,
     label: "Level 3 (Downline Tier 2)",
     membersCount: 18,
     rate: "3.0%",
-    totalVolume: "$6,240.00",
-    earnedIncome: "$187.20",
+    totalVolume: "₹6,240.00",
+    earnedIncome: "₹187.20",
   },
   {
     level: 4,
     label: "Level 4 (Downline Tier 3)",
     membersCount: 6,
     rate: "2.0%",
-    totalVolume: "$3,135.00",
-    earnedIncome: "$62.70",
+    totalVolume: "₹3,135.00",
+    earnedIncome: "₹62.70",
   },
 ];
 
 function TeamIncomePage() {
-  const totalTeamIncome = "$2,045.40";
-  const totalVolume = "$34,490.00";
+  const totalTeamIncome = "₹2,045.40";
+  const totalVolume = "₹34,490.00";
 
   return (
     <VideoHubLayout>
@@ -146,7 +146,7 @@ function TeamIncomePage() {
 
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Next Milestone</span>
-            <p className="text-2xl font-black text-foreground">$50,000</p>
+            <p className="text-2xl font-black text-foreground">₹50,000</p>
             <p className="text-[11px] text-amber-400 font-semibold">68.9% completed</p>
           </div>
         </div>
@@ -205,12 +205,12 @@ function TeamIncomePage() {
               <div>
                 <h3 className="text-sm font-bold text-foreground">Ambassador Rank Pool Bonus</h3>
                 <p className="text-xs text-muted-foreground">
-                  Reach $50,000 monthly team volume to participate in the 2% Global Creator Bonus
+                  Reach ₹50,000 monthly team volume to participate in the 2% Global Creator Bonus
                   Pool.
                 </p>
               </div>
             </div>
-            <div className="text-xs font-bold text-amber-400 shrink-0">$34,490 / $50,000</div>
+            <div className="text-xs font-bold text-amber-400 shrink-0">₹34,490 / ₹50,000</div>
           </div>
 
           {/* Progress bar */}

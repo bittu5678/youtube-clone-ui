@@ -35,7 +35,7 @@ export function VideoCard({ video }: { video: Video }) {
             )}
             {video.videoType === "premium" && (
               <span className="rounded-md bg-amber-500/95 backdrop-blur-sm px-2 py-0.5 text-[10px] font-black text-black shadow-sm flex items-center gap-1">
-                <Lock className="h-2.5 w-2.5" /> ₹6 Premium
+                <Lock className="h-2.5 w-2.5" /> ₹6 Sponsor
               </span>
             )}
             {video.videoType === "free" &&
