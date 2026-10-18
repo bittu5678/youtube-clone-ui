@@ -681,3 +681,83 @@ export async function sendCertificateEmailServer(
     };
   }
 }
+
+export interface PasswordResetEmailPayload {
+  userName: string;
+  userId: string;
+  email: string;
+  resetLink: string;
+}
+
+export async function sendPasswordResetEmailServer(
+  payload: PasswordResetEmailPayload,
+): Promise<EmailDeliveryResult> {
+  const smtpConfig = resolveSmtpConfig();
+  const maskedRecipient = maskEmail(payload.email);
+
+  if (!smtpConfig.configured) {
+    return {
+      success: false,
+      provider: "none",
+      error: "SMTP credentials missing on server.",
+    };
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      auth: {
+        user: smtpConfig.user,
+        pass: smtpConfig.pass,
+      },
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000,
+    });
+
+    const subject = "Reset Your FaceTube Password";
+    const text = `Hello ${payload.userName},\n\nWe received a request to reset your FaceTube password.\nClick the link below to set a new password:\n${payload.resetLink}\n\nThis link expires in 1 hour.\nIf you did not make this request, you can safely ignore this email.\n\nBest regards,\nFaceTube Security Team`;
+    const html = `
+      <div style="background-color:#0f0f12;padding:30px;font-family:sans-serif;color:#ffffff;">
+        <div style="max-width:600px;margin:auto;background:#18181f;border:1px solid #2a2a38;border-radius:12px;padding:30px;">
+          <h2 style="color:#ffffff;margin-top:0;">Face<span style="color:#f40600;">Tube</span> Security</h2>
+          <h3 style="color:#ffffff;">Password Reset Request</h3>
+          <p style="color:#a0a0b2;line-height:1.6;">Hello <strong>${payload.userName}</strong> (User ID: <span style="color:#f40600;font-family:monospace;">${payload.userId}</span>),</p>
+          <p style="color:#a0a0b2;line-height:1.6;">We received a request to reset your password. Click the button below to choose a new password. This link is single-use and will expire in 1 hour.</p>
+          <p style="margin:25px 0;"><a href="${payload.resetLink}" style="background:#f40600;color:#ffffff;padding:12px 24px;border-radius:24px;text-decoration:none;font-weight:bold;display:inline-block;">Reset Password &rarr;</a></p>
+          <p style="color:#7e7e94;font-size:12px;word-break:break-all;">Link: ${payload.resetLink}</p>
+          <hr style="border:none;border-top:1px solid #2a2a38;margin:20px 0;" />
+          <p style="color:#606075;font-size:11px;margin:0;">If you did not request this password reset, please ignore this email.</p>
+        </div>
+      </div>
+    `;
+
+    const info = await transporter.sendMail({
+      from: smtpConfig.from,
+      to: payload.email,
+      subject,
+      text,
+      html,
+    });
+
+    console.info(
+      `[FaceTube SMTP] Delivered password reset email to ${maskedRecipient}! Message ID: ${info.messageId}`,
+    );
+    return {
+      success: true,
+      provider: "smtp",
+      messageId: info.messageId,
+    };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[FaceTube SMTP] Failed to send password reset email to ${maskedRecipient}:`, errorMsg);
+    return {
+      success: false,
+      provider: "smtp",
+      error: errorMsg,
+    };
+  }
+}
+

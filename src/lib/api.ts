@@ -197,6 +197,45 @@ export const api = {
         user: any | null;
       }>("/auth/me.php");
     },
+
+    changePassword: async (params: {
+      currentPassword: string;
+      newPassword: string;
+      confirmPassword?: string;
+    }) => {
+      return apiFetch<{
+        success: boolean;
+        message?: string;
+      }>("/auth/change-password.php", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+    },
+
+    forgotPassword: async (params: { identifier: string }) => {
+      return apiFetch<{
+        success: boolean;
+        message: string;
+      }>("/auth/forgot-password.php", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+    },
+
+    resetPassword: async (params: {
+      email: string;
+      token: string;
+      newPassword: string;
+      confirmPassword?: string;
+    }) => {
+      return apiFetch<{
+        success: boolean;
+        message: string;
+      }>("/auth/reset-password.php", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+    },
   },
 
   // Users & Profiles

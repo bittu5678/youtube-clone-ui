@@ -410,4 +410,22 @@ INSERT INTO `income_ledger` (`id`, `transaction_id`, `user_id`, `source_user_id`
 ('tx-init-003', 'TX_GLB_84729104', 'FT900431', NULL, NULL, NULL, 'global_income', 1.5000, 'settled', 'Global Income Pool distribution share (1 of 2 eligible creators)', DATE_SUB(NOW(), INTERVAL 3 DAY))
 ON DUPLICATE KEY UPDATE `amount`=VALUES(`amount`);
 
+-- ------------------------------------------------------------------------------
+-- 10. Table: password_reset_tokens
+-- Secure, expiring, single-use password reset tokens
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `password_reset_tokens` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `email` VARCHAR(255) NOT NULL,
+  `token_hash` VARCHAR(64) NOT NULL,
+  `expires_at` DATETIME NOT NULL,
+  `used` TINYINT(1) NOT NULL DEFAULT 0,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_prt_email` (`email`),
+  KEY `idx_prt_token_hash` (`token_hash`),
+  KEY `idx_prt_expires` (`expires_at`),
+  KEY `idx_prt_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

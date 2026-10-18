@@ -385,3 +385,140 @@ function sendWelcomeEmailPhp($name, $email, $userId, $loginLink = 'https://facet
         'error' => "Email delivery failed: {$failMsg}"
     ];
 }
+
+/**
+ * Generates branded HTML template for Password Reset Email
+ */
+function generatePasswordResetEmailHtmlPhp($name, $email, $userId, $resetLink) {
+    $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+    $safeEmail = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+    $safeUserId = htmlspecialchars($userId, ENT_QUOTES, 'UTF-8');
+    $safeResetLink = htmlspecialchars($resetLink, ENT_QUOTES, 'UTF-8');
+
+    return <<<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset Your FaceTube Password</title>
+</head>
+<body style="margin:0;padding:0;background-color:#0f0f12;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#ffffff;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#0f0f12;padding:40px 15px;">
+    <tr>
+      <td align="center">
+        <table width="600" border="0" cellspacing="0" cellpadding="0" style="max-width:600px;background-color:#18181f;border:1px solid #2a2a38;border-radius:16px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
+          <!-- Header -->
+          <tr>
+            <td style="padding:32px 40px;background:linear-gradient(135deg, #18181f 0%, #201318 100%);border-bottom:1px solid #2a2a38;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <span style="font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#ffffff;">Face<span style="color:#f40600;">Tube</span></span>
+                    <span style="display:inline-block;margin-left:10px;padding:3px 8px;background:rgba(244,6,0,0.15);border:1px solid rgba(244,6,0,0.4);border-radius:6px;font-size:11px;font-weight:700;color:#ff4d4d;text-transform:uppercase;letter-spacing:1px;vertical-align:middle;">Security</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px;">
+              <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#ffffff;">Password Reset Request</h1>
+              <p style="margin:0 0 24px 0;font-size:15px;line-height:24px;color:#a0a0b2;">
+                Hello <strong>{$safeName}</strong> (User ID: <span style="color:#ff4d4d;font-family:monospace;font-weight:700;">{$safeUserId}</span>),
+              </p>
+              <p style="margin:0 0 24px 0;font-size:15px;line-height:24px;color:#a0a0b2;">
+                We received a request to reset your password for your FaceTube account. Click the button below to choose a new password. This link is single-use and will expire in <strong>1 hour</strong>.
+              </p>
+
+              <!-- Reset Button -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:30px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="{$safeResetLink}" target="_blank" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg, #f40600 0%, #d60000 100%);color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;border-radius:30px;box-shadow:0 6px 20px rgba(244,6,0,0.4);">Reset My Password &rarr;</a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 16px 0;font-size:13px;line-height:20px;color:#7e7e94;">
+                If the button above does not work, copy and paste this link into your web browser:
+              </p>
+              <p style="margin:0 0 24px 0;font-size:12px;line-height:18px;word-break:break-all;color:#ff4d4d;background:#101015;padding:12px;border-radius:8px;border:1px solid #222230;">
+                {$safeResetLink}
+              </p>
+
+              <p style="margin:0;font-size:13px;line-height:20px;color:#7e7e94;border-top:1px solid #2a2a38;padding-top:20px;">
+                <strong>Did not request this?</strong> If you did not initiate this password reset request, you can safely ignore this email. Your password will remain unchanged and your account is secure.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:24px 40px;background-color:#121217;border-top:1px solid #222230;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#606075;">
+                &copy; 2026 FaceTube Platform. All rights reserved. &bull; <a href="https://facetube.online/help" style="color:#808099;text-decoration:none;">Help &amp; Support</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+HTML;
+}
+
+/**
+ * Dispatches password reset email via configured SMTP with fallback to mail()
+ */
+function sendPasswordResetEmailPhp($name, $email, $userId, $resetLink) {
+    $config = getSmtpConfigPhp();
+    $subject = 'Reset Your FaceTube Password';
+    $html = generatePasswordResetEmailHtmlPhp($name, $email, $userId, $resetLink);
+
+    if (!$config['configured']) {
+        return [
+            'success' => false,
+            'provider' => 'none',
+            'error' => 'SMTP not configured on server'
+        ];
+    }
+
+    $smtpRes = sendSmtpSocketMail($config, $email, $subject, $html);
+    if ($smtpRes['success']) {
+        return [
+            'success' => true,
+            'provider' => 'smtp',
+            'messageId' => $smtpRes['messageId'] ?? ('smtp_reset_' . time())
+        ];
+    }
+
+    if (function_exists('mail')) {
+        $headers = [
+            'MIME-Version: 1.0',
+            'Content-type: text/html; charset=UTF-8',
+            'From: ' . $config['from'],
+            'Reply-To: ' . $config['from'],
+            'X-Mailer: FaceTube/PHP'
+        ];
+        $mailSent = @mail($email, '=?UTF-8?B?' . base64_encode($subject) . '?=', $html, implode("\r\n", $headers));
+        if ($mailSent) {
+            return [
+                'success' => true,
+                'provider' => 'mail',
+                'messageId' => 'mail_reset_' . time()
+            ];
+        }
+    }
+
+    $failMsg = $smtpRes['error'] ?? 'SMTP server connection or authentication failed';
+    return [
+        'success' => false,
+        'provider' => 'smtp',
+        'error' => "Email delivery failed: {$failMsg}"
+    ];
+}

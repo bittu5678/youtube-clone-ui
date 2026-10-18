@@ -93,6 +93,13 @@ function SettingsPage() {
               </Link>
             )}
             <Link
+              to="/profile"
+              search={{ tab: "change-password" }}
+              className="rounded-full bg-brand/10 border border-brand/20 px-3 py-1 text-xs font-semibold text-brand hover:bg-brand hover:text-white transition"
+            >
+              Change Password
+            </Link>
+            <Link
               to="/auth"
               className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-foreground hover:bg-secondary/80 transition"
             >

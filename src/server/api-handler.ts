@@ -12,7 +12,12 @@ import {
   PRICING_CONFIG,
   AdsPlanId,
 } from "./payments";
-import { sendWelcomeEmailServer, sendCertificateEmailServer, resolveSmtpConfig } from "./email";
+import {
+  sendWelcomeEmailServer,
+  sendCertificateEmailServer,
+  sendPasswordResetEmailServer,
+  resolveSmtpConfig,
+} from "./email";
 
 const DATA_DIR = path.resolve(process.cwd(), "data");
 const STORE_FILE = path.join(DATA_DIR, "facetube_store.json");

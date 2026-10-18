@@ -25,6 +25,7 @@ import {
   Check,
   Landmark,
   Link2,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/videohub/Logo";
@@ -36,8 +37,12 @@ import { SHORTS_LIST } from "@/data/shorts";
 import { PersonalKycTab } from "@/components/profile/PersonalKycTab";
 import { BankKycTab } from "@/components/profile/BankKycTab";
 import { ReferralLinkTab } from "@/components/profile/ReferralLinkTab";
+import { ChangePasswordTab } from "@/components/profile/ChangePasswordTab";
 
 export const Route = createFileRoute("/profile")({
+  validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
+    tab: typeof search.tab === "string" ? search.tab : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "You — FaceTube" },
@@ -51,12 +56,20 @@ export const Route = createFileRoute("/profile")({
   component: ProfilePage,
 });
 
-type ProfileTabType = "personal-kyc" | "bank-kyc" | "referral-link";
+type ProfileTabType = "personal-kyc" | "bank-kyc" | "referral-link" | "change-password";
 
 function ProfilePage() {
+  const searchParams = Route.useSearch();
   const { user, profile, dbUser, role: _role, isAdmin, signOut, signIn, allUsers } = useAuth();
   const [demoSwitchOpen, setDemoSwitchOpen] = useState(false);
-  const [profileTab, setProfileTab] = useState<ProfileTabType>("personal-kyc");
+  const [profileTab, setProfileTab] = useState<ProfileTabType>(
+    searchParams.tab === "change-password" ||
+      searchParams.tab === "bank-kyc" ||
+      searchParams.tab === "referral-link" ||
+      searchParams.tab === "personal-kyc"
+      ? searchParams.tab
+      : "personal-kyc",
+  );
   const [activeTab, setActiveTab] = useState<"videos" | "shorts" | "playlists">("videos");
   const [editProfileOpen, setEditProfileOpen] = useState(false);
 
@@ -381,6 +394,12 @@ function ProfilePage() {
                     icon: Link2,
                     emoji: "🔗",
                   },
+                  {
+                    id: "change-password" as const,
+                    label: "Change Password",
+                    icon: Lock,
+                    emoji: "🔒",
+                  },
                 ] as const
               ).map((tab) => {
                 const Icon = tab.icon;
@@ -425,6 +444,8 @@ function ProfilePage() {
           {profileTab === "referral-link" && (
             <ReferralLinkTab userId={currentUserId} userName={channelName} />
           )}
+
+          {profileTab === "change-password" && <ChangePasswordTab />}
         </section>
 
         {/* Channel Content Library: Videos | Shorts | Playlists */}

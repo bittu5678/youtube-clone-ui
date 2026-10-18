@@ -52,24 +52,22 @@ function ShortsPage() {
       .then((videos) => {
         const mapped = videos
           .filter((v) => isShortVideo({ contentType: v.contentType, duration: v.duration }))
-          .map(
-            (v): ShortItem => ({
-              id: v.id,
-              title: v.title,
-              creator: v.creatorName || "FaceTube Creator",
-              creatorHandle: `@${(v.creatorName || "creator").toLowerCase().replace(/\s+/g, "")}`,
-              initials: (v.creatorName || "FC").slice(0, 2).toUpperCase(),
-              views: `${(v.views || 0).toLocaleString()} views`,
-              likes: (v.likes || 0).toLocaleString(),
-              comments: "0",
-              shares: "0",
-              soundTrack: `${v.creatorName || "FaceTube"} · Original Audio`,
-              tags: [v.category?.toLowerCase() || "shorts", "facetube"],
-              thumb: v.thumbnailUrl,
-              aspectColor: "from-purple-900/60 to-brand/80",
-              videoUrl: v.videoUrl,
-            }),
-          );
+          .map((v): ShortItem => ({
+            id: v.id,
+            title: v.title,
+            creator: v.creatorName || "FaceTube Creator",
+            creatorHandle: `@${(v.creatorName || "creator").toLowerCase().replace(/\s+/g, "")}`,
+            initials: (v.creatorName || "FC").slice(0, 2).toUpperCase(),
+            views: `${(v.views || 0).toLocaleString()} views`,
+            likes: (v.likes || 0).toLocaleString(),
+            comments: "0",
+            shares: "0",
+            soundTrack: `${v.creatorName || "FaceTube"} · Original Audio`,
+            tags: [v.category?.toLowerCase() || "shorts", "facetube"],
+            thumb: v.thumbnailUrl,
+            aspectColor: "from-purple-900/60 to-brand/80",
+            videoUrl: v.videoUrl,
+          }));
         if (mapped.length > 0) {
           setUploadedShorts(mapped);
         }
