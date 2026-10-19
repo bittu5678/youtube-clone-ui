@@ -17,6 +17,8 @@ try {
   // Ignore
 }
 
+process.env["VITE_CONFIG_NATIVE_IGNORE_WARNING"] = "true";
+
 if (process.argv.includes("build") && !process.argv.includes("development")) {
   process.env["NODE_ENV"] = "production";
 }
@@ -40,7 +42,7 @@ function facetubeApiDevPlugin(): Plugin {
               method: req.method || "GET",
               headers,
             });
-            const { serveUploadFile } = await import("./src/server/uploads-handler");
+            const { serveUploadFile } = await import("./src/server/uploads-handler.ts");
             const response = await serveUploadFile(webReq);
             if (response) {
               res.statusCode = response.status;
@@ -105,7 +107,7 @@ function facetubeApiDevPlugin(): Plugin {
 
             const webReq = new Request(fullUrl.toString(), reqInit);
 
-            const { handleApiRequest } = await import("./src/server/api-handler");
+            const { handleApiRequest } = await import("./src/server/api-handler.ts");
             const response = await handleApiRequest(webReq);
             if (response) {
               res.statusCode = response.status;

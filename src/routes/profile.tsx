@@ -39,9 +39,13 @@ import { BankKycTab } from "@/components/profile/BankKycTab";
 import { ReferralLinkTab } from "@/components/profile/ReferralLinkTab";
 import { ChangePasswordTab } from "@/components/profile/ChangePasswordTab";
 
+export interface ProfileSearch {
+  tab?: string | undefined;
+}
+
 export const Route = createFileRoute("/profile")({
-  validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
-    tab: typeof search.tab === "string" ? search.tab : undefined,
+  validateSearch: (search: Record<string, unknown>): ProfileSearch => ({
+    tab: typeof search["tab"] === "string" ? search["tab"] : undefined,
   }),
   head: () => ({
     meta: [
@@ -77,18 +81,18 @@ function ProfilePage() {
   const currentUserId =
     profile?.user_id ||
     dbUser?.user_id ||
-    (typeof userMeta?.user_id === "string" ? userMeta.user_id : "") ||
+    (typeof userMeta?.["user_id"] === "string" ? userMeta["user_id"] : "") ||
     "FT483921";
   const currentFullName =
     profile?.full_name ||
     profile?.name ||
     dbUser?.name ||
-    (typeof userMeta?.name === "string" ? userMeta.name : "") ||
+    (typeof userMeta?.["name"] === "string" ? userMeta["name"] : "") ||
     "Alex Rivera";
   const currentMobile =
     profile?.mobile ||
     dbUser?.mobile ||
-    (typeof userMeta?.mobile === "string" ? userMeta.mobile : "") ||
+    (typeof userMeta?.["mobile"] === "string" ? userMeta["mobile"] : "") ||
     "+1 555-014-8392";
 
   // Editable Profile State

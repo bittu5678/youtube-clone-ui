@@ -689,6 +689,10 @@ export interface PasswordResetEmailPayload {
   resetLink: string;
 }
 
+function maskEmail(email: string): string {
+  return email.replace(/(?<=.{2}).(?=[^@]*?@)/g, "*");
+}
+
 export async function sendPasswordResetEmailServer(
   payload: PasswordResetEmailPayload,
 ): Promise<EmailDeliveryResult> {
@@ -752,7 +756,10 @@ export async function sendPasswordResetEmailServer(
     };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error(`[FaceTube SMTP] Failed to send password reset email to ${maskedRecipient}:`, errorMsg);
+    console.error(
+      `[FaceTube SMTP] Failed to send password reset email to ${maskedRecipient}:`,
+      errorMsg,
+    );
     return {
       success: false,
       provider: "smtp",
@@ -760,4 +767,3 @@ export async function sendPasswordResetEmailServer(
     };
   }
 }
-

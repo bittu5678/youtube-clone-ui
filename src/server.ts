@@ -49,13 +49,13 @@ export default {
     try {
       const url = new URL(request.url);
       if (url.pathname.startsWith("/uploads/")) {
-        const { serveUploadFile } = await import("./server/uploads-handler");
+        const { serveUploadFile } = await import("./server/uploads-handler.ts");
         const uploadRes = await serveUploadFile(request);
         if (uploadRes) return uploadRes;
       }
 
       if (url.pathname.startsWith("/api")) {
-        const { handleApiRequest } = await import("./server/api-handler");
+        const { handleApiRequest } = await import("./server/api-handler.ts");
         const apiResponse = await handleApiRequest(
           request,
           env && typeof env === "object" ? (env as Record<string, string | undefined>) : undefined,

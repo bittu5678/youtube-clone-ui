@@ -31,10 +31,15 @@ import {
   type UploadedVideo,
 } from "@/lib/video-service";
 
+export interface IndexSearch {
+  q?: string | undefined;
+  category?: string | undefined;
+}
+
 export const Route = createFileRoute("/")({
-  validateSearch: (search: Record<string, unknown>): { q?: string; category?: string } => ({
-    q: typeof search.q === "string" ? search.q : undefined,
-    category: typeof search.category === "string" ? search.category : undefined,
+  validateSearch: (search: Record<string, unknown>): IndexSearch => ({
+    q: typeof search["q"] === "string" ? search["q"] : undefined,
+    category: typeof search["category"] === "string" ? search["category"] : undefined,
   }),
   head: () => ({
     meta: [

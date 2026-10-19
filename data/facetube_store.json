@@ -6,7 +6,7 @@
       "name": "FaceTube Administrator",
       "mobile": "+1 555-019-2834",
       "email": "admin@facetube.com",
-      "password_hash": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "password_hash": "$2b$10$Z3E1UABc4pfqMz6J0JjwvOSq0Ci56ojklyZls6hEQ.x5pnv/42dWa",
       "role": "admin",
       "referral_code": "FTVIP",
       "avatar_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
@@ -200,7 +200,36 @@
     "0906bf864a359c105c8ab929a8bb4f815f67cfd7cc131065": "FT102857",
     "15a59b96c538e53e8fbddbfd1035c584a492dc0bf7b2d232": "FT483921",
     "2c8ba29db694435d7f951d0013d87ae292fddcf17137de8b": "FT900431",
-    "1ed2288d504fe3ab3635a226c7782f5dfb787fca074208a5": "FT900431"
+    "1ed2288d504fe3ab3635a226c7782f5dfb787fca074208a5": "FT900431",
+    "1da36b99cd033883315ebeca9b6b1cdf41ae51defb93c8b3": "FT483921",
+    "18ccb178057ab45af4e647bc361e42ea4a858efb31e71e57": "FT483921",
+    "68dd93860ba41c637cace5313cea051a9873a85a71993428": "FT483921",
+    "f25e6e6a7a9caf126d9e57aac472854f4df7e995473e22dc": "FT483921",
+    "73d8f4d7a6b012f3829ca8612a9c374b0bbc4ae105a5643c": "FT102857",
+    "82071df9dfed6e5d4dcee5b812459ed118f989f61237a3c3": "FT102857",
+    "a647b7ca5bc481ad1d9fc3e340f6fe1878da7ce4ad6dab9f": "FT483921",
+    "c8b33a4abdcc7f8ff4b2f80ad2d3529a9991ac9bc6b898f5": "FT900431",
+    "3980fdf957558b3111fcb15955ab65d175a11308db28a358": "FT900431",
+    "e3bd3b46b41fb730c3e4b2b30ec50f3a53960f482d4e8833": "FT102857",
+    "2abedb6cfb2f080db738a1391015f6e26f89dcdaff3400f3": "FT102857",
+    "54aed7012fac092b7c628d505dfe8f2f7a511441d15cd727": "FT483921",
+    "bcab099474ad49e05167055d6c7c488fae969f3d2ddc72db": "FT483921",
+    "8bd8720c395ed02d7acc22a08259e670a84ca454e4450ecf": "FT483921",
+    "ffb213cb61a520bbb1e3e7f7335758b51dda3e8912965253": "FT483921",
+    "8b56e03d26c093452cf0fa72da4ab2b062611c86c955c53a": "FT102857",
+    "5cff0cef09ac994e53c05a4fdbe70e5eed76fca50af43485": "FT102857",
+    "0e53e68ab4694e42f85c6c0c9187a53fd133ca181391ea46": "FT483921",
+    "1b74de07ae9b8fe44db20a1d50b333edf5ce675a43c9f976": "FT900431",
+    "6f1b95147d94597ca4dcd2ec417e2810708f021fe2747d63": "FT900431",
+    "9476d5b0f99bce6749619a3355ce2c502e6e42b4344b8176": "FT483921",
+    "bdcc7e77c2bf34ca6612b367488848e28d1f830dedd49895": "FT483921",
+    "518fafcb8cc2c0bf17581c04bdca96112244c7d649f163e4": "FT483921",
+    "5eabac186568421854491f1f2f5eb8ab98064775ccd8b2a4": "FT483921",
+    "e7f3f36ed92163ccb8483ea9284eaca35fc2bb2848744f56": "FT102857",
+    "623a195367e0acd38a648120e3a5a3bacc4ee143fcb00937": "FT102857",
+    "1facaf48188bfbd2a52be9379db32af8dbb57a720083e405": "FT483921",
+    "7e42eee67502193d4917179e53022f84e799a4049cb34141": "FT900431",
+    "c7068412ebc4d8f6a38231cd7331c7a03f37bb0321c7e0f4": "FT900431"
   },
   "videos": [
     {
@@ -281,9 +310,9 @@
       "payment_amount": 0,
       "is_promoted": true,
       "created_at": "2026-09-29T07:21:29.240Z",
-      "updated_at": "2026-10-18T06:09:02.217Z",
+      "updated_at": "2026-10-19T09:12:58.919Z",
       "promotion_plan": "plan-7-days",
-      "promotion_expires_at": "2026-12-09T16:53:24.591Z"
+      "promotion_expires_at": "2026-12-30T16:53:24.591Z"
     },
     {
       "id": "vid-seed-003",
@@ -460,5 +489,14 @@
     }
   },
   "certificates": {},
-  "walletTransactions": []
+  "walletTransactions": [],
+  "passwordResetTokens": [
+    {
+      "email": "admin@facetube.com",
+      "token_hash": "3e431c53ec30347b92ee9f1f93c1ca54aa30fd2ba959f923a5ca0d9f7a54ad99",
+      "expires_at": "2026-10-18T08:41:30.790Z",
+      "used": false,
+      "created_at": "2026-10-18T07:41:30.790Z"
+    }
+  ]
 }

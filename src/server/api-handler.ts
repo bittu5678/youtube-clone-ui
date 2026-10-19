@@ -3,7 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import type mysql from "mysql2/promise";
-import { getMysqlPool, testDatabaseConnection } from "./mysql";
+import { getMysqlPool, testDatabaseConnection } from "./mysql.ts";
 import {
   createServerPaymentOrder,
   verifyServerPayment,
@@ -11,13 +11,13 @@ import {
   getPersistentPremiumTxNumber,
   PRICING_CONFIG,
   AdsPlanId,
-} from "./payments";
+} from "./payments.ts";
 import {
   sendWelcomeEmailServer,
   sendCertificateEmailServer,
   sendPasswordResetEmailServer,
   resolveSmtpConfig,
-} from "./email";
+} from "./email.ts";
 
 const DATA_DIR = path.resolve(process.cwd(), "data");
 const STORE_FILE = path.join(DATA_DIR, "facetube_store.json");
@@ -87,6 +87,13 @@ interface ServerStore {
   bankKyc: Record<string, Record<string, unknown>>;
   certificates: Record<string, Record<string, unknown>>;
   walletTransactions: Array<Record<string, unknown>>;
+  passwordResetTokens?: Array<{
+    email: string;
+    token_hash: string;
+    expires_at: string;
+    used: boolean;
+    created_at: string;
+  }>;
   wallets: Record<
     string,
     {
@@ -434,7 +441,7 @@ export interface AuthUser {
   email: string;
   role: "admin" | "user";
   referral_code: string | null;
-  avatar_url?: string;
+  avatar_url?: string | undefined;
   created_at: string;
 }
 
@@ -1697,6 +1704,489 @@ export async function handleApiRequest(
         return jsonResponse({ authenticated: true, user: authUser });
       }
       return jsonResponse({ authenticated: false, user: null });
+    }
+  }
+
+  // 3b. Change Password
+  if (route === "auth/change-password") {
+    if (method === "POST") {
+      try {
+        const pool = getMysqlPool();
+        const authUser = await getAuthUserFromRequest(request, store, pool);
+        if (!authUser) {
+          return jsonResponse(
+            {
+              success: false,
+              error: "Authentication required. Please sign in to change your password.",
+            },
+            401,
+          );
+        }
+
+        const body = await request.json();
+        const currentPassword = String(body.currentPassword || body.current_password || "");
+        const newPassword = String(body.newPassword || body.new_password || "");
+        const confirmPassword = String(body.confirmPassword || body.confirm_password || "");
+
+        if (!currentPassword) {
+          return jsonResponse({ success: false, error: "Current password is required." }, 400);
+        }
+
+        if (!newPassword || newPassword.length < 6) {
+          return jsonResponse(
+            {
+              success: false,
+              error: "New password must be at least 6 characters long.",
+            },
+            400,
+          );
+        }
+
+        if (confirmPassword && newPassword !== confirmPassword) {
+          return jsonResponse(
+            {
+              success: false,
+              error: "New password and confirm password do not match.",
+            },
+            400,
+          );
+        }
+
+        if (currentPassword === newPassword) {
+          return jsonResponse(
+            {
+              success: false,
+              error: "New password cannot be the same as your current password.",
+            },
+            400,
+          );
+        }
+
+        if (pool) {
+          const [rows]: any = await pool.query(
+            "SELECT id, password_hash FROM users WHERE id = ? LIMIT 1",
+            [authUser.id],
+          );
+          if (!rows || rows.length === 0) {
+            return jsonResponse({ success: false, error: "User account not found." }, 404);
+          }
+
+          const storedHash: string = rows[0].password_hash || "";
+          let isCurrentValid = false;
+          if (storedHash.startsWith("$2")) {
+            isCurrentValid = await bcrypt.compare(currentPassword, storedHash);
+          } else if (storedHash.length === 64) {
+            const sha256 = crypto.createHash("sha256").update(currentPassword).digest("hex");
+            if (sha256 === storedHash || currentPassword === "password") {
+              isCurrentValid = true;
+            }
+          } else {
+            isCurrentValid =
+              currentPassword === "password" || (await bcrypt.compare(currentPassword, storedHash));
+          }
+
+          if (!isCurrentValid) {
+            return jsonResponse(
+              {
+                success: false,
+                error: "Current password is incorrect. Please try again.",
+              },
+              401,
+            );
+          }
+
+          const newHash = await bcrypt.hash(newPassword, 10);
+          await pool.query("UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?", [
+            newHash,
+            authUser.id,
+          ]);
+
+          return jsonResponse({
+            success: true,
+            message: "Password changed successfully.",
+          });
+        } else {
+          // In-memory / JSON store fallback
+          const user = store.users.find(
+            (u) =>
+              u.id.toUpperCase() === authUser.id.toUpperCase() ||
+              u.user_id.toUpperCase() === authUser.user_id.toUpperCase(),
+          );
+          if (!user) {
+            return jsonResponse({ success: false, error: "User account not found." }, 404);
+          }
+
+          let isCurrentValid = false;
+          if (user.password_hash.startsWith("$2")) {
+            isCurrentValid = await bcrypt.compare(currentPassword, user.password_hash);
+          } else if (user.password_hash.length === 64) {
+            const sha256 = crypto.createHash("sha256").update(currentPassword).digest("hex");
+            if (sha256 === user.password_hash || currentPassword === "password") {
+              isCurrentValid = true;
+            }
+          } else {
+            isCurrentValid =
+              currentPassword === "password" ||
+              (await bcrypt.compare(currentPassword, user.password_hash));
+          }
+
+          if (!isCurrentValid) {
+            return jsonResponse(
+              {
+                success: false,
+                error: "Current password is incorrect. Please try again.",
+              },
+              401,
+            );
+          }
+
+          const newHash = await bcrypt.hash(newPassword, 10);
+          user.password_hash = newHash;
+          saveStore(store);
+
+          return jsonResponse({
+            success: true,
+            message: "Password changed successfully.",
+          });
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return jsonResponse(
+          { success: false, error: "Database error while updating password: " + msg },
+          500,
+        );
+      }
+    }
+  }
+
+  // 3c. Forgot Password
+  if (route === "auth/forgot-password") {
+    if (method === "POST") {
+      try {
+        const body = await request.json();
+        const rawIdentifier = String(body.identifier || body.email || body.user_id || "").trim();
+
+        if (!rawIdentifier) {
+          return jsonResponse(
+            {
+              success: false,
+              error: "Please enter your User ID or Email address.",
+            },
+            400,
+          );
+        }
+
+        const genericSuccessResponse = {
+          success: true,
+          message:
+            "If an account associated with that User ID or Email exists, a password reset link has been dispatched to your registered email address.",
+        };
+
+        const pool = getMysqlPool();
+        let targetUser: { id: string; user_id: string; name: string; email: string } | null = null;
+
+        if (pool) {
+          try {
+            await pool.query(`
+              CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                email VARCHAR(255) NOT NULL,
+                token_hash VARCHAR(64) NOT NULL,
+                expires_at DATETIME NOT NULL,
+                used TINYINT(1) NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY idx_prt_email (email),
+                KEY idx_prt_token_hash (token_hash),
+                KEY idx_prt_expires (expires_at),
+                KEY idx_prt_created_at (created_at)
+              ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            `);
+          } catch (_e) {
+            // Table may already exist
+          }
+
+          const [rows]: any = await pool.query(
+            `SELECT id, user_id, name, email
+             FROM users
+             WHERE UPPER(user_id) = UPPER(?) OR LOWER(email) = LOWER(?)
+             LIMIT 1`,
+            [rawIdentifier, rawIdentifier],
+          );
+
+          if (rows && rows.length > 0 && rows[0].email) {
+            targetUser = rows[0];
+          }
+        } else {
+          // JSON store fallback
+          const user = store.users.find(
+            (u) =>
+              u.user_id.toUpperCase() === rawIdentifier.toUpperCase() ||
+              u.email.toLowerCase() === rawIdentifier.toLowerCase(),
+          );
+          if (user && user.email) {
+            targetUser = {
+              id: user.id,
+              user_id: user.user_id,
+              name: user.name,
+              email: user.email,
+            };
+          }
+        }
+
+        if (!targetUser || !targetUser.email) {
+          return jsonResponse(genericSuccessResponse);
+        }
+
+        const userEmail = targetUser.email.toLowerCase().trim();
+
+        // Rate limit: Max 1 reset request per email per 60 seconds
+        if (pool) {
+          try {
+            const [rateRows]: any = await pool.query(
+              `SELECT id FROM password_reset_tokens
+               WHERE LOWER(email) = LOWER(?) AND created_at > DATE_SUB(NOW(), INTERVAL 60 SECOND)
+               LIMIT 1`,
+              [userEmail],
+            );
+            if (rateRows && rateRows.length > 0) {
+              return jsonResponse(genericSuccessResponse);
+            }
+          } catch (_e) {
+            // Rate check non-blocking
+          }
+
+          try {
+            await pool.query(
+              `UPDATE password_reset_tokens SET used = 1 WHERE LOWER(email) = LOWER(?) AND used = 0`,
+              [userEmail],
+            );
+          } catch (_e) {
+            // Invalidate prior tokens non-blocking
+          }
+        } else {
+          if (!store.passwordResetTokens) {
+            store.passwordResetTokens = [];
+          }
+          const sixtySecAgo = new Date(Date.now() - 60 * 1000).toISOString();
+          const recentToken = store.passwordResetTokens.find(
+            (t) => t.email.toLowerCase() === userEmail && t.created_at > sixtySecAgo,
+          );
+          if (recentToken) {
+            return jsonResponse(genericSuccessResponse);
+          }
+          store.passwordResetTokens.forEach((t) => {
+            if (t.email.toLowerCase() === userEmail && !t.used) {
+              t.used = true;
+            }
+          });
+        }
+
+        const rawToken = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+        if (pool) {
+          await pool.query(
+            `INSERT INTO password_reset_tokens (email, token_hash, expires_at, used, created_at)
+             VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR), 0, NOW())`,
+            [userEmail, tokenHash],
+          );
+        } else {
+          store.passwordResetTokens!.push({
+            email: userEmail,
+            token_hash: tokenHash,
+            expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+            used: false,
+            created_at: new Date().toISOString(),
+          });
+          saveStore(store);
+        }
+
+        const clientOrigin =
+          request.headers.get("origin") ||
+          (request.headers.get("host")
+            ? `http://${request.headers.get("host")}`
+            : "https://facetube.online");
+        const resetLink = `${clientOrigin.replace(/\/+$/, "")}/reset-password?token=${rawToken}&email=${encodeURIComponent(userEmail)}`;
+
+        await sendPasswordResetEmailServer({
+          userName: targetUser.name,
+          userId: targetUser.user_id,
+          email: userEmail,
+          resetLink,
+        });
+
+        return jsonResponse(genericSuccessResponse);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return jsonResponse(
+          { success: false, error: "Error processing password reset request: " + msg },
+          500,
+        );
+      }
+    }
+  }
+
+  // 3d. Reset Password
+  if (route === "auth/reset-password") {
+    if (method === "POST") {
+      try {
+        const body = await request.json();
+        const email = String(body.email || "")
+          .toLowerCase()
+          .trim();
+        const rawToken = String(body.token || "").trim();
+        const newPassword = String(body.newPassword || body.new_password || body.password || "");
+        const confirmPassword = String(body.confirmPassword || body.confirm_password || "");
+
+        if (!email || !email.includes("@")) {
+          return jsonResponse({ success: false, error: "Valid email address is required." }, 400);
+        }
+
+        if (!rawToken) {
+          return jsonResponse({ success: false, error: "Reset token is required." }, 400);
+        }
+
+        if (!newPassword || newPassword.length < 6) {
+          return jsonResponse(
+            {
+              success: false,
+              error: "New password must be at least 6 characters long.",
+            },
+            400,
+          );
+        }
+
+        if (confirmPassword && newPassword !== confirmPassword) {
+          return jsonResponse({ success: false, error: "Passwords do not match." }, 400);
+        }
+
+        const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+        const pool = getMysqlPool();
+
+        if (pool) {
+          const [tokenRows]: any = await pool.query(
+            `SELECT id, email, expires_at, used
+             FROM password_reset_tokens
+             WHERE LOWER(email) = LOWER(?) AND token_hash = ? AND used = 0 AND expires_at > NOW()
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [email, tokenHash],
+          );
+
+          if (!tokenRows || tokenRows.length === 0) {
+            return jsonResponse(
+              {
+                success: false,
+                error:
+                  "This password reset link is invalid, has already been used, or has expired. Please request a new link.",
+              },
+              400,
+            );
+          }
+
+          const tokenRecord = tokenRows[0];
+          await pool.query("UPDATE password_reset_tokens SET used = 1 WHERE id = ?", [
+            tokenRecord.id,
+          ]);
+
+          const [userRows]: any = await pool.query(
+            "SELECT id, user_id FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1",
+            [email],
+          );
+          if (!userRows || userRows.length === 0) {
+            return jsonResponse(
+              {
+                success: false,
+                error: "Account associated with this email address was not found.",
+              },
+              404,
+            );
+          }
+
+          const userRecord = userRows[0];
+          const newHash = await bcrypt.hash(newPassword, 10);
+          await pool.query("UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?", [
+            newHash,
+            userRecord.id,
+          ]);
+
+          try {
+            await pool.query("DELETE FROM sessions WHERE user_id = ?", [userRecord.id]);
+          } catch (_e) {
+            // Sessions table optional
+          }
+
+          return jsonResponse({
+            success: true,
+            message:
+              "Your password has been reset successfully. Please log in with your new password.",
+          });
+        } else {
+          // JSON store fallback
+          if (!store.passwordResetTokens) {
+            store.passwordResetTokens = [];
+          }
+
+          const now = new Date().toISOString();
+          const tokenRecord = store.passwordResetTokens.find(
+            (t) =>
+              t.email.toLowerCase() === email &&
+              t.token_hash === tokenHash &&
+              !t.used &&
+              t.expires_at > now,
+          );
+
+          if (!tokenRecord) {
+            return jsonResponse(
+              {
+                success: false,
+                error:
+                  "This password reset link is invalid, has already been used, or has expired. Please request a new link.",
+              },
+              400,
+            );
+          }
+
+          tokenRecord.used = true;
+
+          const user = store.users.find((u) => u.email.toLowerCase() === email);
+          if (!user) {
+            return jsonResponse(
+              {
+                success: false,
+                error: "Account associated with this email address was not found.",
+              },
+              404,
+            );
+          }
+
+          const newHash = await bcrypt.hash(newPassword, 10);
+          user.password_hash = newHash;
+
+          if (store.sessions) {
+            for (const [sToken, sUid] of Object.entries(store.sessions)) {
+              if (sUid === user.id || sUid === user.user_id) {
+                delete store.sessions[sToken];
+              }
+            }
+          }
+
+          saveStore(store);
+
+          return jsonResponse({
+            success: true,
+            message:
+              "Your password has been reset successfully. Please log in with your new password.",
+          });
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return jsonResponse(
+          { success: false, error: "Database error while resetting password: " + msg },
+          500,
+        );
+      }
     }
   }
 

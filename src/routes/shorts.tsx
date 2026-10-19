@@ -25,9 +25,13 @@ import { SHORTS_LIST, type ShortItem } from "@/data/shorts";
 import { useAuth } from "@/lib/auth-context";
 import { fetchUploadedVideos, isShortVideo } from "@/lib/video-service";
 
+export interface ShortsSearch {
+  id?: string | undefined;
+}
+
 export const Route = createFileRoute("/shorts")({
-  validateSearch: (search: Record<string, unknown>): { id?: string } => ({
-    id: typeof search.id === "string" ? search.id : undefined,
+  validateSearch: (search: Record<string, unknown>): ShortsSearch => ({
+    id: typeof search["id"] === "string" ? search["id"] : undefined,
   }),
   head: () => ({
     meta: [
@@ -126,7 +130,8 @@ function ShortsPage() {
   });
 
   const touchStartY = useRef<number | null>(null);
-  const activeShort: ShortItem = allShorts[currentIndex] || allShorts[0] || SHORTS_LIST[0];
+  const fallbackShort: ShortItem = SHORTS_LIST[0] as ShortItem;
+  const activeShort: ShortItem = allShorts[currentIndex] ?? allShorts[0] ?? fallbackShort;
 
   const handleNext = () => {
     setCurrentIndex((prev) => (prev + 1) % allShorts.length);
@@ -157,12 +162,15 @@ function ShortsPage() {
   }, []);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
+    const firstTouch = e.touches[0];
+    touchStartY.current = firstTouch ? firstTouch.clientY : null;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartY.current === null) return;
-    const deltaY = touchStartY.current - e.changedTouches[0].clientY;
+    const firstTouch = e.changedTouches[0];
+    if (!firstTouch) return;
+    const deltaY = touchStartY.current - firstTouch.clientY;
     if (deltaY > 40) {
       handleNext();
     } else if (deltaY < -40) {

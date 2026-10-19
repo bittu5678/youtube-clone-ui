@@ -17,6 +17,7 @@ import {
   Sparkles,
   Inbox,
   X,
+  KeyRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/videohub/Logo";
@@ -24,6 +25,7 @@ import { ThemeToggle } from "@/components/videohub/ThemeToggle";
 import { FacetubeLogoIcon } from "@/components/videohub/FacetubeLogoIcon";
 import { useAuth } from "@/lib/auth-context";
 import { generateWelcomeEmailContent, sendWelcomeEmail } from "@/lib/email-service";
+import { api } from "@/lib/api";
 import type { DbUser } from "@/types/auth";
 
 export const Route = createFileRoute("/auth")({
@@ -107,6 +109,57 @@ function AuthPage() {
     provider?: "resend" | "smtp" | "none";
   } | null>(null);
   const [isRetryingEmail, setIsRetryingEmail] = useState(false);
+
+  // Forgot Password State
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
+  const [forgotIdentifier, setForgotIdentifier] = useState("");
+  const [forgotSubmitting, setForgotSubmitting] = useState(false);
+  const [forgotResult, setForgotResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const ident = forgotIdentifier.trim();
+    if (!ident) {
+      toast.error("Please enter your User ID or Email.");
+      return;
+    }
+
+    setForgotSubmitting(true);
+    setForgotResult(null);
+
+    try {
+      const res = await api.auth.forgotPassword({ identifier: ident });
+      if (res && res.success) {
+        setForgotResult({
+          success: true,
+          message:
+            res.message ||
+            "If an account associated with that User ID or Email exists, a password reset link has been dispatched to your registered email address.",
+        });
+        toast.success("Password reset request submitted");
+      } else {
+        const err = (res as any)?.error || "Failed to process password reset request.";
+        setForgotResult({
+          success: false,
+          message: err,
+        });
+        toast.error(err);
+      }
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to process request. Please try again later.";
+      setForgotResult({
+        success: false,
+        message: msg,
+      });
+      toast.error(msg);
+    } finally {
+      setForgotSubmitting(false);
+    }
+  };
 
   const isSignup = mode === "signup";
 
@@ -573,7 +626,7 @@ function AuthPage() {
                   </>
                 )}
 
-                <div className="flex items-center justify-between pt-1 text-sm">
+                <div className="flex items-center justify-between pt-1 text-xs sm:text-sm">
                   <label className="flex items-center gap-2 text-muted-foreground">
                     <input
                       type="checkbox"
@@ -586,13 +639,13 @@ function AuthPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        setLoginIdentifier("FT102857");
-                        setLoginPassword("password123");
-                        toast.info("Filled Admin User ID & Demo Password");
+                        setShowForgotPasswordModal(true);
+                        setForgotIdentifier(loginIdentifier || "");
+                        setForgotResult(null);
                       }}
                       className="font-medium text-brand hover:underline"
                     >
-                      Fill Admin Demo (FT102857)
+                      Forgot password?
                     </button>
                   )}
                 </div>
@@ -922,6 +975,123 @@ function AuthPage() {
                 Close Preview
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Forgot Password Modal */}
+      {showForgotPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-5">
+            <button
+              type="button"
+              onClick={() => {
+                setShowForgotPasswordModal(false);
+                setForgotResult(null);
+              }}
+              className="absolute right-4 top-4 rounded-full p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition"
+              aria-label="Close dialog"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-brand/10 text-brand">
+                <KeyRound className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Forgot Password</h3>
+                <p className="text-xs text-muted-foreground">
+                  Request a secure password reset link
+                </p>
+              </div>
+            </div>
+
+            {forgotResult?.success ? (
+              <div className="space-y-4 pt-1">
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-2 text-xs">
+                  <div className="flex items-center gap-2 font-semibold text-emerald-400">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span>Reset Link Dispatched</span>
+                  </div>
+                  <p className="text-muted-foreground leading-relaxed">{forgotResult.message}</p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-secondary/30 p-3 text-[11px] text-muted-foreground space-y-1">
+                  <p className="font-semibold text-foreground flex items-center gap-1.5">
+                    <ShieldCheck className="h-3.5 w-3.5 text-brand" /> Single-Use Security
+                  </p>
+                  <p>
+                    Reset links expire in 1 hour and can only be used once. Check your inbox and
+                    spam folder.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPasswordModal(false);
+                    setForgotResult(null);
+                  }}
+                  className="w-full h-11 rounded-xl bg-brand text-xs font-bold text-brand-foreground shadow-lift transition hover:bg-brand-dark"
+                >
+                  Return to Sign In
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotPasswordSubmit} className="space-y-4 pt-1">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Enter your <strong>FT User ID</strong> (e.g. FT102857) or your registered{" "}
+                  <strong>Email address</strong>. If your account exists, a single-use password
+                  reset link will be sent.
+                </p>
+
+                {forgotResult && !forgotResult.success && (
+                  <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{forgotResult.message}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1.5">
+                    User ID or Email <span className="text-destructive">*</span>
+                  </label>
+                  <div className="group flex h-12 items-center gap-3 rounded-xl border border-border bg-secondary/50 px-4 transition focus-within:border-brand/50 focus-within:bg-background focus-within:shadow-lift">
+                    <Mail className="h-4 w-4 shrink-0 text-muted-foreground group-focus-within:text-brand transition" />
+                    <input
+                      type="text"
+                      value={forgotIdentifier}
+                      onChange={(e) => setForgotIdentifier(e.target.value)}
+                      placeholder="e.g. FT102857 or you@example.com"
+                      required
+                      autoFocus
+                      className="h-full w-full min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotPasswordModal(false);
+                      setForgotResult(null);
+                    }}
+                    className="flex-1 h-11 rounded-xl border border-border bg-secondary/50 text-xs font-semibold text-foreground hover:bg-secondary transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={forgotSubmitting}
+                    className="flex-1 h-11 rounded-xl bg-brand text-xs font-bold text-brand-foreground shadow-lift transition hover:bg-brand-dark disabled:opacity-50"
+                  >
+                    {forgotSubmitting ? "Sending Link..." : "Send Reset Link"}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

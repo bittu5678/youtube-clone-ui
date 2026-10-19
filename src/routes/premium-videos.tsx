@@ -22,10 +22,15 @@ import {
 } from "@/lib/video-service";
 import { resolveVideoThumbnail, SVG_FALLBACK_THUMBNAIL } from "@/lib/thumbnail-service";
 
+export interface PremiumVideosSearch {
+  mode?: string | undefined;
+  refresh?: number | undefined;
+}
+
 export const Route = createFileRoute("/premium-videos")({
-  validateSearch: (search: Record<string, unknown>): { mode?: string; refresh?: number } => ({
-    mode: typeof search.mode === "string" ? search.mode : undefined,
-    refresh: typeof search.refresh === "number" ? search.refresh : undefined,
+  validateSearch: (search: Record<string, unknown>): PremiumVideosSearch => ({
+    mode: typeof search["mode"] === "string" ? search["mode"] : undefined,
+    refresh: typeof search["refresh"] === "number" ? search["refresh"] : undefined,
   }),
   head: () => ({
     meta: [
