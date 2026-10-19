@@ -62,7 +62,7 @@ function WatchLaterPage() {
               </p>
             </div>
 
-            {videos.length > 0 && (
+            {videos[0] && (
               <div className="flex items-center gap-3">
                 <Link
                   to="/watch/$videoId"

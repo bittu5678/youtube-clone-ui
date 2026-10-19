@@ -62,7 +62,7 @@ function LikedVideosPage() {
               </p>
             </div>
 
-            {likedList.length > 0 && (
+            {likedList[0] && (
               <div className="flex items-center gap-3">
                 <Link
                   to="/watch/$videoId"
