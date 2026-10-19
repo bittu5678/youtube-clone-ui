@@ -55,7 +55,10 @@ export function BankKycTab({ userId, defaultFullName }: BankKycTabProps) {
     async function loadData() {
       setLoading(true);
       try {
-        const data = await getBankKyc(userId, { fullName: defaultFullName });
+        const data = await getBankKyc(
+          userId,
+          defaultFullName !== undefined ? { fullName: defaultFullName } : undefined,
+        );
         if (isMounted) {
           setKycData(data);
           setFormData({
