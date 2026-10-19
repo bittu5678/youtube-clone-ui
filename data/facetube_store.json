@@ -464,7 +464,16 @@
     "be8c48f203aa8b8564b7e78faee0dc712673e5a7189ee56a": "FT102857",
     "e748f4abeb05953624ab8c1cd5068a09d19eace9e4441127": "FT483921",
     "803eee8b5bfb25cb730a7a71ae2e12266ee0bedfa2af4506": "FT900431",
-    "458a1cdf1451ee06e752527df06559a4e854778d01e5d6f0": "FT900431"
+    "458a1cdf1451ee06e752527df06559a4e854778d01e5d6f0": "FT900431",
+    "55dfbd7d7e1f2007e88b0495d760892fc6df716d7d59aa3b": "FT483921",
+    "dc547ff2c9e5b15e2f2736d2f312c6fd1f69b187f5675def": "FT483921",
+    "7bc48efb82ea188432c8bc9c18172541f0ad89c0f11f30aa": "FT483921",
+    "a1b831dbd264b3b7cf28a6954be6c0b8a160b206e6d83154": "FT483921",
+    "87c19d9b073feaaf120a1f0b50c5b77c57a20835b0ed8b4d": "FT102857",
+    "4f82521037fbb133c78c39ddd660ad202c1087f713c2227a": "FT102857",
+    "53f18d563e9f633ff22f308f835ab310f9851d22c4416405": "FT483921",
+    "6744dbc778bac31c755df322a519e74850377a7beb63b591": "FT900431",
+    "f17ced0610dddb8e850e5b125e34aaa7df4e7f1d2be227a2": "FT900431"
   },
   "videos": [
     {
@@ -545,9 +554,9 @@
       "payment_amount": 0,
       "is_promoted": true,
       "created_at": "2026-09-29T07:21:29.240Z",
-      "updated_at": "2026-10-19T13:00:26.988Z",
+      "updated_at": "2026-10-19T13:17:26.734Z",
       "promotion_plan": "plan-7-days",
-      "promotion_expires_at": "2027-06-30T16:53:24.591Z"
+      "promotion_expires_at": "2027-07-07T16:53:24.591Z"
     },
     {
       "id": "vid-seed-003",

@@ -203,7 +203,7 @@ export async function getBankKyc(
     if (res && res.kyc) {
       const data = res.kyc;
       const kyc: BankKyc = {
-        id: data.id,
+        ...(data.id ? { id: data.id } : {}),
         userId: data.user_id || data.userId,
         accountHolderName: data.account_holder_name || data.accountHolderName,
         bankName: data.bank_name || data.bankName,
@@ -212,9 +212,13 @@ export async function getBankKyc(
         branchName: data.branch_name || data.branchName || "",
         accountType: (data.account_type || data.accountType) === "Current" ? "Current" : "Saving",
         upiId: data.upi_id || data.upiId || "",
-        upiQrCodeUrl: data.upi_qr_code || data.upiQrCodeUrl || undefined,
+        ...(data.upi_qr_code || data.upiQrCodeUrl
+          ? { upiQrCodeUrl: data.upi_qr_code || data.upiQrCodeUrl }
+          : {}),
         status: data.status || "Submitted",
-        updatedAt: data.updated_at || data.updatedAt,
+        ...(data.updated_at || data.updatedAt
+          ? { updatedAt: data.updated_at || data.updatedAt }
+          : {}),
       };
       saveLocalBankKyc(kyc);
       return kyc;
@@ -240,7 +244,7 @@ export async function getBankKyc(
     branchName: seed.branchName || "",
     accountType: (seed.accountType as "Saving" | "Current") || "Saving",
     upiId: seed.upiId || "",
-    upiQrCodeUrl: seed.upiQrCodeUrl,
+    ...(seed.upiQrCodeUrl ? { upiQrCodeUrl: seed.upiQrCodeUrl } : {}),
     status: seed.status || "Pending",
     updatedAt: new Date().toISOString(),
   };
