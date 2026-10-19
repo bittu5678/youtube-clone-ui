@@ -42,11 +42,11 @@ export interface UploadedVideo {
   views: number;
   likes: number;
   paymentStatus: VideoPaymentStatus;
-  paymentId?: string;
+  paymentId?: string | undefined;
   paymentAmount: number; // e.g. 0 for free, 6 for premium
   isPromoted: boolean;
-  promotionPlan?: string;
-  promotionExpiresAt?: string;
+  promotionPlan?: string | undefined;
+  promotionExpiresAt?: string | undefined;
   createdAt: string;
   updatedAt: string;
 }
@@ -303,15 +303,16 @@ export async function fetchUploadedVideos(
     typeof optionsOrUserId === "string" ? { userId: optionsOrUserId } : optionsOrUserId || {};
 
   try {
-    const res = await api.videos.list({
-      userId: opts.userId,
-      videoType: opts.videoType,
-      contentType: opts.contentType,
-      category: opts.category,
-      search: opts.search,
-      limit: opts.limit,
-      offset: opts.offset,
-    });
+    const listParams: Parameters<typeof api.videos.list>[0] = {};
+    if (opts.userId) listParams.userId = opts.userId;
+    if (opts.videoType) listParams.videoType = opts.videoType;
+    if (opts.contentType) listParams.contentType = opts.contentType;
+    if (opts.category) listParams.category = opts.category;
+    if (opts.search) listParams.search = opts.search;
+    if (opts.limit !== undefined) listParams.limit = opts.limit;
+    if (opts.offset !== undefined) listParams.offset = opts.offset;
+
+    const res = await api.videos.list(listParams);
 
     if (res && res.videos && Array.isArray(res.videos)) {
       const mapped = res.videos.map((d: any) => ({
@@ -484,7 +485,7 @@ export async function recordNewVideoUpload(params: {
     views: 0,
     likes: 0,
     paymentStatus: isPremium ? params.paymentStatus || "pending" : "not_required",
-    paymentId: params.paymentId,
+    ...(params.paymentId ? { paymentId: params.paymentId } : {}),
     paymentAmount: isPremium ? (params.paymentAmount ?? 6) : 0,
     isPromoted: false,
     createdAt: new Date().toISOString(),
@@ -543,11 +544,14 @@ export async function markVideoPromoted(params: {
   const expiresAt = new Date(Date.now() + params.durationDays * 24 * 60 * 60 * 1000).toISOString();
 
   if (index !== -1) {
-    all[index].isPromoted = true;
-    all[index].promotionPlan = params.planId;
-    all[index].promotionExpiresAt = expiresAt;
-    all[index].updatedAt = new Date().toISOString();
-    saveStoredVideos(all);
+    const video = all[index];
+    if (video) {
+      video.isPromoted = true;
+      video.promotionPlan = params.planId;
+      video.promotionExpiresAt = expiresAt;
+      video.updatedAt = new Date().toISOString();
+      saveStoredVideos(all);
+    }
   }
 
   try {
@@ -611,8 +615,11 @@ export function isShortVideo(video: { contentType?: string; duration?: string })
   const parts = raw.split(":").map(Number);
   if (parts.some(isNaN)) return false;
   if (parts.length === 2) {
-    const [minutes, seconds] = parts;
-    return minutes === 0 && seconds <= 60;
+    const minutes = parts[0];
+    const seconds = parts[1];
+    if (minutes !== undefined && seconds !== undefined) {
+      return minutes === 0 && seconds <= 60;
+    }
   }
   return false;
 }

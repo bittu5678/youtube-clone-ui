@@ -14,8 +14,11 @@ export const PRODUCTION_API_URL = "https://facetube.online/api";
  */
 export function getApiBaseUrl(): string {
   // 1. Explicit environment variable override
-  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) {
-    const rawApi = String(import.meta.env.VITE_API_BASE_URL)
+  const envApiUrl =
+    (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+    (typeof process !== "undefined" && process.env?.["VITE_API_BASE_URL"]);
+  if (envApiUrl) {
+    const rawApi = String(envApiUrl)
       .trim()
       .replace(/\/+$/, "");
     if (

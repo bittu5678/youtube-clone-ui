@@ -45,7 +45,7 @@ export const Route = createFileRoute("/ads-promotions")({
 });
 
 interface AdPlan {
-  id: string;
+  id: "plan-7-days" | "plan-15-days" | "plan-monthly" | "plan-yearly";
   name: string;
   durationLabel: string;
   days: number;

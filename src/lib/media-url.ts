@@ -14,13 +14,19 @@ export const PRODUCTION_API_DOMAIN = "https://facetube.online";
  */
 export function getMediaBaseUrl(): string {
   // 1. Explicit environment variable override
-  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_MEDIA_BASE_URL) {
-    return import.meta.env.VITE_MEDIA_BASE_URL.replace(/\/+$/, "");
+  const envMedia =
+    (typeof import.meta !== "undefined" && import.meta.env?.VITE_MEDIA_BASE_URL) ||
+    (typeof process !== "undefined" && process.env?.["VITE_MEDIA_BASE_URL"]);
+  if (envMedia) {
+    return String(envMedia).replace(/\/+$/, "");
   }
 
   // 2. Derive from VITE_API_BASE_URL if configured
-  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) {
-    const rawApi = String(import.meta.env.VITE_API_BASE_URL).trim();
+  const envApi =
+    (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+    (typeof process !== "undefined" && process.env?.["VITE_API_BASE_URL"]);
+  if (envApi) {
+    const rawApi = String(envApi).trim();
     const apiBase = rawApi.replace(/\/+$/, "");
     if (apiBase.startsWith("http://") || apiBase.startsWith("https://")) {
       // Strip trailing /api if present, because uploads are served directly at domain root /uploads/
