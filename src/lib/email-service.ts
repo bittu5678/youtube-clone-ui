@@ -115,8 +115,8 @@ export async function sendWelcomeEmail({
     if (response.ok && data.success) {
       dispatchResult = {
         success: true,
-        provider: data.provider,
-        messageId: data.messageId,
+        ...(data.provider ? { provider: data.provider } : {}),
+        ...(data.messageId ? { messageId: data.messageId } : {}),
       };
     } else {
       dispatchResult = {
@@ -144,8 +144,8 @@ export async function sendWelcomeEmail({
     body,
     sentAt: new Date().toISOString(),
     status: dispatchResult.success ? "delivered" : "failed",
-    provider: dispatchResult.provider,
-    error: dispatchResult.error,
+    ...(dispatchResult.provider !== undefined ? { provider: dispatchResult.provider } : {}),
+    ...(dispatchResult.error !== undefined ? { error: dispatchResult.error } : {}),
   };
 
   try {

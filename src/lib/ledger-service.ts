@@ -13,13 +13,13 @@ export interface LedgerTransaction {
   id: string;
   transactionId: string;
   userId: string;
-  sourceUserId?: string;
-  sourceUserName?: string;
-  videoId?: string;
+  sourceUserId?: string | undefined;
+  sourceUserName?: string | undefined;
+  videoId?: string | undefined;
   incomeType: IncomeType;
   amount: number;
   status: "settled" | "pending" | "failed";
-  specialTag?: "SPECIAL_GLOBAL_RULE" | "SPECIAL_TRANSACTION";
+  specialTag?: "SPECIAL_GLOBAL_RULE" | "SPECIAL_TRANSACTION" | undefined;
   description: string;
   createdAt: string;
 }
@@ -151,13 +151,13 @@ export async function getUserLedger(userId?: string): Promise<LedgerTransaction[
         id: d.id,
         transactionId: d.transaction_id || d.transactionId,
         userId: d.user_id || d.userId,
-        sourceUserId: d.source_user_id || d.sourceUserId,
-        sourceUserName: d.source_user_name || d.sourceUserName,
-        videoId: d.video_id || d.videoId,
+        sourceUserId: d.source_user_id || d.sourceUserId || undefined,
+        sourceUserName: d.source_user_name || d.sourceUserName || undefined,
+        videoId: d.video_id || d.videoId || undefined,
         incomeType: (d.income_type || d.incomeType) as IncomeType,
         amount: Number(d.amount) || 0,
         status: d.status || "settled",
-        specialTag: d.special_tag || d.specialTag,
+        specialTag: d.special_tag || d.specialTag || undefined,
         description: d.description || "",
         createdAt: d.created_at || d.createdAt,
       }));
@@ -210,11 +210,20 @@ export interface PremiumDistributionParams {
   uploaderName: string;
   videoId: string;
   paymentId: string;
-  txNumber?: number;
-  directReferrerId?: string | null;
-  isSpecialTransaction?: boolean;
-  specialTag?: "SPECIAL_GLOBAL_RULE" | "NORMAL_PREMIUM" | string;
-  adminAmount?: number;
+  txNumber?: number | undefined;
+  directReferrerId?: string | null | undefined;
+  isSpecialTransaction?: boolean | undefined;
+  specialTag?: "SPECIAL_GLOBAL_RULE" | "NORMAL_PREMIUM" | string | undefined;
+  adminAmount?: number | undefined;
+}
+
+export interface PremiumDistributionResult {
+  referralTransaction?: LedgerTransaction | undefined;
+  adminTransaction?: LedgerTransaction | undefined;
+  specialAuditTransaction?: LedgerTransaction | undefined;
+  globalTransactions: LedgerTransaction[];
+  isSpecial: boolean;
+  txNumber?: number | undefined;
 }
 
 /**
@@ -222,14 +231,9 @@ export interface PremiumDistributionParams {
  * - Normal: ₹1 Direct Referral, ₹1 Admin, ₹3 Global Income Pool, ₹1 GST/PG
  * - Special (11th, 21st, 31st...): ₹1 Direct Referral (if valid referrer), ₹4 Admin, ₹0 Global Pool
  */
-export async function distributePremiumVideoIncome(params: PremiumDistributionParams): Promise<{
-  referralTransaction?: LedgerTransaction;
-  adminTransaction?: LedgerTransaction;
-  specialAuditTransaction?: LedgerTransaction;
-  globalTransactions: LedgerTransaction[];
-  isSpecial: boolean;
-  txNumber?: number;
-}> {
+export async function distributePremiumVideoIncome(
+  params: PremiumDistributionParams,
+): Promise<PremiumDistributionResult> {
   const ledger = getStoredLedger();
   const wallets = getStoredWallets();
 
@@ -243,11 +247,14 @@ export async function distributePremiumVideoIncome(params: PremiumDistributionPa
       t.transactionId === `TX_ADM_${params.paymentId}`,
   );
   if (duplicate) {
-    return {
+    const duplicateResult: PremiumDistributionResult = {
       globalTransactions: [],
       isSpecial: Boolean(params.isSpecialTransaction),
-      txNumber: params.txNumber,
     };
+    if (params.txNumber !== undefined) {
+      duplicateResult.txNumber = params.txNumber;
+    }
+    return duplicateResult;
   }
 
   // Determine special transaction state
@@ -319,7 +326,7 @@ export async function distributePremiumVideoIncome(params: PremiumDistributionPa
     incomeType: "admin_allocation",
     amount: adminAmount,
     status: "settled",
-    specialTag: isSpecial ? "SPECIAL_GLOBAL_RULE" : undefined,
+    ...(isSpecial ? { specialTag: "SPECIAL_GLOBAL_RULE" as const } : {}),
     description: isSpecial
       ? `Special Premium Transaction ${txSeqLabel}: Admin Allocation (₹4) under rule SPECIAL_GLOBAL_RULE`
       : `Admin / Platform Share (₹1) for Premium Video ${txSeqLabel}`,
@@ -404,14 +411,24 @@ export async function distributePremiumVideoIncome(params: PremiumDistributionPa
   saveStoredLedger(ledger);
   saveStoredWallets(wallets);
 
-  return {
-    referralTransaction,
-    adminTransaction,
-    specialAuditTransaction,
+  const result: PremiumDistributionResult = {
     globalTransactions,
     isSpecial,
-    txNumber: params.txNumber,
   };
+  if (referralTransaction !== undefined) {
+    result.referralTransaction = referralTransaction;
+  }
+  if (adminTransaction !== undefined) {
+    result.adminTransaction = adminTransaction;
+  }
+  if (specialAuditTransaction !== undefined) {
+    result.specialAuditTransaction = specialAuditTransaction;
+  }
+  if (params.txNumber !== undefined) {
+    result.txNumber = params.txNumber;
+  }
+
+  return result;
 }
 
 /**
@@ -439,7 +456,7 @@ export async function getDailyWithdrawnAmount(userId: string, dateStr?: string):
 
 export interface WithdrawalValidationResult {
   valid: boolean;
-  error?: string;
+  error?: string | undefined;
   alreadyWithdrawnToday: number;
   remainingDailyLimit: number;
   currentBalance: number;
@@ -516,6 +533,13 @@ export async function validateWithdrawalRequest(
   };
 }
 
+export interface ProcessWithdrawalResult {
+  success: boolean;
+  error?: string | undefined;
+  transaction?: LedgerTransaction | undefined;
+  updatedWallet?: UserWallet | undefined;
+}
+
 export async function processWithdrawal(
   userId: string,
   amount: number,
@@ -526,16 +550,14 @@ export async function processWithdrawal(
     upiId?: string;
     bankName?: string;
   },
-): Promise<{
-  success: boolean;
-  error?: string;
-  transaction?: LedgerTransaction;
-  updatedWallet?: UserWallet;
-}> {
+): Promise<ProcessWithdrawalResult> {
   const norm = userId.trim().toUpperCase();
   const validation = await validateWithdrawalRequest(norm, amount);
   if (!validation.valid) {
-    return { success: false, error: validation.error };
+    return {
+      success: false,
+      error: validation.error || "Withdrawal validation failed",
+    };
   }
 
   const ledger = getStoredLedger();
@@ -571,18 +593,48 @@ export async function processWithdrawal(
 
   // Record in PHP MySQL API if backend is connected
   try {
+    let withdrawBankPayload:
+      | {
+          accountHolder?: string;
+          accountNumber?: string;
+          ifscCode?: string;
+          upiId?: string;
+          bankName?: string;
+        }
+      | undefined = undefined;
+
+    if (bankDetails) {
+      const payload: {
+        accountHolder?: string;
+        accountNumber?: string;
+        ifscCode?: string;
+        upiId?: string;
+        bankName?: string;
+      } = {};
+      if (bankDetails.accountHolder !== undefined && bankDetails.accountHolder !== "") {
+        payload.accountHolder = bankDetails.accountHolder;
+      }
+      if (bankDetails.accountNumber !== undefined && bankDetails.accountNumber !== "") {
+        payload.accountNumber = bankDetails.accountNumber;
+      }
+      if (bankDetails.ifscCode !== undefined && bankDetails.ifscCode !== "") {
+        payload.ifscCode = bankDetails.ifscCode;
+      }
+      if (bankDetails.upiId !== undefined && bankDetails.upiId !== "") {
+        payload.upiId = bankDetails.upiId;
+      }
+      if (bankDetails.bankName !== undefined && bankDetails.bankName !== "") {
+        payload.bankName = bankDetails.bankName;
+      }
+      if (Object.keys(payload).length > 0) {
+        withdrawBankPayload = payload;
+      }
+    }
+
     const res = await api.wallet.withdraw({
       userId: norm,
       amount,
-      bankDetails: bankDetails
-        ? {
-            accountHolder: bankDetails.accountHolderName,
-            accountNumber: bankDetails.accountNumber,
-            ifscCode: bankDetails.ifscCode,
-            upiId: bankDetails.upiId,
-            bankName: bankDetails.bankName,
-          }
-        : undefined,
+      ...(withdrawBankPayload !== undefined ? { bankDetails: withdrawBankPayload } : {}),
     });
     if (res && res.updatedWallet) {
       wallet = {
