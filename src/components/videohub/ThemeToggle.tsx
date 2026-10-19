@@ -49,10 +49,14 @@ export function ThemeToggle({ className = "", showLabelsOnWide = true }: ThemeTo
         setMobileMenuOpen(false);
       }
     }
+
     if (mobileMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
     }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, [mobileMenuOpen]);
 
   // Current active icon for mobile toggle
