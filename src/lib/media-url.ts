@@ -15,7 +15,7 @@ export const PRODUCTION_API_DOMAIN = "https://facetube.online";
 export function getMediaBaseUrl(): string {
   // 1. Explicit environment variable override
   const envMedia =
-    (typeof import.meta !== "undefined" && import.meta.env?.VITE_MEDIA_BASE_URL) ||
+    (typeof import.meta !== "undefined" && import.meta.env?.["VITE_MEDIA_BASE_URL"]) ||
     (typeof process !== "undefined" && process.env?.["VITE_MEDIA_BASE_URL"]);
   if (envMedia) {
     return String(envMedia).replace(/\/+$/, "");
@@ -23,7 +23,7 @@ export function getMediaBaseUrl(): string {
 
   // 2. Derive from VITE_API_BASE_URL if configured
   const envApi =
-    (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+    (typeof import.meta !== "undefined" && import.meta.env?.["VITE_API_BASE_URL"]) ||
     (typeof process !== "undefined" && process.env?.["VITE_API_BASE_URL"]);
   if (envApi) {
     const rawApi = String(envApi).trim();
