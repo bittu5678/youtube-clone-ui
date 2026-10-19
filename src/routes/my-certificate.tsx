@@ -100,9 +100,10 @@ function MyCertificatePage() {
 
   // AUTOMATIC EMAIL ON NEW CREATOR RANK ACHIEVEMENT
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const lastAwardedRank = localStorage.getItem(`facetube_last_cert_rank_${userId}`);
     if (lastAwardedRank !== selectedRank.name && userEmail) {
-      const timer = setTimeout(async () => {
+      timer = setTimeout(async () => {
         try {
           let base64Pdf: string | undefined;
           if (certificateRef.current) {
@@ -146,9 +147,11 @@ function MyCertificatePage() {
           console.error("Auto-send certificate email error:", err);
         }
       }, 1200);
-
-      return () => clearTimeout(timer);
     }
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, [selectedRank, userId, userName, userEmail, subscriberDisplay, certificateId, issueDate]);
 
   // Handlers for the 3 requested buttons:
