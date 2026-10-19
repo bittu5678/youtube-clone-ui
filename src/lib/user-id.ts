@@ -16,7 +16,8 @@ export function generateFTUserId(): string {
   if (typeof window !== "undefined" && window.crypto && window.crypto.getRandomValues) {
     const arr = new Uint32Array(1);
     window.crypto.getRandomValues(arr);
-    num = arr[0] % 1000000;
+    const firstVal = arr[0];
+    num = firstVal !== undefined ? firstVal % 1000000 : Math.floor(Math.random() * 1000000);
   } else {
     num = Math.floor(Math.random() * 1000000);
   }

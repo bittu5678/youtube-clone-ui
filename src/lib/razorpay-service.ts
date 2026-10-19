@@ -180,7 +180,7 @@ export async function initiatePremiumVideoPayment(
           userName: effectiveUserName,
           videoId: effectiveVideoId,
           purpose: "premium_video_upload",
-          referrerUserId: params.directReferrerId,
+          referrerUserId: params.directReferrerId ?? null,
         });
 
         if (!res?.verified) {
@@ -196,7 +196,7 @@ export async function initiatePremiumVideoPayment(
           title: effectiveTitle,
           description: effectiveDescription,
           videoUrl: params.videoUrl,
-          thumbnailUrl: params.thumbnailUrl,
+          ...(params.thumbnailUrl !== undefined && { thumbnailUrl: params.thumbnailUrl }),
           category: params.category || "General",
           videoType: "premium",
           contentType: params.contentType,
@@ -206,17 +206,23 @@ export async function initiatePremiumVideoPayment(
         });
 
         // 4. Update local ledger cache if not a duplicate
-        if (!res.duplicate) {
+        const isDuplicate =
+          "duplicate" in res ? Boolean((res as { duplicate?: boolean })["duplicate"]) : false;
+        if (!isDuplicate) {
           await distributePremiumVideoIncome({
             uploaderUserId: effectiveUserId,
             uploaderName: effectiveUserName,
             videoId: newVideo.id || effectiveVideoId,
             paymentId,
-            txNumber: res.txNumber,
-            directReferrerId: params.directReferrerId,
-            isSpecialTransaction: res.isSpecialTransaction,
-            specialTag: res.specialTag,
-            adminAmount: res.distribution?.adminAmount,
+            directReferrerId: params.directReferrerId ?? null,
+            ...(res.txNumber !== undefined && { txNumber: res.txNumber }),
+            ...(res.isSpecialTransaction !== undefined && {
+              isSpecialTransaction: res.isSpecialTransaction,
+            }),
+            ...(res.specialTag !== undefined && { specialTag: res.specialTag }),
+            ...(res.distribution?.adminAmount !== undefined && {
+              adminAmount: res.distribution.adminAmount,
+            }),
           });
         }
 
@@ -243,8 +249,8 @@ export async function initiatePremiumVideoPayment(
         );
       },
       prefill: {
-        name: params.userName,
-        email: params.userEmail || `${params.userId.toLowerCase()}@facetube.app`,
+        name: effectiveUserName,
+        email: params.userEmail || `${effectiveUserId.toLowerCase()}@facetube.app`,
         contact: params.userMobile || "9999999999",
       },
       theme: {
@@ -348,7 +354,7 @@ export async function initiateAdsPromotionPayment(params: {
           userId: params.userId,
           purpose: "ads_promotion",
           planId: params.planId,
-          referrerUserId: params.directReferrerId,
+          referrerUserId: params.directReferrerId ?? null,
           metadata: { planId: params.planId },
         });
 

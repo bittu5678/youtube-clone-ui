@@ -18,9 +18,7 @@ export function getApiBaseUrl(): string {
     (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
     (typeof process !== "undefined" && process.env?.["VITE_API_BASE_URL"]);
   if (envApiUrl) {
-    const rawApi = String(envApiUrl)
-      .trim()
-      .replace(/\/+$/, "");
+    const rawApi = String(envApiUrl).trim().replace(/\/+$/, "");
     if (
       rawApi.toLowerCase().includes("api.facetube.online") &&
       rawApi.toLowerCase().endsWith("/api")

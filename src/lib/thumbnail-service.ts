@@ -42,12 +42,19 @@ export const SVG_FALLBACK_THUMBNAIL =
  * Returns a high-res cover image URL corresponding to the video's category.
  */
 export function getCategoryFallbackThumbnail(category?: string): string {
-  if (!category) return CATEGORY_THUMBNAILS["General"];
+  const defaultThumbnail = CATEGORY_THUMBNAILS["General"] ?? SVG_FALLBACK_THUMBNAIL;
+  if (!category) return defaultThumbnail;
   const trimmed = category.trim();
   const match = Object.keys(CATEGORY_THUMBNAILS).find(
     (k) => k.toLowerCase() === trimmed.toLowerCase(),
   );
-  return (match ? CATEGORY_THUMBNAILS[match] : undefined) || CATEGORY_THUMBNAILS["General"];
+  if (match) {
+    const matchedThumb = CATEGORY_THUMBNAILS[match];
+    if (matchedThumb) {
+      return matchedThumb;
+    }
+  }
+  return defaultThumbnail;
 }
 
 /**
@@ -62,7 +69,7 @@ export function resolveVideoThumbnail(video?: {
   thumbnail?: string;
   category?: string;
 }): string {
-  if (!video) return CATEGORY_THUMBNAILS["General"];
+  if (!video) return CATEGORY_THUMBNAILS["General"] ?? SVG_FALLBACK_THUMBNAIL;
   const rawCand = video.thumbnailUrl || video.thumbnail_url || video.thumb || video.thumbnail;
 
   if (rawCand && typeof rawCand === "string") {
