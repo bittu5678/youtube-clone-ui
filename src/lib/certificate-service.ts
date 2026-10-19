@@ -174,17 +174,36 @@ export const CREATOR_RANKS: CreatorRankInfo[] = [
 ];
 
 export function getRankDetails(rankNameOrId?: string): CreatorRankInfo {
-  if (!rankNameOrId) return CREATOR_RANKS[3]; // Default to Gold (Level 4)
-  const query = rankNameOrId.toLowerCase().trim();
-  const found = CREATOR_RANKS.find(
-    (r) =>
-      r.id.toLowerCase() === query ||
-      r.name.toLowerCase().includes(query) ||
-      r.awardName.toLowerCase().includes(query) ||
-      r.levelLabel.toLowerCase() === query ||
-      `level ${r.level}` === query,
-  );
-  return found || CREATOR_RANKS[3];
+  const defaultRank = CREATOR_RANKS[3] || CREATOR_RANKS[0];
+  if (!rankNameOrId) {
+    if (defaultRank) return defaultRank;
+  } else {
+    const query = rankNameOrId.toLowerCase().trim();
+    const found = CREATOR_RANKS.find(
+      (r) =>
+        r.id.toLowerCase() === query ||
+        r.name.toLowerCase().includes(query) ||
+        r.awardName.toLowerCase().includes(query) ||
+        r.levelLabel.toLowerCase() === query ||
+        `level ${r.level}` === query,
+    );
+    if (found) return found;
+  }
+  if (defaultRank) return defaultRank;
+  return {
+    id: "level-1",
+    level: 1,
+    levelLabel: "LEVEL 1",
+    name: "Starter Creator Award",
+    awardName: "Starter Creator Award",
+    minSubscribers: 1000,
+    formattedSubscribers: "1,000",
+    badge: "🌱",
+    accentColor: "from-emerald-500 to-teal-700 border-emerald-500",
+    tierLevel: "Level 1",
+    description:
+      "Achieved 1,000 verified channel subscribers and basic creator monetization accreditation.",
+  };
 }
 
 /**
@@ -194,12 +213,15 @@ export function calculateRankFromSubscribers(subscribers: number): CreatorRankIn
   const count = typeof subscribers === "number" && !isNaN(subscribers) ? subscribers : 0;
   // Iterate from highest level (10) down to level 1
   for (let i = CREATOR_RANKS.length - 1; i >= 0; i--) {
-    if (count >= CREATOR_RANKS[i].minSubscribers) {
-      return CREATOR_RANKS[i];
+    const rank = CREATOR_RANKS[i];
+    if (rank && count >= rank.minSubscribers) {
+      return rank;
     }
   }
   // If below Level 1 threshold, return Level 1 as the current target/first milestone
-  return CREATOR_RANKS[0];
+  const baseRank = CREATOR_RANKS[0];
+  if (baseRank) return baseRank;
+  return getRankDetails("level-1");
 }
 
 export function generateAutoCertificateId(userId: string, rankName: string): string {
@@ -494,9 +516,9 @@ export async function sendCertificateEmailApi(payload: {
   subscribers: string;
   certificateId: string;
   issueDate: string;
-  pdfBase64?: string;
-  reason?: string;
-}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  pdfBase64?: string | undefined;
+  reason?: string | undefined;
+}): Promise<{ success: boolean; messageId?: string | undefined; error?: string | undefined }> {
   try {
     const res = await fetch("/api/send-certificate-email", {
       method: "POST",
@@ -548,7 +570,7 @@ export async function checkAndSendRankMilestoneEmail(params: {
     subscribers: params.subscribers,
     certificateId: params.certificateId,
     issueDate: params.issueDate,
-    pdfBase64,
+    ...(pdfBase64 ? { pdfBase64 } : {}),
     reason: `Rank Achievement: ${params.rank}`,
   });
 
