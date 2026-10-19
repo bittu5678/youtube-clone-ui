@@ -115,12 +115,14 @@ export async function registerUserInDatabase({
 }: SignUpParams): Promise<{
   user: DbUser;
   userId: string;
-  emailDelivery?: {
-    success: boolean;
-    provider?: "resend" | "smtp" | "none";
-    error?: string;
-    messageId?: string;
-  };
+  emailDelivery?:
+    | {
+        success: boolean;
+        provider?: "resend" | "smtp" | "none" | undefined;
+        error?: string | undefined;
+        messageId?: string | undefined;
+      }
+    | undefined;
 }> {
   const trimmedName = name.trim();
   const trimmedMobile = mobile.trim();
@@ -151,7 +153,7 @@ export async function registerUserInDatabase({
       mobile: trimmedMobile,
       email: normalizedEmail,
       password,
-      referralCode: referralCode?.trim() || undefined,
+      ...(referralCode?.trim() ? { referralCode: referralCode.trim() } : {}),
     });
   } catch (apiErr: unknown) {
     const errorMsg =
@@ -183,11 +185,15 @@ export async function registerUserInDatabase({
   generatedUserId = apiRes.user.user_id;
 
   // 2. Determine Welcome Email Delivery status
-  let emailDelivery = {
+  let emailDelivery: {
+    success: boolean;
+    provider?: "resend" | "smtp" | "none" | undefined;
+    error?: string | undefined;
+    messageId?: string | undefined;
+  } = {
     success: false,
-    provider: "none" as "resend" | "smtp" | "none",
+    provider: "none",
     error: "Email delivery failed",
-    messageId: undefined as string | undefined,
   };
 
   if (apiRes.emailDelivery) {
@@ -220,7 +226,6 @@ export async function registerUserInDatabase({
         success: false,
         provider: "none",
         error: `Email delivery failed: ${msg}`,
-        messageId: undefined,
       };
     }
   }
