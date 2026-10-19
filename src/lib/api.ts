@@ -15,7 +15,7 @@ export const PRODUCTION_API_URL = "https://facetube.online/api";
 export function getApiBaseUrl(): string {
   // 1. Explicit environment variable override
   const envApiUrl =
-    (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+    (typeof import.meta !== "undefined" && import.meta.env?.["VITE_API_BASE_URL"]) ||
     (typeof process !== "undefined" && process.env?.["VITE_API_BASE_URL"]);
   if (envApiUrl) {
     const rawApi = String(envApiUrl).trim().replace(/\/+$/, "");
@@ -94,7 +94,7 @@ export async function apiFetch<T = unknown>(
 
   // When running on the server (SSR / Node.js runtime), fetch requires an absolute URL with protocol and host
   if (typeof window === "undefined" && !url.startsWith("http://") && !url.startsWith("https://")) {
-    const port = process.env.PORT || 3000;
+    const port = process.env["PORT"] || 3000;
     url = `http://127.0.0.1:${port}${url.startsWith("/") ? "" : "/"}${url}`;
   }
 
