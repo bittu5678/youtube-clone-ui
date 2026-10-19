@@ -4,12 +4,12 @@
  * Base URL configurable via VITE_API_BASE_URL (defaults to /api)
  */
 
-export const PRODUCTION_API_URL = "https://api.facetube.online";
+export const PRODUCTION_API_URL = "https://facetube.online/api";
 
 /**
  * Returns the base URL for FaceTube PHP API calls.
  * 1. Explicit override: VITE_API_BASE_URL (if provided)
- * 2. Production browser: Automatically defaults to https://api.facetube.online on facetube.online
+ * 2. Production browser: Automatically defaults to https://facetube.online/api on facetube.online
  * 3. Local development / Preview: Defaults to /api (handled by Vite dev middleware)
  */
 export function getApiBaseUrl(): string {

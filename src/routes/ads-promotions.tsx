@@ -203,7 +203,8 @@ function AdsPromotionsPage() {
 
   // Selected Plan State
   const [selectedPlanId, setSelectedPlanId] = useState<string>("plan-monthly");
-  const selectedPlan = AD_PLANS.find((p) => p.id === selectedPlanId) || AD_PLANS[2];
+  const defaultPlan: AdPlan = AD_PLANS[2]!;
+  const selectedPlan: AdPlan = AD_PLANS.find((p) => p.id === selectedPlanId) ?? defaultPlan;
 
   // Ad Video Upload State
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -227,10 +228,13 @@ function AdsPromotionsPage() {
       .then((vids) => {
         setUserVideos(vids);
         if (vids && vids.length > 0) {
-          setSelectedVideoId(vids[0].id);
-          setCampaignTitle(vids[0].title);
-          setVideoPreviewUrl(vids[0].videoUrl);
-          setCategory(vids[0].category || "Entertainment");
+          const firstVid = vids[0];
+          if (firstVid) {
+            setSelectedVideoId(firstVid.id);
+            setCampaignTitle(firstVid.title);
+            setVideoPreviewUrl(firstVid.videoUrl);
+            setCategory(firstVid.category || "Entertainment");
+          }
         }
       })
       .catch((err) => console.warn("Failed to load channel videos:", err))
@@ -289,7 +293,7 @@ function AdsPromotionsPage() {
   const calculateExpiryDate = (days: number): string => {
     const d = new Date();
     d.setDate(d.getDate() + days);
-    return d.toISOString().split("T")[0];
+    return d.toISOString().slice(0, 10);
   };
 
   // Activate Promotion Submission with Razorpay Payment Gateway
@@ -303,20 +307,23 @@ function AdsPromotionsPage() {
 
     try {
       const { initiateAdsPromotionPayment } = await import("@/lib/razorpay-service");
+      const userEmail = user?.email || undefined;
+      const userMobile = profile?.mobile || dbUser?.mobile || undefined;
+
       await initiateAdsPromotionPayment({
         userId: effectiveUserId,
         userName,
-        userEmail: user?.email || undefined,
-        userMobile: profile?.mobile || dbUser?.mobile || undefined,
+        ...(userEmail ? { userEmail } : {}),
+        ...(userMobile ? { userMobile } : {}),
         videoId: selectedVideoId || `camp-vid-${Date.now()}`,
-        planId: selectedPlan.id as "plan-7-days" | "plan-15-days" | "plan-monthly" | "plan-yearly",
+        planId: selectedPlan.id,
         planName: selectedPlan.name,
         durationDays: selectedPlan.days,
         price: selectedPlan.price,
-        directReferrerId: sponsorId,
+        ...(sponsorId ? { directReferrerId: sponsorId } : {}),
         onSuccess: async (res: unknown) => {
           const now = new Date();
-          const startDate = now.toISOString().split("T")[0];
+          const startDate = now.toISOString().slice(0, 10);
           const expiryDate = calculateExpiryDate(selectedPlan.days);
           const commission = Math.round(selectedPlan.price * 0.1);
           const paymentResult = res as { paymentId?: string } | undefined;

@@ -146,22 +146,7 @@ function WalletBalancePage() {
 
     setWithdrawing(true);
     try {
-      // 2. Server-side validation check
-      const serverRes = await fetch("/api/wallet/withdraw", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, amount }),
-      });
-
-      const serverData = await serverRes.json();
-      if (!serverRes.ok || !serverData.success) {
-        setValidationError(serverData.error || "Server validation rejected withdrawal request.");
-        toast.error(serverData.error || "Withdrawal failed server verification.");
-        setWithdrawing(false);
-        return;
-      }
-
-      // 3. Process withdrawal in ledger service
+      // Process withdrawal through the centralized ledger service (which invokes the configured api.wallet.withdraw client)
       const bankKyc = await getBankKyc(userId);
       const res = await processWithdrawal(userId, amount, {
         accountHolder: bankKyc?.accountHolderName,

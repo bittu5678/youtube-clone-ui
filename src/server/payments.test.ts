@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { verifyServerPayment, verifyPayment } from "./payments";
 import { handleApiRequest } from "./api-handler";
+import { api } from "../lib/api";
+import { processWithdrawal } from "../lib/ledger-service";
 
 describe("Payment Verification & Referral Security Audit Tests", () => {
   const secret = "test_razorpay_secret_key_1234567890";
@@ -428,6 +430,57 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
 
     assert.equal(res.status, 403);
     assert.match(res.data.error, /does not match the authenticated payer/i);
+  });
+
+  it("13. Proves wallet withdrawal action invokes api.wallet.withdraw mutation exactly once", async () => {
+    let withdrawCallCount = 0;
+    const originalWithdraw = api.wallet.withdraw;
+    const originalGetBalance = api.wallet.getBalance;
+
+    api.wallet.getBalance = async (_userId?: string) => {
+      return {
+        success: true,
+        wallet: {
+          user_id: "FT483921",
+          balance: 5000,
+          total_earned: 5000,
+          total_withdrawn: 0,
+          referral_income: 0,
+          global_income: 0,
+          adsense_income: 0,
+          affiliate_income: 0,
+          updated_at: new Date().toISOString(),
+        },
+      };
+    };
+
+    api.wallet.withdraw = async (_data: any) => {
+      withdrawCallCount++;
+      return {
+        success: true,
+        transaction: { id: "test_tx_wdr_1" },
+        updatedWallet: { balance: 4000, total_withdrawn: 1000 },
+      };
+    };
+
+    try {
+      const res = await processWithdrawal("FT483921", 1000, {
+        accountHolder: "Alex Rivera",
+        accountNumber: "50100481920194",
+        bankName: "HDFC Bank",
+        upiId: "alexrivera@okhdfcbank",
+      });
+
+      assert.equal(res.success, true, "Withdrawal should succeed when balance is sufficient");
+      assert.equal(
+        withdrawCallCount,
+        1,
+        "api.wallet.withdraw must be called exactly once per withdrawal action",
+      );
+    } finally {
+      api.wallet.withdraw = originalWithdraw;
+      api.wallet.getBalance = originalGetBalance;
+    }
   });
 });
 
