@@ -47,10 +47,14 @@ export function PersonalKycTab({ userId, defaultFullName, defaultMobile }: Perso
     async function loadData() {
       setLoading(true);
       try {
-        const data = await getPersonalKyc(userId, {
-          fullName: defaultFullName,
-          mobile: defaultMobile,
-        });
+        const userDefaults: { fullName?: string; mobile?: string } = {};
+        if (defaultFullName !== undefined) {
+          userDefaults.fullName = defaultFullName;
+        }
+        if (defaultMobile !== undefined) {
+          userDefaults.mobile = defaultMobile;
+        }
+        const data = await getPersonalKyc(userId, userDefaults);
         if (isMounted) {
           setKycData(data);
           setFormData({
