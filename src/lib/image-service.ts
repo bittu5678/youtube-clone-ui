@@ -6,11 +6,11 @@ export interface UploadedImage {
   userId: string;
   creatorName: string;
   title: string;
-  description?: string;
+  description?: string | undefined;
   imageUrl: string;
   format: "jpg" | "jpeg" | "png" | "webp";
   fileSize: string;
-  category?: string;
+  category?: string | undefined;
   views: number;
   likes: number;
   createdAt: string;
@@ -113,7 +113,7 @@ export function saveStoredImages(images: UploadedImage[]): void {
 
 export async function fetchUploadedImages(userId?: string): Promise<UploadedImage[]> {
   try {
-    const res = await api.images.list({ userId });
+    const res = await api.images.list(userId ? { userId } : undefined);
     if (res && res.images && Array.isArray(res.images)) {
       const serverImages: UploadedImage[] = res.images.map((item: any) => ({
         id: String(item.id),
@@ -229,13 +229,18 @@ export function interleaveFeedWithImages<T extends { id: string }>(
   let imageIndex = 0;
 
   for (let i = 0; i < videos.length; i++) {
-    combined.push({ type: "video", data: videos[i] });
+    const video = videos[i];
+    if (video) {
+      combined.push({ type: "video", data: video });
+    }
 
     // After every `interval` video items (e.g. 5th, 10th, 15th...), insert 1 uploaded image
     if ((i + 1) % interval === 0) {
       const img = images[imageIndex % images.length];
-      combined.push({ type: "image", data: img });
-      imageIndex++;
+      if (img) {
+        combined.push({ type: "image", data: img });
+        imageIndex++;
+      }
     }
   }
 
