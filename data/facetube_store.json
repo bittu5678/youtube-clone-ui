@@ -536,7 +536,25 @@
     "ab69f5cca83a45022a9677e907ccc9dd532d9e4c7a777c26": "FT102857",
     "26acd31546c94e58df3bd81af0ac18a3833d82d8e873a220": "FT483921",
     "e7c1fe0fe5e9f73ecdbe7f7491a40ecdfbc996c85a1469ce": "FT900431",
-    "49042f80e04b7c6597c72426ff9ddb0ff503b7a8ab1f52d7": "FT900431"
+    "49042f80e04b7c6597c72426ff9ddb0ff503b7a8ab1f52d7": "FT900431",
+    "b639180bf3a9fcacd4f01f7f6f56b163f5bfdf989cfda6e6": "FT483921",
+    "f72092c19bcfab0a804d388ec82b09b57c5ba9cf773bcd57": "FT483921",
+    "74c41b87df5d1dc8455b056d3547bd8523322b9419f520a4": "FT483921",
+    "b3f2b0790ad032a7eda47b52533a8711541fdea00787d8ee": "FT483921",
+    "d54d46a1b17b26667e28ab4ae8d8c7bd2cf04c3b6ab993cb": "FT102857",
+    "1318b2d6b8455252c3a9390db55afbab2aef10bbbc0e893c": "FT102857",
+    "5df3156cd8ecd870bcf72ee157883afff69acd52435cd6d1": "FT483921",
+    "030d0158b85c4a0d37dcdc52673c2ff2ab8938668a1d4f78": "FT900431",
+    "759c48f656a0332a94da5e467718b3c2f17f1dfee2acbaef": "FT900431",
+    "e33023fe965fa5d96ad88191a50989c28285cb404fe0328e": "FT483921",
+    "977e676e6a11eb7aa2497f41b6e60e5c7ca6de11163ec57f": "FT483921",
+    "acac15dc0e5c20baa717e8860b20a2eb4fa6e9d8099f159e": "FT483921",
+    "370b0bd0d36110f2268f235d2670b7b5603628640d6eb73f": "FT483921",
+    "53d53f6b8eb54029d377c7c71b872ad9f81f55e44ab9f0d2": "FT102857",
+    "9bd97aba90822ab5576f85c5f4208e8563637cadd8e8b6f1": "FT102857",
+    "f6a3893947649d4494a97cd7076843c7773303d96fb06c12": "FT483921",
+    "16f6bc42204188c230d3339f30240bd5b7cfeec8d0f70c19": "FT900431",
+    "7e5e3e36ccc168cb615fc070a99c1467916804bb0b4f021c": "FT900431"
   },
   "videos": [
     {
@@ -617,9 +635,9 @@
       "payment_amount": 0,
       "is_promoted": true,
       "created_at": "2026-09-29T07:21:29.240Z",
-      "updated_at": "2026-10-19T14:47:39.618Z",
+      "updated_at": "2026-10-20T07:09:03.967Z",
       "promotion_plan": "plan-7-days",
-      "promotion_expires_at": "2027-08-25T16:53:24.591Z"
+      "promotion_expires_at": "2027-09-08T16:53:24.591Z"
     },
     {
       "id": "vid-seed-003",

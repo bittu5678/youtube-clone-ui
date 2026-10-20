@@ -14,16 +14,28 @@ export function VideoHubLayout({ children, query, onQueryChange }: VideoHubLayou
   const [railOpen, setRailOpen] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const navbarProps: {
+    onToggleSidebar: () => void;
+    query?: string;
+    onQueryChange?: (value: string) => void;
+  } = {
+    onToggleSidebar: () => {
+      setRailOpen((v) => !v);
+      setDrawerOpen((v) => !v);
+    },
+  };
+
+  if (query !== undefined) {
+    navbarProps.query = query;
+  }
+
+  if (onQueryChange !== undefined) {
+    navbarProps.onQueryChange = onQueryChange;
+  }
+
   return (
     <div className="min-h-screen bg-background font-sans text-foreground">
-      <Navbar
-        onToggleSidebar={() => {
-          setRailOpen((v) => !v);
-          setDrawerOpen((v) => !v);
-        }}
-        query={query}
-        onQueryChange={onQueryChange}
-      />
+      <Navbar {...navbarProps} />
 
       <div className="flex">
         {/* Left Sidebar (Fixed on Desktop, Drawer on Mobile) */}

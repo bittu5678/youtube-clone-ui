@@ -218,8 +218,9 @@ export function DashboardSummaryCards({
 
   if (dynamicOverrides) {
     cards = cards.map((c) => {
-      if (dynamicOverrides[c.id] !== undefined) {
-        return { ...c, value: dynamicOverrides[c.id] };
+      const overrideVal = dynamicOverrides[c.id];
+      if (overrideVal !== undefined) {
+        return { ...c, value: overrideVal };
       }
       return c;
     });
