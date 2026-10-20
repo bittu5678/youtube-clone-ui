@@ -26,7 +26,7 @@ import { FacetubeLogoIcon } from "@/components/videohub/FacetubeLogoIcon";
 import { useAuth } from "@/lib/auth-context";
 import { generateWelcomeEmailContent, sendWelcomeEmail } from "@/lib/email-service";
 import { api } from "@/lib/api";
-import type { DbUser } from "@/types/auth";
+import type { DbUser, SignUpParams } from "@/types/auth";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -107,6 +107,7 @@ function AuthPage() {
     success: boolean;
     error?: string;
     provider?: "resend" | "smtp" | "none";
+    messageId?: string;
   } | null>(null);
   const [isRetryingEmail, setIsRetryingEmail] = useState(false);
 
@@ -246,14 +247,19 @@ function AuthPage() {
         return;
       }
 
-      setSubmitting(true);
-      const res = await signUp({
+      const trimmedReferral = referralCode.trim();
+      const signUpParams: SignUpParams = {
         name: fullName.trim(),
         mobile: mobile.trim(),
         email: email.trim(),
         password,
-        referralCode: referralCode.trim() || undefined,
-      });
+      };
+      if (trimmedReferral) {
+        signUpParams.referralCode = trimmedReferral;
+      }
+
+      setSubmitting(true);
+      const res = await signUp(signUpParams);
       setSubmitting(false);
 
       if (!res.success || !res.userId) {
