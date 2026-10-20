@@ -150,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null);
           setProfile(null);
           setDbUser(null);
-          setRole(null);
+          setRole("user");
           try {
             localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
           } catch (_e) {
@@ -162,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setProfile(null);
         setDbUser(null);
-        setRole(null);
+        setRole("user");
         try {
           localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
         } catch (_e) {
@@ -179,17 +179,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    */
   const signUp = async (params: SignUpParams): Promise<SignUpResult> => {
     try {
-      const {
-        user: newDbUser,
-        userId,
-        emailDelivery,
-      } = await registerUserInDatabase({
+      const registerParams: SignUpParams = {
         name: params.name || params.fullName || "FaceTube User",
         mobile: params.mobile,
         email: params.email,
         password: params.password,
-        referralCode: params.referralCode,
-      });
+      };
+      if (params.referralCode !== undefined) {
+        registerParams.referralCode = params.referralCode;
+      }
+
+      const {
+        user: newDbUser,
+        userId,
+        emailDelivery,
+      } = await registerUserInDatabase(registerParams);
 
       const newProfile: Profile = {
         id: newDbUser.id,
@@ -236,13 +240,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       syncUsersList();
 
-      return {
+      let cleanEmailDelivery: SignUpResult["emailDelivery"] | undefined = undefined;
+      if (emailDelivery) {
+        cleanEmailDelivery = {
+          success: emailDelivery.success,
+        };
+        if (emailDelivery.provider !== undefined) {
+          cleanEmailDelivery.provider = emailDelivery.provider;
+        }
+        if (emailDelivery.error !== undefined) {
+          cleanEmailDelivery.error = emailDelivery.error;
+        }
+        if (emailDelivery.messageId !== undefined) {
+          cleanEmailDelivery.messageId = emailDelivery.messageId;
+        }
+      }
+
+      const signUpResult: SignUpResult = {
         success: true,
         user: newDbUser,
         userId,
-        emailDelivery,
         error: null,
       };
+      if (cleanEmailDelivery !== undefined) {
+        signUpResult.emailDelivery = cleanEmailDelivery;
+      }
+
+      return signUpResult;
     } catch (err: unknown) {
       return {
         success: false,
