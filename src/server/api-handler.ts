@@ -1255,8 +1255,9 @@ export async function handleApiRequest(
             verifiedReferrerId
           ) {
             if (!store.wallets) store.wallets = {};
-            if (!store.wallets[verifiedReferrerId]) {
-              store.wallets[verifiedReferrerId] = {
+            let w = store.wallets[verifiedReferrerId];
+            if (!w) {
+              w = {
                 balance: 0,
                 total_earned: 0,
                 total_withdrawn: 0,
@@ -1266,8 +1267,19 @@ export async function handleApiRequest(
                 affiliate_income: 0,
                 updated_at: new Date().toISOString(),
               };
+              store.wallets[verifiedReferrerId] = w;
             }
-            const w = store.wallets[verifiedReferrerId];
+            if (!w) {
+              return jsonResponse(
+                {
+                  verified: false,
+                  paymentId,
+                  orderId,
+                  error: "Failed to load referrer wallet record.",
+                },
+                500,
+              );
+            }
             const comm = Number(result.distribution.directReferralAmount);
             w.balance += comm;
             w.total_earned += comm;
@@ -3172,6 +3184,15 @@ export async function handleApiRequest(
       const qUserId = url.searchParams.get("userId") || url.searchParams.get("user_id");
       const pool = getMysqlPool();
       const authUser = await getAuthUserFromRequest(request, store, pool);
+      if (!authUser) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Authentication required. Please provide a valid Bearer session token.",
+          },
+          401,
+        );
+      }
       const auth = requireAuth(authUser, qUserId);
       if (!auth.success) {
         return auth.response;
