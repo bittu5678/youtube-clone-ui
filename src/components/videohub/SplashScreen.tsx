@@ -151,7 +151,7 @@ export function SplashScreen({ onComplete, durationMs = 3000 }: SplashScreenProp
             vx: Math.cos(angle) * speed,
             vy: Math.sin(angle) * speed,
             radius: 1.2 + Math.random() * 2.6,
-            color: colors[Math.floor(Math.random() * colors.length)],
+            color: colors[Math.floor(Math.random() * colors.length)] ?? "#ffffff",
             alpha: 1,
             decay: 0.012 + Math.random() * 0.02,
             life: 0,
@@ -253,6 +253,7 @@ export function SplashScreen({ onComplete, durationMs = 3000 }: SplashScreenProp
       // 1. Draw glowing ambient floating particles
       for (let i = 0; i < ambientParticlesRef.current.length; i++) {
         const p = ambientParticlesRef.current[i];
+        if (!p) continue;
         p.x += p.vx;
         p.y += p.vy;
 
@@ -301,6 +302,7 @@ export function SplashScreen({ onComplete, durationMs = 3000 }: SplashScreenProp
       // 3. Draw expanding shockwaves
       for (let i = shockwavesRef.current.length - 1; i >= 0; i--) {
         const sw = shockwavesRef.current[i];
+        if (!sw) continue;
         sw.r += sw.speed;
         sw.alpha -= 0.013;
 
@@ -324,6 +326,7 @@ export function SplashScreen({ onComplete, durationMs = 3000 }: SplashScreenProp
       // 4. Draw burst particles spreading dynamically
       for (let i = burstParticlesRef.current.length - 1; i >= 0; i--) {
         const p = burstParticlesRef.current[i];
+        if (!p) continue;
         p.x += p.vx;
         p.y += p.vy;
         p.vx *= 0.965;
