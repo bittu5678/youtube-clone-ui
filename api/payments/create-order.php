@@ -78,7 +78,7 @@ if ($purpose === 'ads_promotion') {
         'plan-7-days' => 100.00,
         'plan-15-days' => 200.00,
         'plan-monthly' => 300.00,
-        'plan-yearly' => 30000.00,
+        'plan-yearly' => 3000.00,
     ];
     $amount = $pricing[$planId] ?? 300.00;
 } elseif ($purpose !== 'premium_video_upload') {

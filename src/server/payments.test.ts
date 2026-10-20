@@ -1,8 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { verifyServerPayment, verifyPayment } from "./payments";
-import { handleApiRequest } from "./api-handler";
+import { verifyServerPayment, verifyPayment, PRICING_CONFIG } from "./payments";
+import { handleApiRequest, isAdPromotionActive } from "./api-handler";
+import { isPromotionActive } from "../lib/video-service";
 import { api } from "../lib/api";
 import { processWithdrawal } from "../lib/ledger-service";
 
@@ -617,7 +618,7 @@ describe("Razorpay Real Order Creation & Gateway Verification Tests", () => {
     assert.equal(adsMonthly.amount, 300.0);
     assert.equal(adsMonthly.amountInSubunits, 30000);
 
-    // Ads promotion: yearly = ₹30,000 / 3000000 paise
+    // Ads promotion: yearly = ₹3,000 / 300000 paise
     const adsYearly = await createServerPaymentOrder(
       {
         purpose: "ads_promotion",
@@ -630,8 +631,8 @@ describe("Razorpay Real Order Creation & Gateway Verification Tests", () => {
         RAZORPAY_SKIP_REMOTE_CHECK: "true",
       },
     );
-    assert.equal(adsYearly.amount, 30000.0);
-    assert.equal(adsYearly.amountInSubunits, 3000000);
+    assert.equal(adsYearly.amount, 3000.0);
+    assert.equal(adsYearly.amountInSubunits, 300000);
   });
 
   it("3. API create-order route returns 503 when credentials missing", async () => {
@@ -663,7 +664,7 @@ describe("Razorpay Real Order Creation & Gateway Verification Tests", () => {
       { planId: "plan-7-days", expectedAmount: 100.0 },
       { planId: "plan-15-days", expectedAmount: 200.0 },
       { planId: "plan-monthly", expectedAmount: 300.0 },
-      { planId: "plan-yearly", expectedAmount: 30000.0 },
+      { planId: "plan-yearly", expectedAmount: 3000.0 },
     ];
 
     for (const { planId, expectedAmount } of testCases) {
@@ -706,7 +707,7 @@ describe("Razorpay Real Order Creation & Gateway Verification Tests", () => {
       );
     }
 
-    // Verify amount mismatch rejection: e.g. claiming ₹100 for yearly ₹30,000 plan
+    // Verify amount mismatch rejection: e.g. claiming ₹100 for yearly ₹3,000 plan
     const badOrderId = `ord_test_mismatch_${Date.now()}`;
     const badPayId = `pay_test_mismatch_${Date.now()}`;
     const badSig = crypto
@@ -724,7 +725,7 @@ describe("Razorpay Real Order Creation & Gateway Verification Tests", () => {
         userId: "FT483921",
         purpose: "ads_promotion",
         metadata: { planId: "plan-yearly" },
-        amount: 100.0, // Fraudulent claim: ₹100 instead of ₹30,000
+        amount: 100.0, // Fraudulent claim: ₹100 instead of ₹3,000
       }),
     });
 
@@ -738,7 +739,7 @@ describe("Razorpay Real Order Creation & Gateway Verification Tests", () => {
     assert.equal(mismatchRes.status, 400, "Mismatched amount must return 400");
     const mismatchBody = await mismatchRes.json();
     assert.equal(mismatchBody.verified, false);
-    assert.match(mismatchBody.error, /does not match expected fee of ₹30000\.00/i);
+    assert.match(mismatchBody.error, /does not match expected fee of ₹3000\.00/i);
   });
 
   it("5. Rejects unauthorized video promotion order creation by non-owner user with 403", async () => {
@@ -868,3 +869,79 @@ describe("Razorpay Real Order Creation & Gateway Verification Tests", () => {
     );
   });
 });
+
+describe("Task 32: Yearly Ads Pricing & Expired Ad Promotion Validation Tests", () => {
+  it("1. Verifies authoritative ₹3,000 yearly ads plan pricing across server configurations", () => {
+    const yearlyPlan = PRICING_CONFIG.ADS_PROMOTION["plan-yearly"];
+    assert.equal(yearlyPlan.price, 3000, "Yearly ads plan must be exactly ₹3,000");
+    assert.equal(yearlyPlan.days, 365, "Yearly ads plan duration must be 365 days");
+
+    // All four plan prices must agree with company specifications
+    assert.equal(PRICING_CONFIG.ADS_PROMOTION["plan-7-days"].price, 100);
+    assert.equal(PRICING_CONFIG.ADS_PROMOTION["plan-15-days"].price, 200);
+    assert.equal(PRICING_CONFIG.ADS_PROMOTION["plan-monthly"].price, 300);
+    assert.equal(PRICING_CONFIG.ADS_PROMOTION["plan-yearly"].price, 3000);
+  });
+
+  it("2. isAdPromotionActive and isPromotionActive return true strictly for active future promotions", () => {
+    const futureDate = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+    const activeSample = {
+      isPromoted: true,
+      promotionExpiresAt: futureDate,
+    };
+
+    assert.equal(isAdPromotionActive(activeSample), true);
+    assert.equal(isPromotionActive(activeSample), true);
+  });
+
+  it("3. isAdPromotionActive and isPromotionActive return false for expired promotions (past timestamp)", () => {
+    const pastDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    const expiredSample = {
+      is_promoted: true,
+      promotion_expires_at: pastDate,
+    };
+
+    assert.equal(isAdPromotionActive(expiredSample), false);
+    assert.equal(isPromotionActive(expiredSample), false);
+  });
+
+  it("4. Safely handles null, undefined, or empty expiry timestamps by failing closed (returns false)", () => {
+    const nullExpirySample = { isPromoted: true, promotionExpiresAt: null };
+    const missingExpirySample = { is_promoted: true };
+    const invalidDateSample = { isPromoted: true, promotionExpiresAt: "invalid-timestamp" };
+    const unpromotedSample = { isPromoted: false, promotionExpiresAt: new Date(Date.now() + 100000).toISOString() };
+
+    assert.equal(isAdPromotionActive(nullExpirySample as any), false);
+    assert.equal(isPromotionActive(nullExpirySample as any), false);
+
+    assert.equal(isAdPromotionActive(missingExpirySample as any), false);
+    assert.equal(isPromotionActive(missingExpirySample as any), false);
+
+    assert.equal(isAdPromotionActive(invalidDateSample), false);
+    assert.equal(isPromotionActive(invalidDateSample), false);
+
+    assert.equal(isAdPromotionActive(unpromotedSample), false);
+    assert.equal(isPromotionActive(unpromotedSample), false);
+  });
+
+  it("5. API /api/videos/list correctly assigns isPromoted false and deprioritizes expired promotions", async () => {
+    const req = new Request("http://localhost:3000/api/videos/list");
+    const res = await handleApiRequest(req);
+    assert.ok(res);
+    assert.equal(res.status, 200);
+
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.ok(Array.isArray(body.videos));
+
+    // Verify all returned videos have isPromoted consistently matching expiry evaluation
+    for (const vid of body.videos) {
+      if (vid.isPromoted) {
+        assert.ok(vid.promotionExpiresAt, "Promoted video must have an expiry timestamp");
+        const exp = new Date(vid.promotionExpiresAt).getTime();
+        assert.ok(exp > Date.now(), `Active promoted video must have future expiry date: ${vid.promotionExpiresAt}`);
+      }
+    }
+  });
+});
+

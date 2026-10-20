@@ -22,7 +22,7 @@ export const PRICING_CONFIG = {
     "plan-7-days": { days: 7, price: 100, label: "7 Days" },
     "plan-15-days": { days: 15, price: 200, label: "15 Days" },
     "plan-monthly": { days: 30, price: 300, label: "1 Month" },
-    "plan-yearly": { days: 365, price: 30000, label: "1 Year" },
+    "plan-yearly": { days: 365, price: 3000, label: "1 Year" },
   },
 } as const;
 

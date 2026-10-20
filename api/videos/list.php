@@ -56,10 +56,11 @@ try {
             id, user_id, creator_name, title, description, video_url, thumbnail_url,
             video_type, content_type, category, duration, views, likes,
             payment_status, payment_id, payment_amount, is_promoted,
-            promotion_plan, promotion_expires_at, created_at, updated_at
+            promotion_plan, promotion_expires_at, created_at, updated_at,
+            (is_promoted = 1 AND promotion_expires_at IS NOT NULL AND promotion_expires_at > NOW()) AS is_active_promoted
         FROM uploaded_videos
         {$whereSql}
-        ORDER BY is_promoted DESC, created_at DESC
+        ORDER BY is_active_promoted DESC, created_at DESC
         LIMIT {$limit} OFFSET {$offset}
     ";
 
@@ -68,6 +69,9 @@ try {
     $rows = $stmt->fetchAll();
 
     $videos = array_map(function ($row) {
+        $expiryTime = !empty($row['promotion_expires_at']) ? strtotime($row['promotion_expires_at']) : false;
+        $isActivePromoted = !empty($row['is_promoted']) && $expiryTime !== false && $expiryTime > time();
+
         return [
             'id' => $row['id'],
             'userId' => $row['user_id'],
@@ -94,8 +98,12 @@ try {
             'payment_id' => $row['payment_id'],
             'paymentAmount' => (float)$row['payment_amount'],
             'payment_amount' => (float)$row['payment_amount'],
-            'isPromoted' => (bool)$row['is_promoted'],
-            'is_promoted' => (bool)$row['is_promoted'],
+            'isPromoted' => (bool)$isActivePromoted,
+            'is_promoted' => (bool)$isActivePromoted,
+            'isActivePromoted' => (bool)$isActivePromoted,
+            'is_active_promoted' => (bool)$isActivePromoted,
+            'rawIsPromoted' => (bool)$row['is_promoted'],
+            'raw_is_promoted' => (bool)$row['is_promoted'],
             'promotionPlan' => $row['promotion_plan'],
             'promotionExpiresAt' => $row['promotion_expires_at'],
             'createdAt' => $row['created_at'],

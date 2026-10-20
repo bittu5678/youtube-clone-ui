@@ -412,7 +412,7 @@ function FourOptionsSelectionView({
                   1 Month = ₹300
                 </div>
                 <div className="rounded-lg bg-emerald-500/10 px-2 py-1 text-emerald-300">
-                  1 Year = ₹30,000
+                  1 Year = ₹3,000
                 </div>
               </div>
             </div>
@@ -1339,7 +1339,7 @@ function PremiumVideoUploadView({
 }
 
 /* -------------------------------------------------------------------------- */
-/* AD PROMOTION VIEW (Exact Pricing: 7d=100, 15d=200, 1mo=300, 1yr=30,000)   */
+/* AD PROMOTION VIEW (Exact Pricing: 7d=100, 15d=200, 1mo=300, 1yr=3,000)    */
 /* -------------------------------------------------------------------------- */
 function AdPromotionUploadView({
   onBack,
@@ -1404,8 +1404,8 @@ function AdPromotionUploadView({
       name: "1_year",
       label: "1 Year",
       days: 365,
-      price: 30000,
-      rateText: "₹82.19/day",
+      price: 3000,
+      rateText: "₹8.22/day",
     },
   ];
 

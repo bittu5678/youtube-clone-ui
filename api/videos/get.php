@@ -27,6 +27,9 @@ try {
     // Increment views counter
     $pdo->prepare('UPDATE uploaded_videos SET views = views + 1 WHERE id = ?')->execute([$id]);
 
+    $expiryTime = !empty($row['promotion_expires_at']) ? strtotime($row['promotion_expires_at']) : false;
+    $isActivePromoted = !empty($row['is_promoted']) && $expiryTime !== false && $expiryTime > time();
+
     $video = [
         'id' => $row['id'],
         'userId' => $row['user_id'],
@@ -53,8 +56,12 @@ try {
         'payment_id' => $row['payment_id'],
         'paymentAmount' => (float)$row['payment_amount'],
         'payment_amount' => (float)$row['payment_amount'],
-        'isPromoted' => (bool)$row['is_promoted'],
-        'is_promoted' => (bool)$row['is_promoted'],
+        'isPromoted' => (bool)$isActivePromoted,
+        'is_promoted' => (bool)$isActivePromoted,
+        'isActivePromoted' => (bool)$isActivePromoted,
+        'is_active_promoted' => (bool)$isActivePromoted,
+        'rawIsPromoted' => (bool)$row['is_promoted'],
+        'raw_is_promoted' => (bool)$row['is_promoted'],
         'promotionPlan' => $row['promotion_plan'],
         'promotionExpiresAt' => $row['promotion_expires_at'],
         'createdAt' => $row['created_at'],

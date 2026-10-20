@@ -445,7 +445,7 @@ export const findVideo = (id: string): Video | undefined => {
               videoUrl: resolveMediaUrl(match.videoUrl || match.video_url),
               videoType: match.videoType || match.video_type || "free",
               contentType: match.contentType || match.content_type || "long",
-              isPromoted: Boolean(match.isPromoted || match.is_promoted),
+              isPromoted: checkAdPromotionActive(match),
             };
           }
         }
@@ -457,6 +457,20 @@ export const findVideo = (id: string): Video | undefined => {
 
   return undefined;
 };
+
+function checkAdPromotionActive(item: {
+  isPromoted?: boolean | number | null | undefined;
+  is_promoted?: boolean | number | null | undefined;
+  promotionExpiresAt?: string | null | undefined;
+  promotion_expires_at?: string | null | undefined;
+}): boolean {
+  const isMarked = Boolean(item.isPromoted ?? item.is_promoted);
+  if (!isMarked) return false;
+  const expiry = item.promotionExpiresAt || item.promotion_expires_at;
+  if (!expiry) return false;
+  const t = new Date(expiry).getTime();
+  return !Number.isNaN(t) && t > Date.now();
+}
 
 /**
  * Asynchronously locates a video by ID, querying the live PHP REST API / MySQL database
@@ -499,7 +513,7 @@ export async function findVideoAsync(id: string): Promise<Video | undefined> {
         videoUrl: resolveMediaUrl(v.video_url || v.videoUrl),
         videoType: v.video_type || v.videoType || "free",
         contentType: v.content_type || v.contentType || "long",
-        isPromoted: Boolean(v.is_promoted || v.isPromoted),
+        isPromoted: checkAdPromotionActive(v),
       };
     }
   } catch (err) {

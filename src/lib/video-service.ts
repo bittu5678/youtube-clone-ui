@@ -293,6 +293,29 @@ export interface FetchVideosOptions {
 }
 
 /**
+ * Safely evaluates whether an ad promotion is currently active.
+ * An ad promotion is active ONLY IF:
+ * 1. Marked as promoted (isPromoted / is_promoted is true)
+ * 2. Expiry timestamp is present, valid, and strictly in the future (> Date.now())
+ * 
+ * Expired promotions, or those with null/missing/invalid expiry timestamps, return false.
+ */
+export function isPromotionActive(video: {
+  isPromoted?: boolean | number | null | undefined;
+  is_promoted?: boolean | number | null | undefined;
+  promotionExpiresAt?: string | null | undefined;
+  promotion_expires_at?: string | null | undefined;
+}): boolean {
+  const isMarked = Boolean(video.isPromoted ?? video.is_promoted);
+  if (!isMarked) return false;
+  const expiryRaw = video.promotionExpiresAt || video.promotion_expires_at;
+  if (!expiryRaw) return false;
+  const expiryTime = new Date(expiryRaw).getTime();
+  if (Number.isNaN(expiryTime)) return false;
+  return expiryTime > Date.now();
+}
+
+/**
  * Fetches videos from the production PHP REST API / MySQL database.
  * Falls back to local stored cache if offline, and syncs newly retrieved items.
  */
@@ -315,34 +338,41 @@ export async function fetchUploadedVideos(
     const res = await api.videos.list(listParams);
 
     if (res && res.videos && Array.isArray(res.videos)) {
-      const mapped = res.videos.map((d: any) => ({
-        id: String(d.id),
-        userId: d.user_id || d.userId || "FT102857",
-        creatorName: d.creator_name || d.creatorName || "FaceTube Creator",
-        title: d.title || "Untitled Video",
-        description: d.description || "",
-        videoUrl: resolveMediaUrl(d.video_url || d.videoUrl || ""),
-        thumbnailUrl: resolveVideoThumbnail({
-          thumbnailUrl: d.thumbnail_url || d.thumbnailUrl,
-          category: d.category,
-        }),
-        videoType: (d.video_type || d.videoType || "free") as VideoType,
-        contentType: (d.content_type || d.contentType || "long") as ContentType,
-        category: d.category || "General",
-        duration: d.duration || "0:00",
-        views: Number(d.views) || 0,
-        likes: Number(d.likes) || 0,
-        paymentStatus: (d.payment_status ||
-          d.paymentStatus ||
-          "not_required") as VideoPaymentStatus,
-        paymentId: d.payment_id || d.paymentId,
-        paymentAmount: Number(d.payment_amount || d.paymentAmount) || 0,
-        isPromoted: Boolean(d.is_promoted ?? d.isPromoted),
-        promotionPlan: d.promotion_plan || d.promotionPlan,
-        promotionExpiresAt: d.promotion_expires_at || d.promotionExpiresAt,
-        createdAt: d.created_at || d.createdAt || new Date().toISOString(),
-        updatedAt: d.updated_at || d.updatedAt || d.created_at || new Date().toISOString(),
-      }));
+      const mapped = res.videos.map((d: any) => {
+        const active = isPromotionActive({
+          isPromoted: d.is_promoted ?? d.isPromoted,
+          promotionExpiresAt: d.promotion_expires_at || d.promotionExpiresAt,
+        });
+
+        return {
+          id: String(d.id),
+          userId: d.user_id || d.userId || "FT102857",
+          creatorName: d.creator_name || d.creatorName || "FaceTube Creator",
+          title: d.title || "Untitled Video",
+          description: d.description || "",
+          videoUrl: resolveMediaUrl(d.video_url || d.videoUrl || ""),
+          thumbnailUrl: resolveVideoThumbnail({
+            thumbnailUrl: d.thumbnail_url || d.thumbnailUrl,
+            category: d.category,
+          }),
+          videoType: (d.video_type || d.videoType || "free") as VideoType,
+          contentType: (d.content_type || d.contentType || "long") as ContentType,
+          category: d.category || "General",
+          duration: d.duration || "0:00",
+          views: Number(d.views) || 0,
+          likes: Number(d.likes) || 0,
+          paymentStatus: (d.payment_status ||
+            d.paymentStatus ||
+            "not_required") as VideoPaymentStatus,
+          paymentId: d.payment_id || d.paymentId,
+          paymentAmount: Number(d.payment_amount || d.paymentAmount) || 0,
+          isPromoted: active,
+          promotionPlan: d.promotion_plan || d.promotionPlan,
+          promotionExpiresAt: d.promotion_expires_at || d.promotionExpiresAt,
+          createdAt: d.created_at || d.createdAt || new Date().toISOString(),
+          updatedAt: d.updated_at || d.updatedAt || d.created_at || new Date().toISOString(),
+        };
+      });
 
       // Cache into local storage
       if (
@@ -387,6 +417,15 @@ export async function fetchUploadedVideos(
         v.creatorName.toLowerCase().includes(s),
     );
   }
+
+  // Prioritize active promotions at top of feeds
+  all.sort((a, b) => {
+    const pA = isPromotionActive(a) ? 1 : 0;
+    const pB = isPromotionActive(b) ? 1 : 0;
+    if (pA !== pB) return pB - pA;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
   return all;
 }
 
@@ -600,7 +639,7 @@ export function convertUploadedToCatalogVideo(v: UploadedVideo): Video {
     contentType:
       v.contentType ||
       (isShortVideo({ contentType: v.contentType, duration: v.duration }) ? "short" : "long"),
-    isPromoted: Boolean(v.isPromoted),
+    isPromoted: isPromotionActive(v),
   };
 }
 

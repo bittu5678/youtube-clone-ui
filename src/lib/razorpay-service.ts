@@ -275,7 +275,7 @@ export async function initiatePremiumVideoPayment(
 
 /**
  * Initiates Razorpay test payment flow for Ads Promotion
- * 7 Days = ₹100 | 15 Days = ₹200 | 1 Month = ₹300 | 1 Year = ₹30,000
+ * 7 Days = ₹100 | 15 Days = ₹200 | 1 Month = ₹300 | 1 Year = ₹3,000
  */
 export async function initiateAdsPromotionPayment(params: {
   userId: string;

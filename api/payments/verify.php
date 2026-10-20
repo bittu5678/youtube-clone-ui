@@ -195,7 +195,7 @@ try {
         $planId = trim($input['planId'] ?? ($input['plan_id'] ?? ($input['metadata']['planId'] ?? '')));
 
         if ($purpose === 'ads_promotion') {
-            $pricing = ['plan-7-days' => 100.0, 'plan-15-days' => 200.0, 'plan-monthly' => 300.0, 'plan-yearly' => 30000.0];
+            $pricing = ['plan-7-days' => 100.0, 'plan-15-days' => 200.0, 'plan-monthly' => 300.0, 'plan-yearly' => 3000.0];
             $amount = $pricing[$planId] ?? 300.0;
         } else {
             $amount = 6.00;

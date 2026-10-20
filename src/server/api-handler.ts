@@ -22,6 +22,29 @@ import {
 const DATA_DIR = path.resolve(process.cwd(), "data");
 const STORE_FILE = path.join(DATA_DIR, "facetube_store.json");
 
+/**
+ * Safely evaluates whether an ad promotion is currently active.
+ * An ad promotion is active ONLY IF:
+ * 1. Marked as promoted (is_promoted / isPromoted is truthy)
+ * 2. Expiry timestamp is present, valid, and strictly in the future (> Date.now())
+ * 
+ * Expired promotions, or those with null/missing/invalid expiry timestamps, return false.
+ */
+export function isAdPromotionActive(video: {
+  is_promoted?: boolean | number | null | undefined;
+  isPromoted?: boolean | number | null | undefined;
+  promotion_expires_at?: string | null | undefined;
+  promotionExpiresAt?: string | null | undefined;
+}): boolean {
+  const isMarked = Boolean(video.is_promoted ?? video.isPromoted);
+  if (!isMarked) return false;
+  const expiryRaw = video.promotion_expires_at ?? video.promotionExpiresAt;
+  if (!expiryRaw) return false;
+  const expiryTime = new Date(expiryRaw).getTime();
+  if (Number.isNaN(expiryTime)) return false;
+  return expiryTime > Date.now();
+}
+
 interface ServerStore {
   users: Array<{
     id: string;
@@ -2342,51 +2365,62 @@ export async function handleApiRequest(
               id, user_id, creator_name, title, description, video_url, thumbnail_url,
               video_type, content_type, category, duration, views, likes,
               payment_status, payment_id, payment_amount, is_promoted,
-              promotion_plan, promotion_expires_at, created_at, updated_at
+              promotion_plan, promotion_expires_at, created_at, updated_at,
+              (is_promoted = 1 AND promotion_expires_at IS NOT NULL AND promotion_expires_at > NOW()) AS is_active_promoted
             FROM uploaded_videos
             ${whereSql}
-            ORDER BY is_promoted DESC, created_at DESC
+            ORDER BY is_active_promoted DESC, created_at DESC
             LIMIT 100
           `;
           const [rows] = (await pool.query(sql, params)) as any;
           if (Array.isArray(rows) && rows.length > 0) {
-            const formatted = rows.map((r: any) => ({
-              id: String(r.id),
-              userId: r.user_id,
-              user_id: r.user_id,
-              creatorName: r.creator_name,
-              creator_name: r.creator_name,
-              title: r.title,
-              description: r.description || "",
-              videoUrl: r.video_url,
-              video_url: r.video_url,
-              thumbnailUrl: r.thumbnail_url || "",
-              thumbnail_url: r.thumbnail_url || "",
-              videoType: r.video_type,
-              video_type: r.video_type,
-              contentType: r.content_type,
-              content_type: r.content_type,
-              category: r.category || "General",
-              duration: r.duration || "0:00",
-              views: Number(r.views) || 0,
-              likes: Number(r.likes) || 0,
-              paymentStatus: r.payment_status || "not_required",
-              payment_status: r.payment_status || "not_required",
-              paymentId: r.payment_id,
-              payment_id: r.payment_id,
-              paymentAmount: Number(r.payment_amount) || 0,
-              payment_amount: Number(r.payment_amount) || 0,
-              isPromoted: Boolean(r.is_promoted),
-              is_promoted: Boolean(r.is_promoted),
-              promotionPlan: r.promotion_plan,
-              promotion_plan: r.promotion_plan,
-              promotionExpiresAt: r.promotion_expires_at,
-              promotion_expires_at: r.promotion_expires_at,
-              createdAt: r.created_at,
-              created_at: r.created_at,
-              updatedAt: r.updated_at,
-              updated_at: r.updated_at,
-            }));
+            const formatted = rows.map((r: any) => {
+              const active = isAdPromotionActive({
+                is_promoted: r.is_promoted,
+                promotion_expires_at: r.promotion_expires_at,
+              });
+              return {
+                id: String(r.id),
+                userId: r.user_id,
+                user_id: r.user_id,
+                creatorName: r.creator_name,
+                creator_name: r.creator_name,
+                title: r.title,
+                description: r.description || "",
+                videoUrl: r.video_url,
+                video_url: r.video_url,
+                thumbnailUrl: r.thumbnail_url || "",
+                thumbnail_url: r.thumbnail_url || "",
+                videoType: r.video_type,
+                video_type: r.video_type,
+                contentType: r.content_type,
+                content_type: r.content_type,
+                category: r.category || "General",
+                duration: r.duration || "0:00",
+                views: Number(r.views) || 0,
+                likes: Number(r.likes) || 0,
+                paymentStatus: r.payment_status || "not_required",
+                payment_status: r.payment_status || "not_required",
+                paymentId: r.payment_id,
+                payment_id: r.payment_id,
+                paymentAmount: Number(r.payment_amount) || 0,
+                payment_amount: Number(r.payment_amount) || 0,
+                isPromoted: active,
+                is_promoted: active,
+                isActivePromoted: active,
+                is_active_promoted: active,
+                rawIsPromoted: Boolean(r.is_promoted),
+                raw_is_promoted: Boolean(r.is_promoted),
+                promotionPlan: r.promotion_plan,
+                promotion_plan: r.promotion_plan,
+                promotionExpiresAt: r.promotion_expires_at,
+                promotion_expires_at: r.promotion_expires_at,
+                createdAt: r.created_at,
+                created_at: r.created_at,
+                updatedAt: r.updated_at,
+                updated_at: r.updated_at,
+              };
+            });
             return jsonResponse({ success: true, videos: formatted, total: formatted.length });
           }
         } catch (dbErr) {
@@ -2419,31 +2453,41 @@ export async function handleApiRequest(
         );
       }
 
-      // Prioritize promoted videos at top of feeds
+      // Prioritize actively promoted videos (expiry still in the future) at top of feeds
       filtered.sort((a, b) => {
-        const pA = a.is_promoted ? 1 : 0;
-        const pB = b.is_promoted ? 1 : 0;
+        const pA = isAdPromotionActive(a) ? 1 : 0;
+        const pB = isAdPromotionActive(b) ? 1 : 0;
         if (pA !== pB) return pB - pA;
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
 
-      const formatted = filtered.map((v) => ({
-        ...v,
-        userId: v.user_id,
-        creatorName: v.creator_name,
-        videoUrl: v.video_url,
-        thumbnailUrl: v.thumbnail_url,
-        videoType: v.video_type,
-        contentType: v.content_type,
-        paymentStatus: v.payment_status,
-        paymentId: v.payment_id,
-        paymentAmount: v.payment_amount,
-        isPromoted: v.is_promoted,
-        promotionPlan: v.promotion_plan,
-        promotionExpiresAt: v.promotion_expires_at,
-        createdAt: v.created_at,
-        updatedAt: v.updated_at,
-      }));
+      const formatted = filtered.map((v) => {
+        const active = isAdPromotionActive(v);
+        return {
+          ...v,
+          userId: v.user_id,
+          creatorName: v.creator_name,
+          videoUrl: v.video_url,
+          thumbnailUrl: v.thumbnail_url,
+          videoType: v.video_type,
+          contentType: v.content_type,
+          paymentStatus: v.payment_status,
+          paymentId: v.payment_id,
+          paymentAmount: v.payment_amount,
+          isPromoted: active,
+          is_promoted: active,
+          isActivePromoted: active,
+          is_active_promoted: active,
+          rawIsPromoted: Boolean(v.is_promoted),
+          raw_is_promoted: Boolean(v.is_promoted),
+          promotionPlan: v.promotion_plan,
+          promotion_plan: v.promotion_plan,
+          promotionExpiresAt: v.promotion_expires_at,
+          promotion_expires_at: v.promotion_expires_at,
+          createdAt: v.created_at,
+          updatedAt: v.updated_at,
+        };
+      });
 
       return jsonResponse({ success: true, videos: formatted, total: formatted.length });
     }
@@ -2462,6 +2506,10 @@ export async function handleApiRequest(
           ])) as any;
           if (Array.isArray(rows) && rows.length > 0) {
             const r = rows[0];
+            const active = isAdPromotionActive({
+              is_promoted: r.is_promoted,
+              promotion_expires_at: r.promotion_expires_at,
+            });
             return jsonResponse({
               success: true,
               video: {
@@ -2490,8 +2538,12 @@ export async function handleApiRequest(
                 payment_id: r.payment_id,
                 paymentAmount: Number(r.payment_amount) || 0,
                 payment_amount: Number(r.payment_amount) || 0,
-                isPromoted: Boolean(r.is_promoted),
-                is_promoted: Boolean(r.is_promoted),
+                isPromoted: active,
+                is_promoted: active,
+                isActivePromoted: active,
+                is_active_promoted: active,
+                rawIsPromoted: Boolean(r.is_promoted),
+                raw_is_promoted: Boolean(r.is_promoted),
                 promotionPlan: r.promotion_plan,
                 promotion_plan: r.promotion_plan,
                 promotionExpiresAt: r.promotion_expires_at,
@@ -2510,6 +2562,7 @@ export async function handleApiRequest(
 
       const v = store.videos.find((item) => item.id === id);
       if (v) {
+        const active = isAdPromotionActive(v);
         return jsonResponse({
           success: true,
           video: {
@@ -2523,9 +2576,16 @@ export async function handleApiRequest(
             paymentStatus: v.payment_status,
             paymentId: v.payment_id,
             paymentAmount: v.payment_amount,
-            isPromoted: v.is_promoted,
+            isPromoted: active,
+            is_promoted: active,
+            isActivePromoted: active,
+            is_active_promoted: active,
+            rawIsPromoted: Boolean(v.is_promoted),
+            raw_is_promoted: Boolean(v.is_promoted),
             promotionPlan: v.promotion_plan,
+            promotion_plan: v.promotion_plan,
             promotionExpiresAt: v.promotion_expires_at,
+            promotion_expires_at: v.promotion_expires_at,
             createdAt: v.created_at,
             updatedAt: v.updated_at,
           },
