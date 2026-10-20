@@ -84,6 +84,7 @@ export interface InitiatePremiumVideoPaymentParams {
   videoUrl: string;
   thumbnailUrl?: string;
   category?: string;
+  duration?: string;
   videoId?: string;
   videoType?: VideoType;
   contentType: ContentType; // "short" | "long"
@@ -200,6 +201,7 @@ export async function initiatePremiumVideoPayment(
           category: params.category || "General",
           videoType: "premium",
           contentType: params.contentType,
+          ...(params.duration !== undefined && { duration: params.duration }),
           paymentStatus: "paid",
           paymentId,
           paymentAmount: 6,
