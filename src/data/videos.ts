@@ -401,10 +401,11 @@ export const allVideos: Video[] = [...recommended, ...trending, ...recent, ...se
 export const findVideo = (id: string): Video | undefined => {
   const staticFound = allVideos.find((v) => v.id === id);
   if (staticFound) {
+    const thumbUrl = staticFound.thumb || staticFound.thumbnail || "";
     return {
       ...staticFound,
-      thumbnail: staticFound.thumb || staticFound.thumbnail,
-      thumbnailUrl: staticFound.thumb || staticFound.thumbnailUrl,
+      thumbnail: thumbUrl,
+      thumbnailUrl: staticFound.thumbnailUrl || thumbUrl,
     };
   }
 
