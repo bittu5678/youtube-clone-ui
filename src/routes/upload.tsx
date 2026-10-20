@@ -58,15 +58,23 @@ interface UploadSearch {
 
 export const Route = createFileRoute("/upload")({
   validateSearch: (search: Record<string, unknown>): UploadSearch => {
+    const rawMode = search["mode"];
+    const rawFormat = search["format"];
     const validModes: MainUploadMode[] = ["free", "premium", "ad_promotion", "image"];
     const validFormats: VideoFormatChoice[] = ["short", "long"];
-    const mode = search.mode as MainUploadMode;
-    const format = search.format as VideoFormatChoice;
 
-    return {
-      mode: validModes.includes(mode) ? mode : null,
-      format: validFormats.includes(format) ? format : undefined,
+    const isModeValid =
+      typeof rawMode === "string" && validModes.includes(rawMode as MainUploadMode);
+    const isFormatValid =
+      typeof rawFormat === "string" && validFormats.includes(rawFormat as VideoFormatChoice);
+
+    const result: UploadSearch = {
+      mode: isModeValid ? (rawMode as MainUploadMode) : null,
     };
+    if (isFormatValid) {
+      result.format = rawFormat as VideoFormatChoice;
+    }
+    return result;
   },
   head: () => ({
     meta: [
@@ -1061,7 +1069,7 @@ function PremiumVideoUploadView({
         category,
         contentType: format,
         duration: detectedDuration || (format === "short" ? "0:45" : "14:20"),
-        directReferrerId: referrerId,
+        ...(referrerId ? { directReferrerId: referrerId } : {}),
         onSuccess: async () => {
           setUploading(false);
           setUploadSuccess(true);
@@ -1346,7 +1354,27 @@ function AdPromotionUploadView({
     profile?.name || dbUser?.name || user?.user_metadata?.full_name || "Alex Rivera";
   const referrerId = profile?.referral_code || dbUser?.referral_code || undefined;
 
-  const DURATION_PLANS = [
+  type AdsPlanKey = "plan-7-days" | "plan-15-days" | "plan-monthly" | "plan-yearly";
+
+  interface DurationPlan {
+    id: AdsPlanKey;
+    name: string;
+    label: string;
+    days: number;
+    price: number;
+    rateText: string;
+  }
+
+  const DEFAULT_DURATION_PLAN: DurationPlan = {
+    id: "plan-7-days",
+    name: "7_days",
+    label: "7 Days",
+    days: 7,
+    price: 100,
+    rateText: "₹14.28/day",
+  };
+
+  const DURATION_PLANS: DurationPlan[] = [
     {
       id: "plan-7-days",
       name: "7_days",
@@ -1382,7 +1410,7 @@ function AdPromotionUploadView({
   ];
 
   const [format, setFormat] = useState<VideoFormatChoice>("short");
-  const [selectedPlanId, setSelectedPlanId] = useState("plan-7-days");
+  const [selectedPlanId, setSelectedPlanId] = useState<string>("plan-7-days");
   const [availableVideos, setAvailableVideos] = useState<UploadedVideo[]>([]);
   const [selectedVideoId, setSelectedVideoId] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1391,11 +1419,15 @@ function AdPromotionUploadView({
   useEffect(() => {
     fetchUploadedVideos(userId).then((vids) => {
       setAvailableVideos(vids);
-      if (vids.length > 0) setSelectedVideoId(vids[0].id);
+      const firstVid = vids[0];
+      if (firstVid) setSelectedVideoId(firstVid.id);
     });
   }, [userId]);
 
-  const currentPlan = DURATION_PLANS.find((p) => p.id === selectedPlanId) || DURATION_PLANS[0];
+  const currentPlan: DurationPlan =
+    DURATION_PLANS.find((p) => p.id === selectedPlanId) ??
+    DURATION_PLANS[0] ??
+    DEFAULT_DURATION_PLAN;
 
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1410,11 +1442,11 @@ function AdPromotionUploadView({
       userName: creatorName,
       userEmail: user?.email || "creator@facetube.app",
       videoId: selectedVideoId || "vid-custom",
-      planId: currentPlan.id as "plan-7-days" | "plan-15-days" | "plan-monthly" | "plan-yearly",
+      planId: currentPlan.id,
       planName: currentPlan.label,
       durationDays: currentPlan.days,
       price: currentPlan.price,
-      directReferrerId: referrerId,
+      ...(referrerId ? { directReferrerId: referrerId } : {}),
       onSuccess: () => {
         setIsProcessing(false);
         setActivated(true);
