@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   ThumbsUp,
   ThumbsDown,
@@ -133,13 +133,13 @@ function ShortsPage() {
   const fallbackShort: ShortItem = SHORTS_LIST[0] as ShortItem;
   const activeShort: ShortItem = allShorts[currentIndex] ?? allShorts[0] ?? fallbackShort;
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     setCurrentIndex((prev) => (prev + 1) % allShorts.length);
-  };
+  }, [allShorts.length]);
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     setCurrentIndex((prev) => (prev - 1 + allShorts.length) % allShorts.length);
-  };
+  }, [allShorts.length]);
 
   // Keyboard navigation: ArrowUp, ArrowDown, Spacebar
   useEffect(() => {
@@ -159,7 +159,7 @@ function ShortsPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [handleNext, handlePrev]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const firstTouch = e.touches[0];

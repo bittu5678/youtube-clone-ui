@@ -24,10 +24,25 @@ export const Route = createFileRoute("/live")({
 
 const LIVE_CATEGORIES = ["All Live", "Coding & Tech", "Gaming", "Music", "Science & Tech"];
 
+const DEFAULT_STREAM: LiveStream = {
+  id: "live-default",
+  title: "🔴 LIVE: 24-Hour Lo-Fi Coding & System Architecture Sprint (Q&A)",
+  streamer: "DevForge Live",
+  streamerHandle: "@devforge",
+  initials: "DF",
+  viewers: "12,450",
+  category: "Coding & Tech",
+  tags: ["typescript", "fullstack", "react"],
+  thumb: "",
+  isLive: true,
+  startedTime: "Started 2 hours ago",
+  chatMessages: [],
+};
+
 function LivePage() {
   const { user, profile } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState("All Live");
-  const [activeStream, setActiveStream] = useState<LiveStream>(LIVE_STREAMS[0]);
+  const [activeStream, setActiveStream] = useState<LiveStream>(LIVE_STREAMS[0] ?? DEFAULT_STREAM);
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState(activeStream.chatMessages);
   const [liked, setLiked] = useState(false);
@@ -69,7 +84,7 @@ function LivePage() {
           <div className="flex items-center gap-2 sm:gap-3">
             <Link
               to="/upload"
-              search={{ type: "long" }}
+              search={{ format: "long" }}
               className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 active:scale-95"
             >
               <Radio className="h-3.5 w-3.5" />

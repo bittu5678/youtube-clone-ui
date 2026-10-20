@@ -49,18 +49,23 @@ export function getMysqlPool(): mysql.Pool | null {
   }
 
   if (!pool) {
-    pool = mysql.createPool({
-      host: conf.host,
-      port: conf.port,
-      user: conf.user,
-      password: conf.password || "",
-      database: conf.database,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-      enableKeepAlive: true,
-      keepAliveInitialDelay: 0,
-    });
+    try {
+      pool = mysql.createPool({
+        host: conf.host,
+        port: conf.port,
+        user: conf.user,
+        password: conf.password || "",
+        database: conf.database,
+        waitForConnections: true,
+        connectionLimit: 10,
+        queueLimit: 0,
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 0,
+      });
+    } catch (err) {
+      console.warn("[AI Studio] MySQL pool creation failed — fallback store active", err);
+      return null;
+    }
   }
 
   return pool;
