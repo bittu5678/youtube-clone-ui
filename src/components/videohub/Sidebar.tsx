@@ -59,7 +59,8 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const [categoriesExpanded, setCategoriesExpanded] = useState(false);
 
   const searchParams = routerState.location.search as Record<string, unknown> | undefined;
-  const currentCategory = (searchParams?.category as string) || "";
+  const rawCategory = searchParams?.["category"];
+  const currentCategory = typeof rawCategory === "string" ? rawCategory : "";
   const isCartoonActive = currentPath === "/" && currentCategory.toLowerCase() === "cartoon";
   const isAgricultureActive =
     currentPath === "/" && currentCategory.toLowerCase() === "agriculture";
