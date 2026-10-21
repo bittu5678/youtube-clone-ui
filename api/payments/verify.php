@@ -266,9 +266,74 @@ try {
             }
         }
 
-        $referralCommission = (!empty($verifiedReferrerId)) ? 1.00 : 0.00;
-        $adminAllocation = $isSpecial ? 4.00 : 1.00;
-        $globalPoolAllocation = $isSpecial ? 0.00 : 3.00;
+        // Resolve Admin user identifier from database
+        $stmtAdmin = $pdo->query("SELECT user_id FROM users WHERE role = 'admin' ORDER BY created_at ASC LIMIT 1");
+        $adminRow = $stmtAdmin->fetch();
+        $adminUserId = $adminRow['user_id'] ?? 'FT102857';
+
+        // Option A Approved Allocation:
+        // Every verified payment is exactly ₹6.
+        // GST/Payment Gateway reporting allocation = ₹1.00 (implicit in ₹6 - ₹5 base).
+        // If valid referrer: Referrer = ₹1.00.
+        // If NO valid referrer: unallocated ₹1.00 redirects to Admin.
+        $hasReferrer = !empty($verifiedReferrerId);
+        $referralCommission = $hasReferrer ? 1.00 : 0.00;
+        $unallocatedReferrerPaise = $hasReferrer ? 0 : 100; // 100 paise if no referrer
+
+        $creatorPayouts = [];
+        $eligibleCreatorCount = 0;
+
+        if ($isSpecial) {
+            // Special transaction (11th, 21st, 31st...):
+            // Global Pool receives ₹0.
+            // If valid referrer: Referrer = ₹1.00, Admin = ₹4.00.
+            // If no valid referrer: Admin receives ₹5.00 (base ₹4 + unallocated ₹1).
+            $adminAllocation = $hasReferrer ? 4.00 : 5.00;
+            $globalPoolAllocation = 0.00;
+        } else {
+            // Normal transaction:
+            // Base Admin = ₹1.00 (+ ₹1.00 if no valid referrer)
+            $baseAdminPaise = 100 + $unallocatedReferrerPaise;
+
+            // Query distinct eligible previous Premium Video creators, strictly excluding current uploader:
+            $stmtEligible = $pdo->prepare('
+                SELECT DISTINCT user_id FROM (
+                    SELECT user_id FROM payment_transactions WHERE purpose = "premium_video_upload"
+                    UNION
+                    SELECT user_id FROM uploaded_videos WHERE video_type = "premium" AND payment_status = "paid"
+                ) AS prev_creators
+                WHERE UPPER(user_id) != UPPER(?)
+                ORDER BY user_id ASC
+            ');
+            $stmtEligible->execute([$userId]);
+            $eligibleCreatorIds = $stmtEligible->fetchAll(PDO::FETCH_COLUMN);
+            $eligibleCreatorCount = count($eligibleCreatorIds);
+
+            if ($eligibleCreatorCount === 0) {
+                // If there are no eligible previous creators, redirect the entire ₹3 pool to Admin
+                $adminPaise = $baseAdminPaise + 300;
+                $adminAllocation = $adminPaise / 100;
+                $globalPoolAllocation = 0.00;
+            } else {
+                // Distribute ₹3 pool (300 paise) equally using integer division; residual paise goes to Admin
+                $poolPaise = 300;
+                $perCreatorPaise = intdiv($poolPaise, $eligibleCreatorCount);
+                $distributedPaise = $perCreatorPaise * $eligibleCreatorCount;
+                $residualPaise = $poolPaise - $distributedPaise;
+
+                $adminPaise = $baseAdminPaise + $residualPaise;
+                $adminAllocation = $adminPaise / 100;
+                $globalPoolAllocation = $distributedPaise / 100;
+
+                foreach ($eligibleCreatorIds as $cUserId) {
+                    $creatorPayouts[] = [
+                        'userId' => $cUserId,
+                        'amount' => $perCreatorPaise / 100,
+                        'amountPaise' => $perCreatorPaise,
+                    ];
+                }
+            }
+        }
 
         // Insert into payment_transactions (protected by UNIQUE key on payment_id)
         $stmtTx = $pdo->prepare('
@@ -313,7 +378,7 @@ try {
             // Table optional
         }
 
-        // Credit direct referral commission (₹1.00) in income_ledger and wallet_balances
+        // 1. Credit direct referral commission (₹1.00) in income_ledger and wallet_balances if valid
         if (!empty($verifiedReferrerId) && $referralCommission > 0) {
             $txRefId = 'TX_REF_' . $paymentId;
             $ledgerUuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
@@ -351,6 +416,99 @@ try {
                     updated_at = NOW()
             ');
             $stmtCredit->execute([$verifiedReferrerId]);
+        }
+
+        // 2. Credit Admin allocation in income_ledger and wallet_balances
+        if ($adminAllocation > 0) {
+            $txAdmId = 'TX_ADM_' . $paymentId;
+            $admLedgerUuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
+            $admDesc = $isSpecial
+                ? "Admin Allocation (₹{$adminAllocation}) for Special Premium Video #{$txNumber} upload by {$userName} ({$userId})"
+                : "Admin Allocation (₹{$adminAllocation}) for Premium Video #{$txNumber} upload by {$userName} ({$userId})";
+
+            $stmtAdmLedger = $pdo->prepare('
+                INSERT INTO income_ledger (
+                    id, transaction_id, user_id, source_user_id, source_user_name, video_id,
+                    income_type, amount, status, special_tag, description, created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?,
+                    "admin_allocation", ?, "settled", ?, ?, NOW()
+                )
+            ');
+            $stmtAdmLedger->execute([
+                $admLedgerUuid,
+                $txAdmId,
+                $adminUserId,
+                $userId,
+                $userName,
+                $videoId ?: null,
+                $adminAllocation,
+                $specialTag,
+                $admDesc
+            ]);
+
+            $stmtCreditAdmin = $pdo->prepare('
+                INSERT INTO wallet_balances (user_id, balance, total_earned, total_withdrawn, referral_income, global_income, adsense_income, affiliate_income, updated_at)
+                VALUES (?, ?, ?, 0.00, 0.00, 0.00, 0.00, 0.00, NOW())
+                ON DUPLICATE KEY UPDATE
+                    balance = balance + VALUES(balance),
+                    total_earned = total_earned + VALUES(total_earned),
+                    updated_at = NOW()
+            ');
+            $stmtCreditAdmin->execute([$adminUserId, $adminAllocation, $adminAllocation]);
+        }
+
+        // 3. Credit each distinct eligible previous creator with their global income share
+        if (!empty($creatorPayouts)) {
+            $stmtGlbLedger = $pdo->prepare('
+                INSERT INTO income_ledger (
+                    id, transaction_id, user_id, source_user_id, source_user_name, video_id,
+                    income_type, amount, status, special_tag, description, created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?,
+                    "global_income", ?, "settled", ?, ?, NOW()
+                )
+            ');
+            $stmtCreditCreator = $pdo->prepare('
+                INSERT INTO wallet_balances (user_id, balance, total_earned, total_withdrawn, referral_income, global_income, adsense_income, affiliate_income, updated_at)
+                VALUES (?, ?, ?, 0.00, 0.00, ?, 0.00, 0.00, NOW())
+                ON DUPLICATE KEY UPDATE
+                    balance = balance + VALUES(balance),
+                    total_earned = total_earned + VALUES(total_earned),
+                    global_income = global_income + VALUES(global_income),
+                    updated_at = NOW()
+            ');
+
+            foreach ($creatorPayouts as $payout) {
+                $txGlbId = "TX_GLB_{$paymentId}_{$payout['userId']}";
+                $glbUuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                    mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                    mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
+                    mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
+                $glbDesc = "Global Income Pool distribution (₹{$payout['amount']} share of ₹3 pool across {$eligibleCreatorCount} eligible creators for Premium Video #{$txNumber})";
+
+                $stmtGlbLedger->execute([
+                    $glbUuid,
+                    $txGlbId,
+                    $payout['userId'],
+                    $userId,
+                    $userName,
+                    $videoId ?: null,
+                    $payout['amount'],
+                    $specialTag,
+                    $glbDesc
+                ]);
+
+                $stmtCreditCreator->execute([
+                    $payout['userId'],
+                    $payout['amount'],
+                    $payout['amount'],
+                    $payout['amount']
+                ]);
+            }
         }
 
         $levelPayouts = [];
@@ -619,6 +777,9 @@ try {
             'adminAmount' => $adminAllocation,
             'adminPercent' => $adminPercent,
             'globalPoolAmount' => $globalPoolAllocation,
+            'eligibleMembersCount' => $isPremiumUpload ? $eligibleCreatorCount : 0,
+            'perMemberShare' => $isPremiumUpload && $eligibleCreatorCount > 0 && !empty($creatorPayouts[0]) ? $creatorPayouts[0]['amount'] : 0.0,
+            'creatorPayouts' => $creatorPayouts,
             'totalReferralAmount' => $totalReferralAmount,
             'levelPayouts' => $levelPayouts,
             'missingLevels' => $missingLevels,

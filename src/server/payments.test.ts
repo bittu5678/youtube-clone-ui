@@ -6,9 +6,11 @@ import {
   verifyPayment,
   PRICING_CONFIG,
   evaluateAdsDistribution,
+  evaluatePremiumDistribution,
   resolveUplineSponsors,
   ADS_REFERRAL_RATES,
   getPersistentPremiumTxNumber,
+  resetPersistentPremiumState,
 } from "./payments";
 import { handleApiRequest, isAdPromotionActive } from "./api-handler";
 import { isPromotionActive } from "../lib/video-service";
@@ -1209,5 +1211,565 @@ describe("Task 33: 7-Level Ads Referral Distribution & Counter Isolation Tests",
     assert.equal(typeof body.distribution.adminAmount, "number");
     assert.equal(typeof body.distribution.totalReferralAmount, "number");
     assert.equal(body.distribution.adminAmount + body.distribution.totalReferralAmount, 3000);
+  });
+});
+
+describe("Task 34: Premium Video Global Pool & Admin Ledger Verification Tests", () => {
+  const secret = "test_razorpay_secret_key_1234567890";
+  const env = {
+    RAZORPAY_KEY_ID: "rzp_test_1234567890",
+    RAZORPAY_KEY_SECRET: secret,
+    RAZORPAY_SKIP_REMOTE_CHECK: "true",
+  };
+
+  it("1. Normal transaction with multiple eligible previous creators distributes integer paise equally", async () => {
+    // Isolate sequence state to tx #1 so next is tx #2 (normal, non-special)
+    await resetPersistentPremiumState(1, []);
+
+    // Pure calculation check: tx 2, valid referrer, 2 eligible creators
+    const dist = evaluatePremiumDistribution(2, "FT102857", 2);
+    assert.equal(dist.isSpecial, false);
+    assert.equal(dist.directReferralAmount, 1.0);
+    assert.equal(dist.adminAmount, 1.0);
+    assert.equal(dist.globalPoolAmount, 3.0);
+    assert.equal(dist.perMemberShare, 1.5);
+    assert.equal(dist.totalAmount, 6.0);
+
+    // Gateway / server verification check
+    const orderId = `ord_t34_norm_${Date.now()}`;
+    const paymentId = `pay_t34_norm_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    const res = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        purpose: "premium_video_upload",
+      },
+      ["CREATOR_PREV_1", "CREATOR_PREV_2"],
+      "FT102857",
+      env,
+    );
+
+    assert.equal(res.verified, true);
+    assert.equal(res.amount, 6.0);
+    assert.equal(res.txNumber, 2);
+    assert.equal(res.isSpecialTransaction, false);
+    assert.equal(res.distribution?.directReferralAmount, 1.0);
+    assert.equal(res.distribution?.adminAmount, 1.0);
+    assert.equal(res.distribution?.globalPoolAmount, 3.0);
+    assert.equal(res.distribution?.eligibleMembersCount, 2);
+    assert.equal(res.distribution?.perMemberShare, 1.5);
+    assert.ok(Array.isArray(res.distribution?.creatorPayouts));
+    assert.equal(res.distribution?.creatorPayouts?.length, 2);
+    assert.equal(res.distribution?.creatorPayouts?.[0]?.amount, 1.5);
+    assert.equal(res.distribution?.creatorPayouts?.[1]?.amount, 1.5);
+  });
+
+  it("2. First transaction with no eligible creators redirects entire ₹3 pool to Admin (Admin ₹4 total with valid referrer)", async () => {
+    // Reset to 0 so next is tx #1
+    await resetPersistentPremiumState(0, []);
+
+    // Pure calculation: 0 eligible creators, valid referrer -> Admin receives base ₹1 + pool ₹3 = ₹4
+    const dist = evaluatePremiumDistribution(1, "FT102857", 0);
+    assert.equal(dist.isSpecial, false);
+    assert.equal(dist.directReferralAmount, 1.0);
+    assert.equal(dist.adminAmount, 4.0); // ₹1 base + ₹3 redirected pool
+    assert.equal(dist.globalPoolAmount, 0.0);
+    assert.equal(dist.perMemberShare, 0.0);
+    assert.equal(dist.totalAmount, 6.0);
+
+    const orderId = `ord_t34_first_${Date.now()}`;
+    const paymentId = `pay_t34_first_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    const res = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        purpose: "premium_video_upload",
+      },
+      [], // Zero previous creators
+      "FT102857",
+      env,
+    );
+
+    assert.equal(res.verified, true);
+    assert.equal(res.txNumber, 1);
+    assert.equal(res.distribution?.directReferralAmount, 1.0);
+    assert.equal(res.distribution?.adminAmount, 4.0);
+    assert.equal(res.distribution?.globalPoolAmount, 0.0);
+    assert.equal(res.distribution?.eligibleMembersCount, 0);
+    assert.equal(res.distribution?.creatorPayouts?.length, 0);
+  });
+
+  it("3. Special 11th/21st/31st transaction with valid referrer allocates ₹1 referrer, ₹4 Admin, ₹0 global pool", async () => {
+    const specials = [11, 21, 31, 41, 51, 101];
+    for (const tx of specials) {
+      const dist = evaluatePremiumDistribution(tx, "FT102857", 5);
+      assert.equal(dist.isSpecial, true, `tx #${tx} must be marked as special`);
+      assert.equal(dist.specialTag, "SPECIAL_GLOBAL_RULE");
+      assert.equal(dist.directReferralAmount, 1.0);
+      assert.equal(dist.adminAmount, 4.0);
+      assert.equal(dist.globalPoolAmount, 0.0);
+      assert.equal(dist.eligibleMembersCount, 0);
+      assert.equal(dist.perMemberShare, 0.0);
+      assert.equal(dist.totalAmount, 6.0);
+    }
+
+    // Server verification check at tx #11
+    await resetPersistentPremiumState(10, []);
+    const orderId = `ord_t34_spec_${Date.now()}`;
+    const paymentId = `pay_t34_spec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    const res = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        purpose: "premium_video_upload",
+      },
+      ["CR_1", "CR_2", "CR_3"],
+      "FT102857",
+      env,
+    );
+
+    assert.equal(res.verified, true);
+    assert.equal(res.txNumber, 11);
+    assert.equal(res.isSpecialTransaction, true);
+    assert.equal(res.specialTag, "SPECIAL_GLOBAL_RULE");
+    assert.equal(res.distribution?.directReferralAmount, 1.0);
+    assert.equal(res.distribution?.adminAmount, 4.0);
+    assert.equal(res.distribution?.globalPoolAmount, 0.0);
+    assert.equal(res.distribution?.eligibleMembersCount, 0);
+  });
+
+  it("4. Normal transaction without valid referrer redirects unallocated ₹1 to Admin (Option A: Admin ₹2 with creators, ₹5 with zero creators)", async () => {
+    // Normal transaction, no referrer, 2 eligible creators:
+    // Referrer: ₹0. Admin: ₹1 base + ₹1 unallocated = ₹2. Global Pool: ₹3 (₹1.50 each). Fees: ₹1. Total: ₹6.
+    const distWithCreators = evaluatePremiumDistribution(2, null, 2);
+    assert.equal(distWithCreators.isSpecial, false);
+    assert.equal(distWithCreators.directReferralAmount, 0.0);
+    assert.equal(distWithCreators.adminAmount, 2.0);
+    assert.equal(distWithCreators.globalPoolAmount, 3.0);
+    assert.equal(distWithCreators.perMemberShare, 1.5);
+    assert.equal(distWithCreators.totalAmount, 6.0);
+
+    // Normal transaction, no referrer, 0 eligible creators:
+    // Referrer: ₹0. Admin: ₹1 base + ₹1 unallocated + ₹3 pool = ₹5. Global Pool: ₹0. Fees: ₹1. Total: ₹6.
+    const distZeroCreators = evaluatePremiumDistribution(2, null, 0);
+    assert.equal(distZeroCreators.isSpecial, false);
+    assert.equal(distZeroCreators.directReferralAmount, 0.0);
+    assert.equal(distZeroCreators.adminAmount, 5.0);
+    assert.equal(distZeroCreators.globalPoolAmount, 0.0);
+    assert.equal(distZeroCreators.totalAmount, 6.0);
+
+    // Server verification with null referrer and creators
+    await resetPersistentPremiumState(1, []);
+    const orderId = `ord_t34_noref_${Date.now()}`;
+    const paymentId = `pay_t34_noref_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    const res = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        purpose: "premium_video_upload",
+      },
+      ["CR_1", "CR_2"],
+      null, // No referrer
+      env,
+    );
+
+    assert.equal(res.verified, true);
+    assert.equal(res.distribution?.directReferralAmount, 0.0);
+    assert.equal(res.distribution?.adminAmount, 2.0); // ₹1 base + ₹1 unallocated
+    assert.equal(res.distribution?.globalPoolAmount, 3.0);
+  });
+
+  it("5. Special transaction without valid referrer redirects unallocated ₹1 to Admin (Option A: Admin receives ₹5 total)", async () => {
+    const specials = [11, 21, 31, 41, 51];
+    for (const tx of specials) {
+      const dist = evaluatePremiumDistribution(tx, null, 5); // null referrer
+      assert.equal(dist.isSpecial, true);
+      assert.equal(dist.directReferralAmount, 0.0);
+      assert.equal(dist.adminAmount, 5.0, `tx #${tx} without referrer must give Admin ₹5`);
+      assert.equal(dist.globalPoolAmount, 0.0);
+      assert.equal(dist.taxAndFees, 1.0);
+      assert.equal(dist.totalAmount, 6.0);
+    }
+
+    await resetPersistentPremiumState(10, []);
+    const orderId = `ord_t34_spec_noref_${Date.now()}`;
+    const paymentId = `pay_t34_spec_noref_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    const res = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        purpose: "premium_video_upload",
+      },
+      ["CR_1", "CR_2"],
+      null, // No referrer
+      env,
+    );
+
+    assert.equal(res.verified, true);
+    assert.equal(res.txNumber, 11);
+    assert.equal(res.distribution?.directReferralAmount, 0.0);
+    assert.equal(res.distribution?.adminAmount, 5.0); // ₹4 special + ₹1 unallocated
+    assert.equal(res.distribution?.globalPoolAmount, 0.0);
+  });
+
+  it("6. Exact ₹6 accounting with integer-paise division and indivisible residual to Admin (e.g. 7 creators)", async () => {
+    // 300 paise / 7 = 42 paise each (₹0.42 * 7 = 294 paise). Residual = 6 paise (₹0.06).
+    // Admin receives base ₹1.00 + residual ₹0.06 = ₹1.06.
+    const dist7 = evaluatePremiumDistribution(2, "FT102857", 7);
+    assert.equal(dist7.directReferralAmount, 1.0);
+    assert.equal(dist7.adminAmount, 1.06);
+    assert.equal(dist7.globalPoolAmount, 2.94);
+    assert.equal(dist7.perMemberShare, 0.42);
+    assert.equal(dist7.taxAndFees, 1.0);
+    // Exact mathematical sum
+    assert.equal(
+      Math.round(
+        (dist7.directReferralAmount +
+          dist7.adminAmount +
+          dist7.globalPoolAmount +
+          dist7.taxAndFees) *
+          100,
+      ),
+      600,
+      "Zero paise leakage must be preserved across integer-paise division",
+    );
+
+    await resetPersistentPremiumState(1, []);
+    const orderId = `ord_t34_paise_${Date.now()}`;
+    const paymentId = `pay_t34_paise_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    const sevenCreators = ["CR_1", "CR_2", "CR_3", "CR_4", "CR_5", "CR_6", "CR_7"];
+
+    const res = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        purpose: "premium_video_upload",
+      },
+      sevenCreators,
+      "FT102857",
+      env,
+    );
+
+    assert.equal(res.verified, true);
+    assert.equal(res.distribution?.adminAmount, 1.06);
+    assert.equal(res.distribution?.globalPoolAmount, 2.94);
+    assert.equal(res.distribution?.creatorPayouts?.length, 7);
+    for (const p of res.distribution?.creatorPayouts || []) {
+      assert.equal(p.amountPaise, 42);
+      assert.equal(p.amount, 0.42);
+    }
+  });
+
+  it("7. Admin residual allocation verified across prime and uneven creator counts with zero leakage", () => {
+    const testCounts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 17, 23, 29, 37, 50, 100];
+    for (const count of testCounts) {
+      const dist = evaluatePremiumDistribution(4, "SPONSOR", count);
+      const totalPaise = Math.round(
+        (dist.directReferralAmount + dist.adminAmount + dist.globalPoolAmount + dist.taxAndFees) *
+          100,
+      );
+      assert.equal(totalPaise, 600, `Leakage detected for creator count: ${count}`);
+    }
+  });
+
+  it("8. Current uploader is strictly excluded from receiving a global pool share of their own upload", async () => {
+    await resetPersistentPremiumState(1, []);
+    const orderId = `ord_t34_excl_${Date.now()}`;
+    const paymentId = `pay_t34_excl_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    // Pass uploader 'FT483921' in the candidate list alongside another creator
+    const res = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921", // The current uploader
+        purpose: "premium_video_upload",
+      },
+      ["FT483921", "OTHER_CREATOR_99"], // Contains current uploader
+      "FT102857",
+      env,
+    );
+
+    assert.equal(res.verified, true);
+    assert.equal(res.distribution?.eligibleMembersCount, 1); // FT483921 must be excluded
+    assert.equal(res.distribution?.creatorPayouts?.length, 1);
+    assert.equal(res.distribution?.creatorPayouts?.[0]?.userId, "OTHER_CREATOR_99");
+    assert.equal(res.distribution?.creatorPayouts?.[0]?.amount, 3.0); // Entire ₹3 goes to the sole remaining eligible creator
+  });
+
+  it("9. Duplicate eligible creator records are deduplicated before pool division", async () => {
+    await resetPersistentPremiumState(1, []);
+    const orderId = `ord_t34_dedup_${Date.now()}`;
+    const paymentId = `pay_t34_dedup_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    // Input array contains duplicate references to same users
+    const res = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        purpose: "premium_video_upload",
+      },
+      ["CREATOR_ALPHA", "CREATOR_ALPHA", "CREATOR_BETA", "CREATOR_BETA"],
+      "FT102857",
+      env,
+    );
+
+    assert.equal(res.verified, true);
+    assert.equal(res.distribution?.eligibleMembersCount, 2); // 2 distinct creators
+    assert.equal(res.distribution?.perMemberShare, 1.5);
+    assert.equal(res.distribution?.creatorPayouts?.length, 2);
+    assert.equal(res.distribution?.creatorPayouts?.[0]?.amount, 1.5);
+    assert.equal(res.distribution?.creatorPayouts?.[1]?.amount, 1.5);
+  });
+
+  it("10. Idempotent duplicate verification prevents double crediting and sequence advance for Premium Video", async () => {
+    await resetPersistentPremiumState(1, []);
+    const orderId = `ord_t34_dup_${Date.now()}`;
+    const paymentId = `pay_t34_dup_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    const res1 = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        purpose: "premium_video_upload",
+      },
+      ["CR_1", "CR_2"],
+      "FT102857",
+      env,
+    );
+    assert.equal(res1.verified, true);
+    assert.equal(res1.duplicate, undefined);
+    const firstTxNumber = res1.txNumber;
+
+    const res2 = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        purpose: "premium_video_upload",
+      },
+      ["CR_1", "CR_2"],
+      "FT102857",
+      env,
+    );
+    assert.equal(res2.verified, true);
+    assert.equal(res2.duplicate, true);
+    assert.match(res2.error || "", /already been processed/i);
+    assert.equal(res2.txNumber, firstTxNumber);
+  });
+
+  it("11. Concurrency test: Parallel requests with distinct payment IDs serialize safely without race conditions", async () => {
+    await resetPersistentPremiumState(1, []);
+    const count = 5;
+    const promises: Promise<any>[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const orderId = `ord_t34_conc_${Date.now()}_${i}`;
+      const paymentId = `pay_t34_conc_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`;
+      const sig = crypto
+        .createHmac("sha256", secret)
+        .update(`${orderId}|${paymentId}`)
+        .digest("hex");
+
+      promises.push(
+        verifyServerPayment(
+          {
+            orderId,
+            paymentId,
+            signature: sig,
+            userId: `USER_${i}`,
+            purpose: "premium_video_upload",
+          },
+          ["CR_A", "CR_B"],
+          "FT102857",
+          env,
+        ),
+      );
+    }
+
+    const results = await Promise.all(promises);
+    assert.equal(results.length, count);
+    const txNumbers = results.map((r) => r.txNumber);
+    // All results must be verified
+    for (const r of results) {
+      assert.equal(r.verified, true);
+    }
+    // All txNumbers must be unique and strictly sequential: 2, 3, 4, 5, 6
+    assert.equal(new Set(txNumbers).size, count);
+    assert.deepEqual(
+      txNumbers.sort((a, b) => a - b),
+      [2, 3, 4, 5, 6],
+    );
+  });
+
+  it("12. Concurrency duplicate test: Simultaneous requests with identical payment ID resolve idempotently", async () => {
+    await resetPersistentPremiumState(1, []);
+    const orderId = `ord_t34_cdup_${Date.now()}`;
+    const paymentId = `pay_t34_cdup_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    // Launch 3 simultaneous verification attempts for same payment ID
+    const promises = [1, 2, 3].map(() =>
+      verifyServerPayment(
+        {
+          orderId,
+          paymentId,
+          signature: sig,
+          userId: "FT483921",
+          purpose: "premium_video_upload",
+        },
+        ["CR_1", "CR_2"],
+        "FT102857",
+        env,
+      ),
+    );
+
+    const results = await Promise.all(promises);
+    assert.equal(results.length, 3);
+    const [r1, r2, r3] = results;
+    // All 3 report verified: true
+    assert.equal(r1?.verified, true);
+    assert.equal(r2?.verified, true);
+    assert.equal(r3?.verified, true);
+
+    // Exactly one is original, the other two are flagged as duplicates
+    const duplicates = results.filter((r) => r?.duplicate === true);
+    assert.equal(duplicates.length, 2);
+
+    // Sequence only incremented once (txNumber: 2)
+    const afterTxNum = await getPersistentPremiumTxNumber();
+    assert.equal(afterTxNum, 2);
+  });
+
+  it("13. Rollback & failure scenarios: Invalid signature or missing credentials leave sequence untouched", async () => {
+    await resetPersistentPremiumState(5, []);
+    const orderId = `ord_t34_fail_${Date.now()}`;
+    const paymentId = `pay_t34_fail_${Date.now()}`;
+
+    // Test A: Invalid HMAC signature
+    const badSigRes = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: "invalid_tampered_signature_hex",
+        userId: "FT483921",
+        purpose: "premium_video_upload",
+      },
+      ["CR_1"],
+      "FT102857",
+      env,
+    );
+    assert.equal(badSigRes.verified, false);
+    assert.match(badSigRes.error || "", /signature/i);
+
+    // Sequence must NOT have advanced
+    let currentTxNum = await getPersistentPremiumTxNumber();
+    assert.equal(currentTxNum, 5);
+
+    // Test B: Missing secret fails closed
+    const noSecretRes = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: "some_sig",
+        userId: "FT483921",
+        purpose: "premium_video_upload",
+      },
+      ["CR_1"],
+      "FT102857",
+      { RAZORPAY_KEY_SECRET: "" },
+    );
+    assert.equal(noSecretRes.verified, false);
+    assert.match(noSecretRes.error || "", /RAZORPAY_KEY_SECRET/i);
+
+    // Sequence must still be untouched
+    currentTxNum = await getPersistentPremiumTxNumber();
+    assert.equal(currentTxNum, 5);
+  });
+
+  it("14. API handler /api/payments/verify returns complete server-authoritative distribution breakdown for Premium Video", async () => {
+    const orderId = `ord_t34_api_${Date.now()}`;
+    const paymentId = `pay_t34_api_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    const req = new Request("http://localhost:3000/api/payments/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        userName: "Alex Rivera",
+        purpose: "premium_video_upload",
+      }),
+    });
+
+    const res = await handleApiRequest(req, env);
+    assert.ok(res);
+    assert.equal(res.status, 200);
+
+    const body = await res.json();
+    assert.equal(body.verified, true);
+    assert.equal(body.amount, 6.0);
+    assert.equal(body.purpose, "premium_video_upload");
+    assert.ok(body.distribution);
+    assert.equal(typeof body.distribution.adminAmount, "number");
+    assert.equal(typeof body.distribution.globalPoolAmount, "number");
+    assert.equal(typeof body.distribution.eligibleMembersCount, "number");
+    assert.ok(Array.isArray(body.distribution.creatorPayouts));
+  });
+
+  it("15. Seven-level Ads referral tests remain completely isolated and unaffected", async () => {
+    const adsPlan = PRICING_CONFIG.ADS_PROMOTION["plan-15-days"];
+    assert.equal(adsPlan.price, 200);
+    assert.equal(adsPlan.days, 15);
+
+    // Verify 7-level rates untouched
+    const dist = evaluateAdsDistribution(200, [
+      { level: 1, userId: "UP1" },
+      { level: 2, userId: "UP2" },
+      { level: 3, userId: "UP3" },
+      { level: 4, userId: "UP4" },
+      { level: 5, userId: "UP5" },
+      { level: 6, userId: "UP6" },
+      { level: 7, userId: "UP7" },
+    ]);
+    assert.equal(dist.totalReferralAmount, 80);
+    assert.equal(dist.adminAmount, 120);
+    assert.equal(dist.adminPercent, 60);
   });
 });

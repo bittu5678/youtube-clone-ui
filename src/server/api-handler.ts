@@ -1106,6 +1106,15 @@ export async function handleApiRequest(
             let missingLevels: number[] = [];
             let adminPercent = 60;
             let totalReferralAmount = 0.0;
+            const creatorPayouts: Array<{ userId: string; amount: number; amountPaise: number }> =
+              [];
+            let eligibleCreatorCount = 0;
+
+            // Resolve Admin user ID from database
+            const [adminRows]: any = await conn.query(
+              `SELECT user_id FROM users WHERE role = 'admin' ORDER BY created_at ASC LIMIT 1`,
+            );
+            const adminUserId = adminRows?.[0]?.user_id || "FT102857";
 
             if (isPremiumUpload) {
               // Sequence allocation strictly for qualifying premium video uploads
@@ -1136,10 +1145,69 @@ export async function handleApiRequest(
                 }
               }
 
-              referralCommission = verifiedReferrerId ? 1.0 : 0.0;
-              adminAllocation = isSpecial ? 4.0 : 1.0;
-              globalPoolAllocation = isSpecial ? 0.0 : 3.0;
+              // Option A Approved Allocation:
+              // Every verified payment is exactly ₹6.
+              // GST/Payment Gateway reporting allocation = ₹1.00.
+              // If valid referrer: Referrer = ₹1.00.
+              // If NO valid referrer: unallocated ₹1.00 redirects to Admin.
+              const hasReferrer = Boolean(verifiedReferrerId);
+              referralCommission = hasReferrer ? 1.0 : 0.0;
+              const unallocatedReferrerPaise = hasReferrer ? 0 : 100;
               totalReferralAmount = referralCommission;
+
+              if (isSpecial) {
+                // Special transaction:
+                // Global pool = ₹0.00
+                // If referrer: Admin = ₹4.00; If no referrer: Admin = ₹5.00
+                adminAllocation = hasReferrer ? 4.0 : 5.0;
+                globalPoolAllocation = 0.0;
+              } else {
+                // Normal transaction:
+                // Base Admin = ₹1.00 (+ ₹1.00 if no valid referrer)
+                const baseAdminPaise = 100 + unallocatedReferrerPaise;
+
+                // Query distinct eligible previous Premium Video creators, strictly excluding current uploader:
+                const [eligibleRows]: any = await conn.query(
+                  `SELECT DISTINCT user_id FROM (
+                     SELECT user_id FROM payment_transactions WHERE purpose = 'premium_video_upload'
+                     UNION
+                     SELECT user_id FROM uploaded_videos WHERE video_type = 'premium' AND payment_status = 'paid'
+                   ) AS prev_creators
+                   WHERE UPPER(user_id) != UPPER(?)
+                   ORDER BY user_id ASC`,
+                  [uploaderId],
+                );
+                const eligibleCreatorIds: string[] = Array.isArray(eligibleRows)
+                  ? eligibleRows.map((r: any) => String(r.user_id).trim().toUpperCase())
+                  : [];
+                eligibleCreatorCount = eligibleCreatorIds.length;
+
+                if (eligibleCreatorCount === 0) {
+                  // Redirect entire ₹3 pool to Admin if no eligible previous creators
+                  const adminPaise = baseAdminPaise + 300;
+                  adminAllocation = adminPaise / 100;
+                  globalPoolAllocation = 0.0;
+                } else {
+                  // Distribute ₹3 pool (300 paise) equally using integer division; residual paise goes to Admin
+                  const poolPaise = 300;
+                  const perCreatorPaise = Math.floor(poolPaise / eligibleCreatorCount);
+                  const distributedPaise = perCreatorPaise * eligibleCreatorCount;
+                  const residualPaise = poolPaise - distributedPaise;
+
+                  const adminPaise = baseAdminPaise + residualPaise;
+                  adminAllocation = adminPaise / 100;
+                  globalPoolAllocation = distributedPaise / 100;
+
+                  for (const cUserId of eligibleCreatorIds) {
+                    creatorPayouts.push({
+                      userId: cUserId,
+                      amount: perCreatorPaise / 100,
+                      amountPaise: perCreatorPaise,
+                    });
+                  }
+                }
+              }
+
               adminPercent = Math.round((adminAllocation / amount) * 100);
 
               // 1. Insert into payment_transactions
@@ -1193,7 +1261,7 @@ export async function handleApiRequest(
                 // Audit table optional
               }
 
-              // 3. Insert into income_ledger & credit wallet_balances if commission is due
+              // 3. Insert into income_ledger & credit wallet_balances for Referrer
               if (verifiedReferrerId && referralCommission > 0) {
                 const txRefId = `TX_REF_${paymentId}`;
                 await conn.query(
@@ -1223,6 +1291,79 @@ export async function handleApiRequest(
                      updated_at = NOW()`,
                   [verifiedReferrerId],
                 );
+              }
+
+              // 4. Insert into income_ledger & credit wallet_balances for Admin
+              if (adminAllocation > 0) {
+                const txAdmId = `TX_ADM_${paymentId}`;
+                const admDesc = isSpecial
+                  ? `Admin Allocation (₹${adminAllocation.toFixed(2)}) for Special Premium Video #${txNumber} upload by ${userName} (${uploaderId})`
+                  : `Admin Allocation (₹${adminAllocation.toFixed(2)}) for Premium Video #${txNumber} upload by ${userName} (${uploaderId})`;
+
+                await conn.query(
+                  `INSERT INTO income_ledger (
+                    id, transaction_id, user_id, source_user_id, source_user_name, video_id,
+                    income_type, amount, status, special_tag, description, created_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, 'admin_allocation', ?, 'settled', ?, ?, NOW())`,
+                  [
+                    crypto.randomUUID(),
+                    txAdmId,
+                    adminUserId,
+                    uploaderId,
+                    userName,
+                    videoId || null,
+                    adminAllocation,
+                    specialTag,
+                    admDesc,
+                  ],
+                );
+
+                await conn.query(
+                  `INSERT INTO wallet_balances (user_id, balance, total_earned, total_withdrawn, referral_income, global_income, adsense_income, affiliate_income, updated_at)
+                   VALUES (?, ?, ?, 0.00, 0.00, 0.00, 0.00, 0.00, NOW())
+                   ON DUPLICATE KEY UPDATE
+                     balance = balance + VALUES(balance),
+                     total_earned = total_earned + VALUES(total_earned),
+                     updated_at = NOW()`,
+                  [adminUserId, adminAllocation, adminAllocation],
+                );
+              }
+
+              // 5. Insert into income_ledger & credit wallet_balances for each eligible previous creator
+              if (creatorPayouts.length > 0) {
+                for (const payout of creatorPayouts) {
+                  const txGlbId = `TX_GLB_${paymentId}_${payout.userId}`;
+                  const glbDesc = `Global Income Pool distribution (₹${payout.amount.toFixed(2)} share of ₹3 pool across ${creatorPayouts.length} eligible creators for Premium Video #${txNumber})`;
+
+                  await conn.query(
+                    `INSERT INTO income_ledger (
+                      id, transaction_id, user_id, source_user_id, source_user_name, video_id,
+                      income_type, amount, status, special_tag, description, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'global_income', ?, 'settled', ?, ?, NOW())`,
+                    [
+                      crypto.randomUUID(),
+                      txGlbId,
+                      payout.userId,
+                      uploaderId,
+                      userName,
+                      videoId || null,
+                      payout.amount,
+                      specialTag,
+                      glbDesc,
+                    ],
+                  );
+
+                  await conn.query(
+                    `INSERT INTO wallet_balances (user_id, balance, total_earned, total_withdrawn, referral_income, global_income, adsense_income, affiliate_income, updated_at)
+                     VALUES (?, ?, ?, 0.00, 0.00, ?, 0.00, 0.00, NOW())
+                     ON DUPLICATE KEY UPDATE
+                       balance = balance + VALUES(balance),
+                       total_earned = total_earned + VALUES(total_earned),
+                       global_income = global_income + VALUES(global_income),
+                       updated_at = NOW()`,
+                    [payout.userId, payout.amount, payout.amount, payout.amount],
+                  );
+                }
               }
             } else {
               // Task 33: 7-Level Ads Promotion Referral Distribution
@@ -1382,6 +1523,12 @@ export async function handleApiRequest(
                 adminAmount: adminAllocation,
                 adminPercent,
                 globalPoolAmount: globalPoolAllocation,
+                eligibleMembersCount: isPremiumUpload ? eligibleCreatorCount : 0,
+                perMemberShare:
+                  isPremiumUpload && eligibleCreatorCount > 0 && creatorPayouts.length > 0
+                    ? creatorPayouts[0]!.amount
+                    : 0,
+                creatorPayouts,
                 totalReferralAmount,
                 levelPayouts,
                 missingLevels,
@@ -1426,6 +1573,20 @@ export async function handleApiRequest(
               ? resolveUplineSponsors(uploaderId, store.users)
               : undefined;
 
+          // Find all distinct users who uploaded paid premium videos, strictly excluding current uploader
+          const storeEligibleCreators = Array.from(
+            new Set(
+              (store.videos || [])
+                .filter(
+                  (v) =>
+                    v.video_type === "premium" &&
+                    v.payment_status === "paid" &&
+                    v.user_id.toUpperCase() !== uploaderId,
+                )
+                .map((v) => v.user_id.toUpperCase()),
+            ),
+          );
+
           const result = await verifyServerPayment(
             {
               orderId,
@@ -1442,7 +1603,7 @@ export async function handleApiRequest(
                   ? { planId: payload.planId || payload.plan_id }
                   : undefined),
             },
-            ["FT483921", "FT900431"],
+            storeEligibleCreators,
             verifiedReferrerId,
             env,
             uplines,
@@ -1452,7 +1613,7 @@ export async function handleApiRequest(
           const txCheckId =
             purpose === "ads_promotion"
               ? `TX_ADS_ADM_${result.paymentId}`
-              : `TX_REF_${result.paymentId}`;
+              : `TX_ADM_${result.paymentId}`;
           const isDuplicate = Boolean(
             result.error?.includes("already") ||
             result.duplicate ||
@@ -1464,7 +1625,9 @@ export async function handleApiRequest(
                   (t.transactionId === `TX_ADS_ADM_${result.paymentId}` ||
                     t.transaction_id === `TX_ADS_ADM_${result.paymentId}`)) ||
                 (purpose === "premium_video_upload" &&
-                  (t.transactionId === `TX_REF_${result.paymentId}` ||
+                  (t.transactionId === `TX_ADM_${result.paymentId}` ||
+                    t.transaction_id === `TX_ADM_${result.paymentId}` ||
+                    t.transactionId === `TX_REF_${result.paymentId}` ||
                     t.transaction_id === `TX_REF_${result.paymentId}`)),
             ),
           );
@@ -1472,53 +1635,155 @@ export async function handleApiRequest(
           if (result.verified && !isDuplicate) {
             if (!store.wallets) store.wallets = {};
 
-            if (
-              purpose === "premium_video_upload" &&
-              verifiedReferrerId &&
-              result.distribution?.directReferralAmount &&
-              result.distribution.directReferralAmount > 0
-            ) {
-              let w = store.wallets[verifiedReferrerId];
-              if (!w) {
-                w = {
-                  balance: 0,
-                  total_earned: 0,
-                  total_withdrawn: 0,
-                  referral_income: 0,
-                  global_income: 0,
-                  adsense_income: 0,
-                  affiliate_income: 0,
-                  updated_at: new Date().toISOString(),
-                };
-                store.wallets[verifiedReferrerId] = w;
-              }
-              const comm = Number(result.distribution.directReferralAmount);
-              w.balance += comm;
-              w.total_earned += comm;
-              w.referral_income += comm;
-              w.updated_at = new Date().toISOString();
+            if (purpose === "premium_video_upload" && result.distribution) {
+              // 1. Credit direct referral commission if valid
+              if (
+                verifiedReferrerId &&
+                result.distribution.directReferralAmount &&
+                result.distribution.directReferralAmount > 0
+              ) {
+                let w = store.wallets[verifiedReferrerId];
+                if (!w) {
+                  w = {
+                    balance: 0,
+                    total_earned: 0,
+                    total_withdrawn: 0,
+                    referral_income: 0,
+                    global_income: 0,
+                    adsense_income: 0,
+                    affiliate_income: 0,
+                    updated_at: new Date().toISOString(),
+                  };
+                  store.wallets[verifiedReferrerId] = w;
+                }
+                const comm = Number(result.distribution.directReferralAmount);
+                w.balance += comm;
+                w.total_earned += comm;
+                w.referral_income += comm;
+                w.updated_at = new Date().toISOString();
 
-              const txRefId = `TX_REF_${result.paymentId}`;
-              store.walletTransactions.unshift({
-                id: `tx-ref-${Date.now()}`,
-                transactionId: txRefId,
-                transaction_id: txRefId,
-                userId: verifiedReferrerId,
-                user_id: verifiedReferrerId,
-                sourceUserId: uploaderId,
-                source_user_id: uploaderId,
-                sourceUserName: userName,
-                source_user_name: userName,
-                videoId: videoId || "",
-                video_id: videoId || "",
-                incomeType: "referral_income",
-                income_type: "referral_income",
-                amount: comm,
-                status: "settled",
-                description: `Direct referral commission (₹${comm.toFixed(2)}) for eligible Premium Video upload by ${userName} (${uploaderId})`,
-                createdAt: new Date().toISOString(),
-                created_at: new Date().toISOString(),
-              });
+                const txRefId = `TX_REF_${result.paymentId}`;
+                store.walletTransactions.unshift({
+                  id: `tx-ref-${Date.now()}`,
+                  transactionId: txRefId,
+                  transaction_id: txRefId,
+                  userId: verifiedReferrerId,
+                  user_id: verifiedReferrerId,
+                  sourceUserId: uploaderId,
+                  source_user_id: uploaderId,
+                  sourceUserName: userName,
+                  source_user_name: userName,
+                  videoId: videoId || "",
+                  video_id: videoId || "",
+                  incomeType: "referral_income",
+                  income_type: "referral_income",
+                  amount: comm,
+                  status: "settled",
+                  specialTag: result.specialTag,
+                  description: `Direct referral commission (₹${comm.toFixed(2)}) for eligible Premium Video upload by ${userName} (${uploaderId})`,
+                  createdAt: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                });
+              }
+
+              // 2. Credit Admin allocation
+              const adminAmount = Number(result.distribution.adminAmount || 0);
+              if (adminAmount > 0) {
+                const adminUser = store.users.find((u) => u.role === "admin") || {
+                  user_id: "FT102857",
+                };
+                const adminUserId = adminUser.user_id;
+                let w = store.wallets[adminUserId];
+                if (!w) {
+                  w = {
+                    balance: 0,
+                    total_earned: 0,
+                    total_withdrawn: 0,
+                    referral_income: 0,
+                    global_income: 0,
+                    adsense_income: 0,
+                    affiliate_income: 0,
+                    updated_at: new Date().toISOString(),
+                  };
+                  store.wallets[adminUserId] = w;
+                }
+                w.balance += adminAmount;
+                w.total_earned += adminAmount;
+                w.updated_at = new Date().toISOString();
+
+                const txAdmId = `TX_ADM_${result.paymentId}`;
+                const admDesc = result.isSpecialTransaction
+                  ? `Admin Allocation (₹${adminAmount.toFixed(2)}) for Special Premium Video #${result.txNumber || 0} upload by ${userName} (${uploaderId})`
+                  : `Admin Allocation (₹${adminAmount.toFixed(2)}) for Premium Video #${result.txNumber || 0} upload by ${userName} (${uploaderId})`;
+
+                store.walletTransactions.unshift({
+                  id: `tx-adm-${Date.now()}`,
+                  transactionId: txAdmId,
+                  transaction_id: txAdmId,
+                  userId: adminUserId,
+                  user_id: adminUserId,
+                  sourceUserId: uploaderId,
+                  source_user_id: uploaderId,
+                  sourceUserName: userName,
+                  source_user_name: userName,
+                  videoId: videoId || "",
+                  video_id: videoId || "",
+                  incomeType: "admin_allocation",
+                  income_type: "admin_allocation",
+                  amount: adminAmount,
+                  status: "settled",
+                  specialTag: result.specialTag,
+                  description: admDesc,
+                  createdAt: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                });
+              }
+
+              // 3. Credit each eligible creator from creatorPayouts
+              const payouts = result.distribution.creatorPayouts || [];
+              for (const payout of payouts) {
+                let w = store.wallets[payout.userId];
+                if (!w) {
+                  w = {
+                    balance: 0,
+                    total_earned: 0,
+                    total_withdrawn: 0,
+                    referral_income: 0,
+                    global_income: 0,
+                    adsense_income: 0,
+                    affiliate_income: 0,
+                    updated_at: new Date().toISOString(),
+                  };
+                  store.wallets[payout.userId] = w;
+                }
+                w.balance += payout.amount;
+                w.total_earned += payout.amount;
+                w.global_income += payout.amount;
+                w.updated_at = new Date().toISOString();
+
+                const txGlbId = `TX_GLB_${result.paymentId}_${payout.userId}`;
+                store.walletTransactions.unshift({
+                  id: `tx-glb-${Date.now()}-${payout.userId}`,
+                  transactionId: txGlbId,
+                  transaction_id: txGlbId,
+                  userId: payout.userId,
+                  user_id: payout.userId,
+                  sourceUserId: uploaderId,
+                  source_user_id: uploaderId,
+                  sourceUserName: userName,
+                  source_user_name: userName,
+                  videoId: videoId || "",
+                  video_id: videoId || "",
+                  incomeType: "global_income",
+                  income_type: "global_income",
+                  amount: payout.amount,
+                  status: "settled",
+                  specialTag: result.specialTag,
+                  description: `Global Income Pool distribution (₹${payout.amount.toFixed(2)} share of ₹3 pool across ${payouts.length} eligible creators for Premium Video #${result.txNumber || 0})`,
+                  createdAt: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                });
+              }
             } else if (purpose === "ads_promotion" && result.distribution) {
               // 1. Credit 7-level sponsor payouts
               const payouts = result.distribution.levelPayouts || [];

@@ -203,10 +203,12 @@ export function isSpecialGlobalTransaction(txNumber: number): boolean {
 
 /**
  * Pure evaluation helper for test & verification of distributions across any transaction number.
+ * Implements Option A for missing referrers and integer paise division for global pool.
  */
 export function evaluatePremiumDistribution(
   txNumber: number,
   referrerId?: string | null,
+  eligibleCreatorsCount = 1,
 ): {
   txNumber: number;
   isSpecial: boolean;
@@ -216,15 +218,45 @@ export function evaluatePremiumDistribution(
   globalPoolAmount: number;
   taxAndFees: number;
   totalAmount: number;
+  eligibleMembersCount: number;
+  perMemberShare: number;
 } {
   const isSpecial = isSpecialGlobalTransaction(txNumber);
-  const directReferralAmount = referrerId ? PRICING_CONFIG.PREMIUM_VIDEO.REFERRAL_SHARE : 0.0;
-  const adminAmount = isSpecial
-    ? PRICING_CONFIG.PREMIUM_VIDEO.SPECIAL_ADMIN_SHARE // ₹4.00
-    : PRICING_CONFIG.PREMIUM_VIDEO.NORMAL_ADMIN_SHARE; // ₹1.00
-  const globalPoolAmount = isSpecial
-    ? PRICING_CONFIG.PREMIUM_VIDEO.SPECIAL_GLOBAL_POOL_SHARE // ₹0.00
-    : PRICING_CONFIG.PREMIUM_VIDEO.NORMAL_GLOBAL_POOL_SHARE; // ₹3.00
+  const hasValidReferrer = Boolean(referrerId && referrerId.trim().length > 0);
+  const directReferralAmount = hasValidReferrer ? PRICING_CONFIG.PREMIUM_VIDEO.REFERRAL_SHARE : 0.0;
+  const unallocatedReferrerPaise = hasValidReferrer ? 0 : 100; // Option A: ₹1 redirected to Admin if no valid referrer
+
+  let adminAmount = 0.0;
+  let globalPoolAmount = 0.0;
+  let perMemberShare = 0.0;
+
+  if (isSpecial) {
+    // Special: ₹4 Admin + ₹1 (if no referrer redirected to Admin) = ₹4 or ₹5
+    adminAmount = hasValidReferrer
+      ? PRICING_CONFIG.PREMIUM_VIDEO.SPECIAL_ADMIN_SHARE // ₹4.00
+      : PRICING_CONFIG.PREMIUM_VIDEO.SPECIAL_ADMIN_SHARE + 1.0; // ₹5.00
+    globalPoolAmount = 0.0;
+    perMemberShare = 0.0;
+  } else {
+    // Normal: Base Admin = ₹1.00 (+ ₹1.00 unallocated referrer if no referrer)
+    const baseAdminPaise = 100 + unallocatedReferrerPaise;
+
+    if (eligibleCreatorsCount <= 0) {
+      // First transaction / no eligible creators: redirect entire ₹3 pool to Admin
+      adminAmount = (baseAdminPaise + 300) / 100;
+      globalPoolAmount = 0.0;
+      perMemberShare = 0.0;
+    } else {
+      const poolPaise = 300;
+      const perCreatorPaise = Math.floor(poolPaise / eligibleCreatorsCount);
+      const distributedPaise = perCreatorPaise * eligibleCreatorsCount;
+      const residualPaise = poolPaise - distributedPaise;
+
+      adminAmount = (baseAdminPaise + residualPaise) / 100;
+      globalPoolAmount = distributedPaise / 100;
+      perMemberShare = perCreatorPaise / 100;
+    }
+  }
 
   return {
     txNumber,
@@ -235,6 +267,8 @@ export function evaluatePremiumDistribution(
     globalPoolAmount,
     taxAndFees: PRICING_CONFIG.PREMIUM_VIDEO.TAX_AND_FEES, // ₹1.00
     totalAmount: PRICING_CONFIG.PREMIUM_VIDEO.TOTAL_PRICE, // ₹6.00
+    eligibleMembersCount: isSpecial ? 0 : eligibleCreatorsCount,
+    perMemberShare,
   };
 }
 
@@ -373,6 +407,21 @@ export async function getPersistentTransactions(): Promise<PersistentPremiumTxRe
   });
 }
 
+/**
+ * Resets the persistent transaction sequence and transaction list (for isolated testing).
+ */
+export async function resetPersistentPremiumState(
+  txNumber = 0,
+  transactions: PersistentPremiumTxRecord[] = [],
+): Promise<void> {
+  return withLock(() => {
+    savePersistentState({
+      lastTxNumber: txNumber,
+      transactions,
+    });
+  });
+}
+
 export interface PaymentOrderRequest {
   purpose: "premium_video_upload" | "ads_promotion";
   userId: string;
@@ -423,6 +472,7 @@ export interface PaymentVerifyResult {
     globalPoolAmount: number;
     eligibleMembersCount: number;
     perMemberShare: number;
+    creatorPayouts?: Array<{ userId: string; amount: number; amountPaise: number }>;
     totalReferralAmount?: number;
     levelPayouts?: AdsLevelPayout[];
     missingLevels?: number[];
@@ -784,24 +834,66 @@ export async function verifyServerPayment(
       const refId = (referrerUserId || req.referrerUserId || null)?.trim().toUpperCase() || null;
       const hasValidReferrer = Boolean(refId && refId.length > 0);
 
-      // DISTRIBUTION RULE:
-      // Special: ₹1 Direct Referral (if referrer), ₹4 Admin, ₹0 Global Pool
-      // Normal: ₹1 Direct Referral (if referrer), ₹1 Admin, ₹3 Global Pool
+      // Option A Approved Allocation:
+      // If valid referrer: ₹1.00 to referrer
+      // If NO valid referrer: unallocated ₹1.00 redirects to Admin
       const referralCommission = hasValidReferrer
         ? PRICING_CONFIG.PREMIUM_VIDEO.REFERRAL_SHARE
         : 0.0;
-      const adminAllocation = isSpecial
-        ? PRICING_CONFIG.PREMIUM_VIDEO.SPECIAL_ADMIN_SHARE // ₹4.00
-        : PRICING_CONFIG.PREMIUM_VIDEO.NORMAL_ADMIN_SHARE; // ₹1.00
-      const globalPoolAllocation = isSpecial
-        ? PRICING_CONFIG.PREMIUM_VIDEO.SPECIAL_GLOBAL_POOL_SHARE // ₹0.00
-        : PRICING_CONFIG.PREMIUM_VIDEO.NORMAL_GLOBAL_POOL_SHARE; // ₹3.00
-      const specialTag = isSpecial ? "SPECIAL_GLOBAL_RULE" : "NORMAL_PREMIUM";
+      const unallocatedReferrerPaise = hasValidReferrer ? 0 : 100;
 
-      const eligibleCount = Math.max(1, eligiblePremiumCreatorIds.length);
-      const perMemberShare = isSpecial
-        ? 0
-        : Number((globalPoolAllocation / eligibleCount).toFixed(4));
+      // Filter eligible previous creators: strictly exclude current uploader and duplicates
+      const uploaderNorm = req.userId.trim().toUpperCase();
+      const distinctEligible = Array.from(
+        new Set(
+          eligiblePremiumCreatorIds
+            .map((id) => id.trim().toUpperCase())
+            .filter((id) => id.length > 0 && id !== uploaderNorm),
+        ),
+      );
+      const eligibleCount = distinctEligible.length;
+
+      let adminAllocation = 0.0;
+      let globalPoolAllocation = 0.0;
+      let perMemberShare = 0.0;
+      const creatorPayouts: Array<{ userId: string; amount: number; amountPaise: number }> = [];
+
+      if (isSpecial) {
+        // Special: ₹4 Admin + ₹1 (if no referrer redirected to Admin) = ₹4 or ₹5
+        adminAllocation = hasValidReferrer ? 4.0 : 5.0;
+        globalPoolAllocation = 0.0;
+      } else {
+        // Normal: Base Admin = ₹1.00 (+ ₹1.00 unallocated referrer if no referrer)
+        const baseAdminPaise = 100 + unallocatedReferrerPaise;
+
+        if (eligibleCount === 0) {
+          // First transaction or no previous eligible creators: redirect entire ₹3 pool to Admin
+          const adminPaise = baseAdminPaise + 300;
+          adminAllocation = adminPaise / 100;
+          globalPoolAllocation = 0.0;
+        } else {
+          // Distribute 300 paise using integer division; residual paise goes to Admin
+          const poolPaise = 300;
+          const perCreatorPaise = Math.floor(poolPaise / eligibleCount);
+          const distributedPaise = perCreatorPaise * eligibleCount;
+          const residualPaise = poolPaise - distributedPaise;
+
+          const adminPaise = baseAdminPaise + residualPaise;
+          adminAllocation = adminPaise / 100;
+          globalPoolAllocation = distributedPaise / 100;
+          perMemberShare = perCreatorPaise / 100;
+
+          for (const cUserId of distinctEligible) {
+            creatorPayouts.push({
+              userId: cUserId,
+              amount: perCreatorPaise / 100,
+              amountPaise: perCreatorPaise,
+            });
+          }
+        }
+      }
+
+      const specialTag = isSpecial ? "SPECIAL_GLOBAL_RULE" : "NORMAL_PREMIUM";
 
       // Create persistent transaction record
       const record: PersistentPremiumTxRecord = {
@@ -841,6 +933,8 @@ export async function verifyServerPayment(
           globalPoolAmount: globalPoolAllocation,
           eligibleMembersCount: isSpecial ? 0 : eligibleCount,
           perMemberShare,
+          creatorPayouts,
+          totalReferralAmount: referralCommission,
         },
       };
     }

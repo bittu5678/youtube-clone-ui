@@ -313,9 +313,46 @@ export async function distributePremiumVideoIncome(
     }
   }
 
-  // 2. Admin Allocation
-  // Special: ₹4 Admin | Normal: ₹1 Admin
-  const adminAmount = isSpecial ? 4.0 : (params.adminAmount ?? 1.0);
+  // 2. Admin Allocation & Global Pool Calculation (Server-Authoritative Option A)
+  const normUploader = params.uploaderUserId.trim().toUpperCase();
+  const allEligible = await getEligibleGlobalIncomeUsers();
+  // Strictly EXCLUDE current uploader from their own transaction's global pool
+  const eligibleUsers = Array.from(
+    new Set(allEligible.map((id) => id.trim().toUpperCase()).filter((id) => id !== normUploader)),
+  );
+  const eligibleCount = eligibleUsers.length;
+
+  const hasValidReferrer = Boolean(normalizedReferrerId && normalizedReferrerId.length > 0);
+  const unallocatedReferrerPaise = hasValidReferrer ? 0 : 100; // Option A: unallocated ₹1 to Admin
+
+  let adminAmount = 0.0;
+  let globalPoolAllocation = 0.0;
+  let perUserShare = 0.0;
+
+  if (isSpecial) {
+    // Special: ₹4 Admin + ₹1 (if no referrer redirected to Admin) = ₹4 or ₹5
+    adminAmount = hasValidReferrer ? 4.0 : 5.0;
+    globalPoolAllocation = 0.0;
+  } else {
+    const baseAdminPaise = 100 + unallocatedReferrerPaise;
+
+    if (eligibleCount === 0) {
+      // First transaction / no previous eligible creators: redirect entire ₹3 pool to Admin
+      adminAmount = (baseAdminPaise + 300) / 100;
+      globalPoolAllocation = 0.0;
+    } else {
+      // Distribute 300 paise in integer paise; residual paise goes to Admin
+      const poolPaise = 300;
+      const perCreatorPaise = Math.floor(poolPaise / eligibleCount);
+      const distributedPaise = perCreatorPaise * eligibleCount;
+      const residualPaise = poolPaise - distributedPaise;
+
+      adminAmount = (baseAdminPaise + residualPaise) / 100;
+      globalPoolAllocation = distributedPaise / 100;
+      perUserShare = perCreatorPaise / 100;
+    }
+  }
+
   const adminTransaction: LedgerTransaction = {
     id: `adm-tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     transactionId: `TX_ADM_${params.paymentId}`,
@@ -328,18 +365,34 @@ export async function distributePremiumVideoIncome(
     status: "settled",
     ...(isSpecial ? { specialTag: "SPECIAL_GLOBAL_RULE" as const } : {}),
     description: isSpecial
-      ? `Special Premium Transaction ${txSeqLabel}: Admin Allocation (₹4) under rule SPECIAL_GLOBAL_RULE`
-      : `Admin / Platform Share (₹1) for Premium Video ${txSeqLabel}`,
+      ? `Special Premium Transaction ${txSeqLabel}: Admin Allocation (₹${adminAmount.toFixed(2)}) under rule SPECIAL_GLOBAL_RULE`
+      : `Admin Allocation (₹${adminAmount.toFixed(2)}) for Premium Video ${txSeqLabel}`,
     createdAt: new Date().toISOString(),
   };
   ledger.unshift(adminTransaction);
 
+  // Credit Admin wallet
+  const adminWalletKey = "ADMIN";
+  if (!wallets[adminWalletKey]) {
+    wallets[adminWalletKey] = {
+      userId: adminWalletKey,
+      balance: adminAmount,
+      totalEarned: adminAmount,
+      totalWithdrawn: 0,
+      referralIncome: 0,
+      globalIncome: 0,
+      adsenseIncome: 0,
+      affiliateIncome: 0,
+      updatedAt: new Date().toISOString(),
+    };
+  } else {
+    wallets[adminWalletKey].balance += adminAmount;
+    wallets[adminWalletKey].totalEarned += adminAmount;
+    wallets[adminWalletKey].updatedAt = new Date().toISOString();
+  }
+
   // 3. Global Income Pool
   if (isSpecial) {
-    // SPECIAL TRANSACTION (11th, 21st, 31st, 41st...):
-    // MUST NOT allocate normal ₹3 Global Income Pool!
-    // Do NOT distribute ₹3 among eligible creators. Do NOT credit Global Income to ANY user.
-    // Record clearly in audit ledger as SPECIAL_GLOBAL_RULE with amount 0.
     specialAuditTransaction = {
       id: `spec-tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       transactionId: `TX_SPEC_${params.paymentId}`,
@@ -351,24 +404,11 @@ export async function distributePremiumVideoIncome(
       amount: 0.0,
       status: "settled",
       specialTag: "SPECIAL_GLOBAL_RULE",
-      description: `Special Premium Transaction ${txSeqLabel}: Rule SPECIAL_GLOBAL_RULE applied (₹4 Admin, ₹0 Global Pool, standard pool distribution bypassed)`,
+      description: `Special Premium Transaction ${txSeqLabel}: Rule SPECIAL_GLOBAL_RULE applied (₹${adminAmount.toFixed(2)} Admin, ₹0 Global Pool, standard pool distribution bypassed)`,
       createdAt: new Date().toISOString(),
     };
     ledger.unshift(specialAuditTransaction);
-  } else {
-    // NORMAL TRANSACTION:
-    // Normal ₹3 Global Income Pool distributed equally to eligible creators (uploaded >= 1 premium video)
-    const eligibleUsers = await getEligibleGlobalIncomeUsers();
-    // Include current uploader if they just paid for premium video
-    const normUploader = params.uploaderUserId.trim().toUpperCase();
-    if (!eligibleUsers.includes(normUploader)) {
-      eligibleUsers.push(normUploader);
-    }
-
-    const poolTotal = 3.0; // ₹3.00
-    const count = Math.max(1, eligibleUsers.length);
-    const perUserShare = Number((poolTotal / count).toFixed(4));
-
+  } else if (eligibleCount > 0 && perUserShare > 0) {
     for (const uid of eligibleUsers) {
       const gTx: LedgerTransaction = {
         id: `glb-tx-${Date.now()}-${uid}`,
@@ -380,7 +420,7 @@ export async function distributePremiumVideoIncome(
         incomeType: "global_income",
         amount: perUserShare,
         status: "settled",
-        description: `Global Income Pool distribution (₹${perUserShare} share of ₹3 pool across ${count} eligible creators for Premium Video ${txSeqLabel})`,
+        description: `Global Income Pool distribution (₹${perUserShare.toFixed(2)} share of ₹3 pool across ${eligibleCount} eligible creators for Premium Video ${txSeqLabel})`,
         createdAt: new Date().toISOString(),
       };
       ledger.unshift(gTx);
