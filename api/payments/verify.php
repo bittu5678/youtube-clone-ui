@@ -233,122 +233,322 @@ try {
         exit;
     }
 
-    // 3.3 Sequence allocation under row lock
-    $stmtCount = $pdo->query('SELECT COUNT(*) as total FROM payment_transactions FOR UPDATE');
-    $countRow = $stmtCount->fetch();
-    $txNumber = intval($countRow['total'] ?? 0) + 1;
-
-    // Special 11th-formula rule: txNumber >= 11 AND (txNumber - 11) % 10 === 0
-    $isSpecial = ($txNumber >= 11 && ($txNumber - 11) % 10 === 0);
-    $specialTag = $isSpecial ? 'SPECIAL_GLOBAL_RULE' : 'NORMAL_PREMIUM';
-
-    // Verify referral relationship strictly against database sponsor
-    $verifiedReferrerId = null;
-    $stmtUserRef = $pdo->prepare('SELECT id, referral_code FROM users WHERE UPPER(user_id) = UPPER(?) LIMIT 1');
-    $stmtUserRef->execute([$userId]);
-    $userRow = $stmtUserRef->fetch();
-    $refCode = trim($userRow['referral_code'] ?? '');
-
-    if (!empty($refCode)) {
-        $stmtRef = $pdo->prepare('
-            SELECT user_id FROM users 
-            WHERE (UPPER(user_id) = UPPER(?) OR UPPER(referral_code) = UPPER(?)) 
-              AND UPPER(user_id) != UPPER(?) 
-            LIMIT 1
-        ');
-        $stmtRef->execute([$refCode, $refCode, $userId]);
-        $refMatch = $stmtRef->fetch();
-        if ($refMatch) {
-            $verifiedReferrerId = $refMatch['user_id'];
-        }
-    }
-
     $isPremiumUpload = ($purpose === 'premium_video_upload');
-    $referralCommission = ($isPremiumUpload && !empty($verifiedReferrerId)) ? 1.00 : 0.00;
-    $adminAllocation = $isSpecial ? 4.00 : 1.00;
-    $globalPoolAllocation = $isSpecial ? 0.00 : 3.00;
 
-    // 3.4 Insert into payment_transactions (protected by UNIQUE key on payment_id)
-    $stmtTx = $pdo->prepare('
-        INSERT INTO payment_transactions (
-            order_id, payment_id, user_id, user_name, video_id, purpose, amount,
-            tx_number, is_special, special_tag, referral_commission, admin_allocation, global_pool_allocation,
-            created_at
-        ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?,
-            NOW()
-        )
-    ');
-    $stmtTx->execute([
-        $orderId, $paymentId, $userId, $userName, $videoId ?: null, $purpose, $amount,
-        $txNumber, $isSpecial ? 1 : 0, $specialTag, $referralCommission, $adminAllocation, $globalPoolAllocation
-    ]);
+    if ($isPremiumUpload) {
+        // 3.3 Premium Video sequence allocation under row lock (isolating counter to premium uploads only)
+        $stmtCount = $pdo->query("SELECT COUNT(*) as total FROM payment_transactions WHERE purpose = 'premium_video_upload' FOR UPDATE");
+        $countRow = $stmtCount->fetch();
+        $txNumber = intval($countRow['total'] ?? 0) + 1;
 
-    // 3.5 Insert into premium_transactions audit sequence
-    try {
-        $ptId = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
-        $stmtPt = $pdo->prepare('
-            INSERT INTO premium_transactions (
-                id, tx_number, payment_id, order_id, video_id, user_id, referrer_id,
-                amount, transaction_type, is_special, special_tag, referral_commission,
-                admin_allocation, global_pool_allocation, created_at
+        // Special 11th-formula rule: txNumber >= 11 AND (txNumber - 11) % 10 === 0
+        $isSpecial = ($txNumber >= 11 && ($txNumber - 11) % 10 === 0);
+        $specialTag = $isSpecial ? 'SPECIAL_GLOBAL_RULE' : 'NORMAL_PREMIUM';
+
+        // Verify direct referral sponsor strictly from users table
+        $verifiedReferrerId = null;
+        $stmtUserRef = $pdo->prepare('SELECT id, referral_code FROM users WHERE UPPER(user_id) = UPPER(?) LIMIT 1');
+        $stmtUserRef->execute([$userId]);
+        $userRow = $stmtUserRef->fetch();
+        $refCode = trim($userRow['referral_code'] ?? '');
+
+        if (!empty($refCode)) {
+            $stmtRef = $pdo->prepare('
+                SELECT user_id FROM users 
+                WHERE (UPPER(user_id) = UPPER(?) OR UPPER(referral_code) = UPPER(?)) 
+                  AND UPPER(user_id) != UPPER(?) 
+                LIMIT 1
+            ');
+            $stmtRef->execute([$refCode, $refCode, $userId]);
+            $refMatch = $stmtRef->fetch();
+            if ($refMatch) {
+                $verifiedReferrerId = $refMatch['user_id'];
+            }
+        }
+
+        $referralCommission = (!empty($verifiedReferrerId)) ? 1.00 : 0.00;
+        $adminAllocation = $isSpecial ? 4.00 : 1.00;
+        $globalPoolAllocation = $isSpecial ? 0.00 : 3.00;
+
+        // Insert into payment_transactions (protected by UNIQUE key on payment_id)
+        $stmtTx = $pdo->prepare('
+            INSERT INTO payment_transactions (
+                order_id, payment_id, user_id, user_name, video_id, purpose, amount,
+                tx_number, is_special, special_tag, referral_commission, admin_allocation, global_pool_allocation,
+                created_at
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?,
-                ?, "premium_upload", ?, ?, ?,
-                ?, ?, NOW()
+                ?, ?, ?, ?, ?, ?,
+                NOW()
             )
         ');
-        $stmtPt->execute([
-            $ptId, $txNumber, $paymentId, $orderId, $videoId ?: 'vid_unknown', $userId, $verifiedReferrerId,
-            $amount, $isSpecial ? 1 : 0, $specialTag, $referralCommission,
-            $adminAllocation, $globalPoolAllocation
+        $stmtTx->execute([
+            $orderId, $paymentId, $userId, $userName, $videoId ?: null, $purpose, $amount,
+            $txNumber, $isSpecial ? 1 : 0, $specialTag, $referralCommission, $adminAllocation, $globalPoolAllocation
         ]);
-    } catch (Exception $ePt) {
-        // Table optional
-    }
 
-    // 3.6 Credit referral commission to sponsor in ledger & wallet (only once)
-    if (!empty($verifiedReferrerId) && $referralCommission > 0) {
-        $txRefId = 'TX_REF_' . $paymentId;
-        $ledgerUuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
+        // Insert into premium_transactions audit sequence
+        try {
+            $ptId = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
+            $stmtPt = $pdo->prepare('
+                INSERT INTO premium_transactions (
+                    id, tx_number, payment_id, order_id, video_id, user_id, referrer_id,
+                    amount, transaction_type, is_special, special_tag, referral_commission,
+                    admin_allocation, global_pool_allocation, created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?,
+                    ?, "premium_upload", ?, ?, ?,
+                    ?, ?, NOW()
+                )
+            ');
+            $stmtPt->execute([
+                $ptId, $txNumber, $paymentId, $orderId, $videoId ?: 'vid_unknown', $userId, $verifiedReferrerId,
+                $amount, $isSpecial ? 1 : 0, $specialTag, $referralCommission,
+                $adminAllocation, $globalPoolAllocation
+            ]);
+        } catch (Exception $ePt) {
+            // Table optional
+        }
 
+        // Credit direct referral commission (₹1.00) in income_ledger and wallet_balances
+        if (!empty($verifiedReferrerId) && $referralCommission > 0) {
+            $txRefId = 'TX_REF_' . $paymentId;
+            $ledgerUuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
+
+            $stmtLedger = $pdo->prepare('
+                INSERT INTO income_ledger (
+                    id, transaction_id, user_id, source_user_id, source_user_name, video_id,
+                    income_type, amount, status, special_tag, description, created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?,
+                    "referral_income", 1.0000, "settled", ?, ?, NOW()
+                )
+            ');
+            $stmtLedger->execute([
+                $ledgerUuid,
+                $txRefId,
+                $verifiedReferrerId,
+                $userId,
+                $userName,
+                $videoId ?: null,
+                $specialTag,
+                "Direct referral commission (₹1.00) for eligible Premium Video upload by {$userName} ({$userId})"
+            ]);
+
+            $stmtCredit = $pdo->prepare('
+                INSERT INTO wallet_balances (user_id, balance, total_earned, total_withdrawn, referral_income, global_income, adsense_income, affiliate_income, updated_at)
+                VALUES (?, 1.00, 1.00, 0.00, 1.00, 0.00, 0.00, 0.00, NOW())
+                ON DUPLICATE KEY UPDATE
+                    balance = balance + 1.00,
+                    total_earned = total_earned + 1.00,
+                    referral_income = referral_income + 1.00,
+                    updated_at = NOW()
+            ');
+            $stmtCredit->execute([$verifiedReferrerId]);
+        }
+
+        $levelPayouts = [];
+        $missingLevels = [];
+        $adminPercent = intval(round(($adminAllocation / $amount) * 100));
+        $totalReferralAmount = $referralCommission;
+    } else {
+        // -------------------------------------------------------------------------
+        // ADS PROMOTION (Task 33: 7-Level Referral Commission Distribution)
+        // Rate Schedule: L1=15%, L2=10%, L3=5%, L4=4%, L5=3%, L6=2%, L7=1%
+        // Base Admin Share: 60%. Missing levels redirected to Admin.
+        // Sequence counter for Premium Videos is NOT incremented.
+        // -------------------------------------------------------------------------
+        $txNumber = 0;
+        $isSpecial = false;
+        $specialTag = 'ADS_PROMOTION';
+        $globalPoolAllocation = 0.00;
+
+        // Resolve up to 7 valid upline sponsors with strict cycle and self-referral prevention
+        $visited = [strtoupper($userId) => true];
+        $uplines = [];
+        $currentUplineId = $userId;
+
+        for ($lvl = 1; $lvl <= 7; $lvl++) {
+            $stmtUpUser = $pdo->prepare('SELECT user_id, referral_code, name FROM users WHERE UPPER(user_id) = UPPER(?) LIMIT 1');
+            $stmtUpUser->execute([$currentUplineId]);
+            $currUserRow = $stmtUpUser->fetch();
+            if (!$currUserRow) break;
+
+            $uRefCode = trim($currUserRow['referral_code'] ?? '');
+            if (empty($uRefCode)) break;
+
+            $stmtUpMatch = $pdo->prepare('
+                SELECT user_id, referral_code, name FROM users 
+                WHERE (UPPER(user_id) = UPPER(?) OR UPPER(referral_code) = UPPER(?)) 
+                  AND UPPER(user_id) != UPPER(?) 
+                LIMIT 1
+            ');
+            $stmtUpMatch->execute([$uRefCode, $uRefCode, $currentUplineId]);
+            $matchedSponsor = $stmtUpMatch->fetch();
+            if (!$matchedSponsor) break;
+
+            $sNormId = strtoupper($matchedSponsor['user_id']);
+            if (isset($visited[$sNormId])) {
+                // Terminate traversal on loop or already visited sponsor
+                break;
+            }
+
+            $visited[$sNormId] = true;
+            $uplines[$lvl] = [
+                'level' => $lvl,
+                'userId' => $matchedSponsor['user_id'],
+                'name' => $matchedSponsor['name'] ?? 'Creator'
+            ];
+            $currentUplineId = $matchedSponsor['user_id'];
+        }
+
+        // Direct Level 1 referrer ID for backward-compatible response
+        $verifiedReferrerId = isset($uplines[1]) ? $uplines[1]['userId'] : null;
+
+        // Resolve Admin user identifier from database
+        $stmtAdmin = $pdo->query("SELECT user_id FROM users WHERE role = 'admin' ORDER BY created_at ASC LIMIT 1");
+        $adminRow = $stmtAdmin->fetch();
+        $adminUserId = $adminRow['user_id'] ?? 'FT102857';
+
+        // 7-Level Rate Percentages
+        $rates = [1 => 15, 2 => 10, 3 => 5, 4 => 4, 5 => 3, 6 => 2, 7 => 1];
+        $totalPaise = (int)round($amount * 100);
+        $allocatedPaise = 0;
+        $levelPayouts = [];
+        $missingLevels = [];
+
+        foreach ($rates as $lvl => $pct) {
+            if (isset($uplines[$lvl])) {
+                $commPaise = (int)round($totalPaise * ($pct / 100));
+                $allocatedPaise += $commPaise;
+                $levelPayouts[] = [
+                    'level' => $lvl,
+                    'percent' => $pct,
+                    'userId' => $uplines[$lvl]['userId'],
+                    'name' => $uplines[$lvl]['name'],
+                    'amount' => $commPaise / 100,
+                    'amountPaise' => $commPaise,
+                ];
+            } else {
+                $missingLevels[] = $lvl;
+            }
+        }
+
+        // Exact integer remainder formula guarantees sum of all credits equals plan amount with zero rounding loss
+        $adminPaise = $totalPaise - $allocatedPaise;
+        $adminAmount = $adminPaise / 100;
+        $totalReferralAmount = $allocatedPaise / 100;
+        $adminAllocation = $adminAmount;
+        $referralCommission = $totalReferralAmount;
+        $adminPercent = (int)round(($adminPaise / $totalPaise) * 100);
+
+        // Record payment in payment_transactions
+        $stmtTx = $pdo->prepare('
+            INSERT INTO payment_transactions (
+                order_id, payment_id, user_id, user_name, video_id, purpose, amount,
+                tx_number, is_special, special_tag, referral_commission, admin_allocation, global_pool_allocation,
+                created_at
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?,
+                0, 0, "ADS_PROMOTION", ?, ?, 0.00,
+                NOW()
+            )
+        ');
+        $stmtTx->execute([
+            $orderId, $paymentId, $userId, $userName, $videoId ?: null, $purpose, $amount,
+            $totalReferralAmount, $adminAmount
+        ]);
+
+        // Insert atomic ledger entries and credit wallet balances for each valid upline sponsor
         $stmtLedger = $pdo->prepare('
             INSERT INTO income_ledger (
                 id, transaction_id, user_id, source_user_id, source_user_name, video_id,
                 income_type, amount, status, special_tag, description, created_at
             ) VALUES (
                 ?, ?, ?, ?, ?, ?,
-                "referral_income", 1.0000, "settled", ?, ?, NOW()
+                "referral_income", ?, "settled", ?, ?, NOW()
             )
         ');
-        $stmtLedger->execute([
-            $ledgerUuid,
-            $txRefId,
-            $verifiedReferrerId,
-            $userId,
-            $userName,
-            $videoId ?: null,
-            $specialTag,
-            "Direct referral commission (₹1.00) for eligible Premium Video upload by {$userName} ({$userId})"
-        ]);
-
         $stmtCredit = $pdo->prepare('
             INSERT INTO wallet_balances (user_id, balance, total_earned, total_withdrawn, referral_income, global_income, adsense_income, affiliate_income, updated_at)
-            VALUES (?, 1.00, 1.00, 0.00, 1.00, 0.00, 0.00, 0.00, NOW())
+            VALUES (?, ?, ?, 0.00, ?, 0.00, 0.00, 0.00, NOW())
             ON DUPLICATE KEY UPDATE
-                balance = balance + 1.00,
-                total_earned = total_earned + 1.00,
-                referral_income = referral_income + 1.00,
+                balance = balance + VALUES(balance),
+                total_earned = total_earned + VALUES(total_earned),
+                referral_income = referral_income + VALUES(referral_income),
                 updated_at = NOW()
         ');
-        $stmtCredit->execute([$verifiedReferrerId]);
+
+        foreach ($levelPayouts as $payout) {
+            $lId = $payout['level'];
+            $txId = "TX_ADS_L{$lId}_{$paymentId}";
+            $lUuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
+            $desc = "Level {$lId} referral commission ({$payout['percent']}%) for Ads Promotion by {$userName} ({$userId})";
+
+            $stmtLedger->execute([
+                $lUuid,
+                $txId,
+                $payout['userId'],
+                $userId,
+                $userName,
+                $videoId ?: null,
+                $payout['amount'],
+                "ADS_REF_L{$lId}",
+                $desc
+            ]);
+
+            $stmtCredit->execute([
+                $payout['userId'],
+                $payout['amount'],
+                $payout['amount'],
+                $payout['amount']
+            ]);
+        }
+
+        // Record Admin allocation (base 60% + missing level remainder) in income_ledger and wallet_balances
+        if ($adminAmount > 0) {
+            $txAdminId = "TX_ADS_ADM_{$paymentId}";
+            $admUuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
+                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
+            $admDesc = "Admin allocation ({$adminPercent}%) including base 60% and unallocated referral shares for Ads Promotion by {$userName} ({$userId})";
+
+            $stmtLedger->execute([
+                $admUuid,
+                $txAdminId,
+                $adminUserId,
+                $userId,
+                $userName,
+                $videoId ?: null,
+                $adminAmount,
+                "ADS_ADMIN_SHARE",
+                $admDesc
+            ]);
+
+            $stmtCreditAdmin = $pdo->prepare('
+                INSERT INTO wallet_balances (user_id, balance, total_earned, total_withdrawn, referral_income, global_income, adsense_income, affiliate_income, updated_at)
+                VALUES (?, ?, ?, 0.00, 0.00, 0.00, 0.00, 0.00, NOW())
+                ON DUPLICATE KEY UPDATE
+                    balance = balance + VALUES(balance),
+                    total_earned = total_earned + VALUES(total_earned),
+                    updated_at = NOW()
+            ');
+            $stmtCreditAdmin->execute([
+                $adminUserId,
+                $adminAmount,
+                $adminAmount
+            ]);
+        }
     }
 
     // 3.7 Feature Activation: Premium Video or Ad Promotion
@@ -414,10 +614,14 @@ try {
         'isSpecialTransaction' => $isSpecial,
         'specialTag' => $specialTag,
         'distribution' => [
-            'directReferralAmount' => $referralCommission,
+            'directReferralAmount' => $verifiedReferrerId && !empty($levelPayouts[0]) ? $levelPayouts[0]['amount'] : $referralCommission,
             'referrerId' => $verifiedReferrerId,
             'adminAmount' => $adminAllocation,
+            'adminPercent' => $adminPercent,
             'globalPoolAmount' => $globalPoolAllocation,
+            'totalReferralAmount' => $totalReferralAmount,
+            'levelPayouts' => $levelPayouts,
+            'missingLevels' => $missingLevels,
         ]
     ]);
 } catch (PDOException $e) {

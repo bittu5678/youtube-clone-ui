@@ -11,6 +11,10 @@ import {
   getPersistentPremiumTxNumber,
   PRICING_CONFIG,
   AdsPlanId,
+  ADS_REFERRAL_RATES,
+  evaluateAdsDistribution,
+  resolveUplineSponsors,
+  type AdsUplineSponsor,
 } from "./payments.ts";
 import {
   sendWelcomeEmailServer,
@@ -27,7 +31,7 @@ const STORE_FILE = path.join(DATA_DIR, "facetube_store.json");
  * An ad promotion is active ONLY IF:
  * 1. Marked as promoted (is_promoted / isPromoted is truthy)
  * 2. Expiry timestamp is present, valid, and strictly in the future (> Date.now())
- * 
+ *
  * Expired promotions, or those with null/missing/invalid expiry timestamps, return false.
  */
 export function isAdPromotionActive(video: {
@@ -568,6 +572,56 @@ export function requireAuth(
   return { success: true, user: authUser, effectiveUserId };
 }
 
+/**
+ * Resolves up to 7 distinct valid upline sponsors using MySQL connection with cycle prevention.
+ */
+export async function resolveUplineSponsorsMysql(
+  uploaderUserId: string,
+  conn: mysql.PoolConnection | mysql.Pool,
+): Promise<AdsUplineSponsor[]> {
+  const normUploader = uploaderUserId.trim().toUpperCase();
+  const visited = new Set<string>([normUploader]);
+  const uplines: AdsUplineSponsor[] = [];
+
+  let currentUserId = normUploader;
+
+  for (let level = 1; level <= 7; level++) {
+    const [uRows]: any = await conn.query(
+      `SELECT user_id, referral_code, name FROM users WHERE UPPER(user_id) = UPPER(?) LIMIT 1`,
+      [currentUserId],
+    );
+    if (!uRows || uRows.length === 0) break;
+    const refCode = (uRows[0].referral_code || "").trim();
+    if (!refCode) break;
+
+    const [sponsorRows]: any = await conn.query(
+      `SELECT user_id, referral_code, name FROM users 
+       WHERE (UPPER(user_id) = UPPER(?) OR UPPER(referral_code) = UPPER(?)) 
+         AND UPPER(user_id) != UPPER(?) 
+       LIMIT 1`,
+      [refCode, refCode, currentUserId],
+    );
+    if (!sponsorRows || sponsorRows.length === 0) break;
+
+    const sponsor = sponsorRows[0];
+    const sponsorNormId = sponsor.user_id.toUpperCase();
+    if (visited.has(sponsorNormId)) {
+      break;
+    }
+
+    visited.add(sponsorNormId);
+    uplines.push({
+      level,
+      userId: sponsor.user_id,
+      name: sponsor.name,
+    });
+
+    currentUserId = sponsorNormId;
+  }
+
+  return uplines;
+}
+
 export async function handleApiRequest(
   request: Request,
   env?: Record<string, string | undefined>,
@@ -1040,80 +1094,69 @@ export async function handleApiRequest(
               });
             }
 
-            // Sequence allocation under row lock
-            const [cntRows]: any = await conn.query(
-              `SELECT COUNT(*) as total FROM payment_transactions FOR UPDATE`,
-            );
-            const txNumber = Number(cntRows?.[0]?.total || 0) + 1;
-            const isSpecial = txNumber >= 11 && (txNumber - 11) % 10 === 0;
-            const specialTag = isSpecial ? "SPECIAL_GLOBAL_RULE" : "NORMAL_PREMIUM";
-
-            // Verify sponsor strictly from users table
-            let verifiedReferrerId: string | null = null;
-            const [uRows]: any = await conn.query(
-              `SELECT id, user_id, referral_code FROM users WHERE UPPER(user_id) = UPPER(?) LIMIT 1`,
-              [uploaderId],
-            );
-            const userRec = uRows?.[0];
-            const refCode = userRec?.referral_code?.trim();
-            if (refCode) {
-              const [sponsorRows]: any = await conn.query(
-                `SELECT user_id FROM users 
-                 WHERE (UPPER(user_id) = UPPER(?) OR UPPER(referral_code) = UPPER(?)) 
-                   AND UPPER(user_id) != UPPER(?) 
-                 LIMIT 1`,
-                [refCode, refCode, uploaderId],
-              );
-              if (sponsorRows && sponsorRows.length > 0) {
-                verifiedReferrerId = sponsorRows[0].user_id;
-              }
-            }
-
             const isPremiumUpload = purpose === "premium_video_upload";
-            const referralCommission = isPremiumUpload && verifiedReferrerId ? 1.0 : 0.0;
-            const adminAllocation = isSpecial ? 4.0 : 1.0;
-            const globalPoolAllocation = isSpecial ? 0.0 : 3.0;
+            let txNumber = 0;
+            let isSpecial = false;
+            let specialTag = "NORMAL_PREMIUM";
+            let verifiedReferrerId: string | null = null;
+            let referralCommission = 0.0;
+            let adminAllocation = 0.0;
+            let globalPoolAllocation = 0.0;
+            let levelPayouts: any[] = [];
+            let missingLevels: number[] = [];
+            let adminPercent = 60;
+            let totalReferralAmount = 0.0;
 
-            // 1. Insert into payment_transactions (protected by UNIQUE KEY uniq_pt_payment_id)
-            await conn.query(
-              `INSERT INTO payment_transactions (
-                order_id, payment_id, user_id, user_name, video_id, purpose, amount,
-                tx_number, is_special, special_tag, referral_commission, admin_allocation, global_pool_allocation, created_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-              [
-                orderId,
-                paymentId,
-                uploaderId,
-                userName,
-                videoId || null,
-                purpose,
-                amount,
-                txNumber,
-                isSpecial ? 1 : 0,
-                specialTag,
-                referralCommission,
-                adminAllocation,
-                globalPoolAllocation,
-              ],
-            );
+            if (isPremiumUpload) {
+              // Sequence allocation strictly for qualifying premium video uploads
+              const [cntRows]: any = await conn.query(
+                `SELECT COUNT(*) as total FROM payment_transactions WHERE purpose = 'premium_video_upload' FOR UPDATE`,
+              );
+              txNumber = Number(cntRows?.[0]?.total || 0) + 1;
+              isSpecial = txNumber >= 11 && (txNumber - 11) % 10 === 0;
+              specialTag = isSpecial ? "SPECIAL_GLOBAL_RULE" : "NORMAL_PREMIUM";
 
-            // 2. Insert into premium_transactions audit table
-            try {
+              // Verify direct sponsor strictly from users table
+              const [uRows]: any = await conn.query(
+                `SELECT id, user_id, referral_code FROM users WHERE UPPER(user_id) = UPPER(?) LIMIT 1`,
+                [uploaderId],
+              );
+              const userRec = uRows?.[0];
+              const refCode = userRec?.referral_code?.trim();
+              if (refCode) {
+                const [sponsorRows]: any = await conn.query(
+                  `SELECT user_id FROM users 
+                   WHERE (UPPER(user_id) = UPPER(?) OR UPPER(referral_code) = UPPER(?)) 
+                     AND UPPER(user_id) != UPPER(?) 
+                   LIMIT 1`,
+                  [refCode, refCode, uploaderId],
+                );
+                if (sponsorRows && sponsorRows.length > 0) {
+                  verifiedReferrerId = sponsorRows[0].user_id;
+                }
+              }
+
+              referralCommission = verifiedReferrerId ? 1.0 : 0.0;
+              adminAllocation = isSpecial ? 4.0 : 1.0;
+              globalPoolAllocation = isSpecial ? 0.0 : 3.0;
+              totalReferralAmount = referralCommission;
+              adminPercent = Math.round((adminAllocation / amount) * 100);
+
+              // 1. Insert into payment_transactions
               await conn.query(
-                `INSERT INTO premium_transactions (
-                  id, tx_number, payment_id, order_id, video_id, user_id, referrer_id,
-                  amount, transaction_type, is_special, special_tag, referral_commission,
-                  admin_allocation, global_pool_allocation, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'premium_upload', ?, ?, ?, ?, ?, NOW())`,
+                `INSERT INTO payment_transactions (
+                  order_id, payment_id, user_id, user_name, video_id, purpose, amount,
+                  tx_number, is_special, special_tag, referral_commission, admin_allocation, global_pool_allocation, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
                 [
-                  crypto.randomUUID(),
-                  txNumber,
-                  paymentId,
                   orderId,
-                  videoId || null,
+                  paymentId,
                   uploaderId,
-                  verifiedReferrerId,
+                  userName,
+                  videoId || null,
+                  purpose,
                   amount,
+                  txNumber,
                   isSpecial ? 1 : 0,
                   specialTag,
                   referralCommission,
@@ -1121,40 +1164,172 @@ export async function handleApiRequest(
                   globalPoolAllocation,
                 ],
               );
-            } catch (_ePt) {
-              // Audit table optional
-            }
 
-            // 3. Insert into income_ledger & credit wallet_balances if commission is due
-            if (verifiedReferrerId && referralCommission > 0) {
-              const txRefId = `TX_REF_${paymentId}`;
+              // 2. Insert into premium_transactions audit table
+              try {
+                await conn.query(
+                  `INSERT INTO premium_transactions (
+                    id, tx_number, payment_id, order_id, video_id, user_id, referrer_id,
+                    amount, transaction_type, is_special, special_tag, referral_commission,
+                    admin_allocation, global_pool_allocation, created_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'premium_upload', ?, ?, ?, ?, ?, NOW())`,
+                  [
+                    crypto.randomUUID(),
+                    txNumber,
+                    paymentId,
+                    orderId,
+                    videoId || null,
+                    uploaderId,
+                    verifiedReferrerId,
+                    amount,
+                    isSpecial ? 1 : 0,
+                    specialTag,
+                    referralCommission,
+                    adminAllocation,
+                    globalPoolAllocation,
+                  ],
+                );
+              } catch (_ePt) {
+                // Audit table optional
+              }
+
+              // 3. Insert into income_ledger & credit wallet_balances if commission is due
+              if (verifiedReferrerId && referralCommission > 0) {
+                const txRefId = `TX_REF_${paymentId}`;
+                await conn.query(
+                  `INSERT INTO income_ledger (
+                    id, transaction_id, user_id, source_user_id, source_user_name, video_id,
+                    income_type, amount, status, special_tag, description, created_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, 'referral_income', 1.0000, 'settled', ?, ?, NOW())`,
+                  [
+                    crypto.randomUUID(),
+                    txRefId,
+                    verifiedReferrerId,
+                    uploaderId,
+                    userName,
+                    videoId || null,
+                    specialTag,
+                    `Direct referral commission (₹1.00) for eligible Premium Video upload by ${userName} (${uploaderId})`,
+                  ],
+                );
+
+                await conn.query(
+                  `INSERT INTO wallet_balances (user_id, balance, total_earned, total_withdrawn, referral_income, global_income, adsense_income, affiliate_income, updated_at)
+                   VALUES (?, 1.00, 1.00, 0.00, 1.00, 0.00, 0.00, 0.00, NOW())
+                   ON DUPLICATE KEY UPDATE
+                     balance = balance + 1.00,
+                     total_earned = total_earned + 1.00,
+                     referral_income = referral_income + 1.00,
+                     updated_at = NOW()`,
+                  [verifiedReferrerId],
+                );
+              }
+            } else {
+              // Task 33: 7-Level Ads Promotion Referral Distribution
+              txNumber = 0;
+              isSpecial = false;
+              specialTag = "ADS_PROMOTION";
+              globalPoolAllocation = 0.0;
+
+              // Resolve up to 7 valid uplines
+              const uplines = await resolveUplineSponsorsMysql(uploaderId, conn);
+              const dist = evaluateAdsDistribution(amount, uplines);
+              levelPayouts = dist.levelPayouts;
+              missingLevels = dist.missingLevels;
+              totalReferralAmount = dist.totalReferralAmount;
+              referralCommission = dist.totalReferralAmount;
+              adminAllocation = dist.adminAmount;
+              adminPercent = dist.adminPercent;
+              verifiedReferrerId = uplines.find((u) => u.level === 1)?.userId || null;
+
+              // Resolve Admin user ID from database
+              const [adminRows]: any = await conn.query(
+                `SELECT user_id FROM users WHERE role = 'admin' ORDER BY created_at ASC LIMIT 1`,
+              );
+              const adminUserId = adminRows?.[0]?.user_id || "FT102857";
+
+              // 1. Insert into payment_transactions (does not increment premium sequence)
               await conn.query(
-                `INSERT INTO income_ledger (
-                  id, transaction_id, user_id, source_user_id, source_user_name, video_id,
-                  income_type, amount, status, special_tag, description, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'referral_income', 1.0000, 'settled', ?, ?, NOW())`,
+                `INSERT INTO payment_transactions (
+                  order_id, payment_id, user_id, user_name, video_id, purpose, amount,
+                  tx_number, is_special, special_tag, referral_commission, admin_allocation, global_pool_allocation, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 'ADS_PROMOTION', ?, ?, 0.00, NOW())`,
                 [
-                  crypto.randomUUID(),
-                  txRefId,
-                  verifiedReferrerId,
+                  orderId,
+                  paymentId,
                   uploaderId,
                   userName,
                   videoId || null,
-                  specialTag,
-                  `Direct referral commission (₹1.00) for eligible Premium Video upload by ${userName} (${uploaderId})`,
+                  purpose,
+                  amount,
+                  referralCommission,
+                  adminAllocation,
                 ],
               );
 
-              await conn.query(
-                `INSERT INTO wallet_balances (user_id, balance, total_earned, total_withdrawn, referral_income, global_income, adsense_income, affiliate_income, updated_at)
-                 VALUES (?, 1.00, 1.00, 0.00, 1.00, 0.00, 0.00, 0.00, NOW())
-                 ON DUPLICATE KEY UPDATE
-                   balance = balance + 1.00,
-                   total_earned = total_earned + 1.00,
-                   referral_income = referral_income + 1.00,
-                   updated_at = NOW()`,
-                [verifiedReferrerId],
-              );
+              // 2. Insert atomic ledger entries and credit wallet balances for each valid upline sponsor
+              for (const payout of levelPayouts) {
+                const txId = `TX_ADS_L${payout.level}_${paymentId}`;
+                await conn.query(
+                  `INSERT INTO income_ledger (
+                    id, transaction_id, user_id, source_user_id, source_user_name, video_id,
+                    income_type, amount, status, special_tag, description, created_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, 'referral_income', ?, 'settled', ?, ?, NOW())`,
+                  [
+                    crypto.randomUUID(),
+                    txId,
+                    payout.userId,
+                    uploaderId,
+                    userName,
+                    videoId || null,
+                    payout.amount,
+                    `ADS_REF_L${payout.level}`,
+                    `Level ${payout.level} referral commission (${payout.ratePercent}%) for Ads Promotion by ${userName} (${uploaderId})`,
+                  ],
+                );
+
+                await conn.query(
+                  `INSERT INTO wallet_balances (user_id, balance, total_earned, total_withdrawn, referral_income, global_income, adsense_income, affiliate_income, updated_at)
+                   VALUES (?, ?, ?, 0.00, ?, 0.00, 0.00, 0.00, NOW())
+                   ON DUPLICATE KEY UPDATE
+                     balance = balance + VALUES(balance),
+                     total_earned = total_earned + VALUES(total_earned),
+                     referral_income = referral_income + VALUES(referral_income),
+                     updated_at = NOW()`,
+                  [payout.userId, payout.amount, payout.amount, payout.amount],
+                );
+              }
+
+              // 3. Record Admin allocation (base 60% + missing level remainder)
+              if (adminAllocation > 0) {
+                const adminTxId = `TX_ADS_ADM_${paymentId}`;
+                await conn.query(
+                  `INSERT INTO income_ledger (
+                    id, transaction_id, user_id, source_user_id, source_user_name, video_id,
+                    income_type, amount, status, special_tag, description, created_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, 'admin_allocation', ?, 'settled', 'ADS_ADMIN_SHARE', ?, NOW())`,
+                  [
+                    crypto.randomUUID(),
+                    adminTxId,
+                    adminUserId,
+                    uploaderId,
+                    userName,
+                    videoId || null,
+                    adminAllocation,
+                    `Admin allocation (${adminPercent}%) including base 60% and unallocated referral shares for Ads Promotion by ${userName} (${uploaderId})`,
+                  ],
+                );
+
+                await conn.query(
+                  `INSERT INTO wallet_balances (user_id, balance, total_earned, total_withdrawn, referral_income, global_income, adsense_income, affiliate_income, updated_at)
+                   VALUES (?, ?, ?, 0.00, 0.00, 0.00, 0.00, 0.00, NOW())
+                   ON DUPLICATE KEY UPDATE
+                     balance = balance + VALUES(balance),
+                     total_earned = total_earned + VALUES(total_earned),
+                     updated_at = NOW()`,
+                  [adminUserId, adminAllocation, adminAllocation],
+                );
+              }
             }
 
             // 4. Update uploaded_videos payment status & promotion activation
@@ -1200,10 +1375,16 @@ export async function handleApiRequest(
               isSpecialTransaction: isSpecial,
               specialTag,
               distribution: {
-                directReferralAmount: referralCommission,
+                directReferralAmount: isPremiumUpload
+                  ? referralCommission
+                  : levelPayouts.find((p) => p.level === 1)?.amount || 0,
                 referrerId: verifiedReferrerId,
                 adminAmount: adminAllocation,
+                adminPercent,
                 globalPoolAmount: globalPoolAllocation,
+                totalReferralAmount,
+                levelPayouts,
+                missingLevels,
               },
             });
           } catch (txErr: any) {
@@ -1240,6 +1421,11 @@ export async function handleApiRequest(
             }
           }
 
+          const uplines =
+            purpose === "ads_promotion" && uploaderId
+              ? resolveUplineSponsors(uploaderId, store.users)
+              : undefined;
+
           const result = await verifyServerPayment(
             {
               orderId,
@@ -1259,76 +1445,177 @@ export async function handleApiRequest(
             ["FT483921", "FT900431"],
             verifiedReferrerId,
             env,
+            uplines,
           );
 
           // Only credit wallet if verified and NOT a duplicate!
-          const txRefId = `TX_REF_${result.paymentId}`;
+          const txCheckId =
+            purpose === "ads_promotion"
+              ? `TX_ADS_ADM_${result.paymentId}`
+              : `TX_REF_${result.paymentId}`;
           const isDuplicate = Boolean(
             result.error?.includes("already") ||
+            result.duplicate ||
             store.walletTransactions.some(
-              (t: any) => t.transactionId === txRefId || t.transaction_id === txRefId,
+              (t: any) =>
+                t.transactionId === txCheckId ||
+                t.transaction_id === txCheckId ||
+                (purpose === "ads_promotion" &&
+                  (t.transactionId === `TX_ADS_ADM_${result.paymentId}` ||
+                    t.transaction_id === `TX_ADS_ADM_${result.paymentId}`)) ||
+                (purpose === "premium_video_upload" &&
+                  (t.transactionId === `TX_REF_${result.paymentId}` ||
+                    t.transaction_id === `TX_REF_${result.paymentId}`)),
             ),
           );
 
-          if (
-            result.verified &&
-            !isDuplicate &&
-            result.distribution?.directReferralAmount &&
-            result.distribution.directReferralAmount > 0 &&
-            verifiedReferrerId
-          ) {
+          if (result.verified && !isDuplicate) {
             if (!store.wallets) store.wallets = {};
-            let w = store.wallets[verifiedReferrerId];
-            if (!w) {
-              w = {
-                balance: 0,
-                total_earned: 0,
-                total_withdrawn: 0,
-                referral_income: 0,
-                global_income: 0,
-                adsense_income: 0,
-                affiliate_income: 0,
-                updated_at: new Date().toISOString(),
-              };
-              store.wallets[verifiedReferrerId] = w;
-            }
-            if (!w) {
-              return jsonResponse(
-                {
-                  verified: false,
-                  paymentId,
-                  orderId,
-                  error: "Failed to load referrer wallet record.",
-                },
-                500,
-              );
-            }
-            const comm = Number(result.distribution.directReferralAmount);
-            w.balance += comm;
-            w.total_earned += comm;
-            w.referral_income += comm;
-            w.updated_at = new Date().toISOString();
 
-            store.walletTransactions.unshift({
-              id: `tx-ref-${Date.now()}`,
-              transactionId: txRefId,
-              transaction_id: txRefId,
-              userId: verifiedReferrerId,
-              user_id: verifiedReferrerId,
-              sourceUserId: uploaderId,
-              source_user_id: uploaderId,
-              sourceUserName: userName,
-              source_user_name: userName,
-              videoId: videoId || "",
-              video_id: videoId || "",
-              incomeType: "referral_income",
-              income_type: "referral_income",
-              amount: comm,
-              status: "settled",
-              description: `Direct referral commission (₹${comm.toFixed(2)}) for eligible Premium Video upload by ${userName} (${uploaderId})`,
-              createdAt: new Date().toISOString(),
-              created_at: new Date().toISOString(),
-            });
+            if (
+              purpose === "premium_video_upload" &&
+              verifiedReferrerId &&
+              result.distribution?.directReferralAmount &&
+              result.distribution.directReferralAmount > 0
+            ) {
+              let w = store.wallets[verifiedReferrerId];
+              if (!w) {
+                w = {
+                  balance: 0,
+                  total_earned: 0,
+                  total_withdrawn: 0,
+                  referral_income: 0,
+                  global_income: 0,
+                  adsense_income: 0,
+                  affiliate_income: 0,
+                  updated_at: new Date().toISOString(),
+                };
+                store.wallets[verifiedReferrerId] = w;
+              }
+              const comm = Number(result.distribution.directReferralAmount);
+              w.balance += comm;
+              w.total_earned += comm;
+              w.referral_income += comm;
+              w.updated_at = new Date().toISOString();
+
+              const txRefId = `TX_REF_${result.paymentId}`;
+              store.walletTransactions.unshift({
+                id: `tx-ref-${Date.now()}`,
+                transactionId: txRefId,
+                transaction_id: txRefId,
+                userId: verifiedReferrerId,
+                user_id: verifiedReferrerId,
+                sourceUserId: uploaderId,
+                source_user_id: uploaderId,
+                sourceUserName: userName,
+                source_user_name: userName,
+                videoId: videoId || "",
+                video_id: videoId || "",
+                incomeType: "referral_income",
+                income_type: "referral_income",
+                amount: comm,
+                status: "settled",
+                description: `Direct referral commission (₹${comm.toFixed(2)}) for eligible Premium Video upload by ${userName} (${uploaderId})`,
+                createdAt: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+              });
+            } else if (purpose === "ads_promotion" && result.distribution) {
+              // 1. Credit 7-level sponsor payouts
+              const payouts = result.distribution.levelPayouts || [];
+              for (const payout of payouts) {
+                let w = store.wallets[payout.userId];
+                if (!w) {
+                  w = {
+                    balance: 0,
+                    total_earned: 0,
+                    total_withdrawn: 0,
+                    referral_income: 0,
+                    global_income: 0,
+                    adsense_income: 0,
+                    affiliate_income: 0,
+                    updated_at: new Date().toISOString(),
+                  };
+                  store.wallets[payout.userId] = w;
+                }
+                w.balance += payout.amount;
+                w.total_earned += payout.amount;
+                w.referral_income += payout.amount;
+                w.updated_at = new Date().toISOString();
+
+                const txLvlId = `TX_ADS_L${payout.level}_${result.paymentId}`;
+                store.walletTransactions.unshift({
+                  id: `tx-ads-l${payout.level}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                  transactionId: txLvlId,
+                  transaction_id: txLvlId,
+                  userId: payout.userId,
+                  user_id: payout.userId,
+                  sourceUserId: uploaderId,
+                  source_user_id: uploaderId,
+                  sourceUserName: userName,
+                  source_user_name: userName,
+                  videoId: videoId || "",
+                  video_id: videoId || "",
+                  incomeType: "referral_income",
+                  income_type: "referral_income",
+                  amount: payout.amount,
+                  status: "settled",
+                  specialTag: `ADS_REF_L${payout.level}`,
+                  description: `Level ${payout.level} referral commission (${payout.ratePercent}%) for Ads Promotion by ${userName} (${uploaderId})`,
+                  createdAt: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                });
+              }
+
+              // 2. Credit Admin allocation
+              const adminAmount = result.distribution.adminAmount || 0;
+              if (adminAmount > 0) {
+                const adminUser = store.users.find((u) => u.role === "admin") || {
+                  user_id: "FT102857",
+                };
+                const adminUserId = adminUser.user_id;
+
+                let w = store.wallets[adminUserId];
+                if (!w) {
+                  w = {
+                    balance: 0,
+                    total_earned: 0,
+                    total_withdrawn: 0,
+                    referral_income: 0,
+                    global_income: 0,
+                    adsense_income: 0,
+                    affiliate_income: 0,
+                    updated_at: new Date().toISOString(),
+                  };
+                  store.wallets[adminUserId] = w;
+                }
+                w.balance += adminAmount;
+                w.total_earned += adminAmount;
+                w.updated_at = new Date().toISOString();
+
+                const txAdminId = `TX_ADS_ADM_${result.paymentId}`;
+                store.walletTransactions.unshift({
+                  id: `tx-ads-adm-${Date.now()}`,
+                  transactionId: txAdminId,
+                  transaction_id: txAdminId,
+                  userId: adminUserId,
+                  user_id: adminUserId,
+                  sourceUserId: uploaderId,
+                  source_user_id: uploaderId,
+                  sourceUserName: userName,
+                  source_user_name: userName,
+                  videoId: videoId || "",
+                  video_id: videoId || "",
+                  incomeType: "admin_allocation",
+                  income_type: "admin_allocation",
+                  amount: adminAmount,
+                  status: "settled",
+                  specialTag: "ADS_ADMIN_SHARE",
+                  description: `Admin allocation (${result.distribution.adminPercent || 60}%) including base 60% and unallocated referral shares for Ads Promotion by ${userName} (${uploaderId})`,
+                  createdAt: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                });
+              }
+            }
           }
 
           // Update video payment status & promotion activation in store (only on initial verification, never on duplicate)

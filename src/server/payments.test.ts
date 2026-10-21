@@ -1,7 +1,15 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { verifyServerPayment, verifyPayment, PRICING_CONFIG } from "./payments";
+import {
+  verifyServerPayment,
+  verifyPayment,
+  PRICING_CONFIG,
+  evaluateAdsDistribution,
+  resolveUplineSponsors,
+  ADS_REFERRAL_RATES,
+  getPersistentPremiumTxNumber,
+} from "./payments";
 import { handleApiRequest, isAdPromotionActive } from "./api-handler";
 import { isPromotionActive } from "../lib/video-service";
 import { api } from "../lib/api";
@@ -909,7 +917,10 @@ describe("Task 32: Yearly Ads Pricing & Expired Ad Promotion Validation Tests", 
     const nullExpirySample = { isPromoted: true, promotionExpiresAt: null };
     const missingExpirySample = { is_promoted: true };
     const invalidDateSample = { isPromoted: true, promotionExpiresAt: "invalid-timestamp" };
-    const unpromotedSample = { isPromoted: false, promotionExpiresAt: new Date(Date.now() + 100000).toISOString() };
+    const unpromotedSample = {
+      isPromoted: false,
+      promotionExpiresAt: new Date(Date.now() + 100000).toISOString(),
+    };
 
     assert.equal(isAdPromotionActive(nullExpirySample as any), false);
     assert.equal(isPromotionActive(nullExpirySample as any), false);
@@ -939,9 +950,264 @@ describe("Task 32: Yearly Ads Pricing & Expired Ad Promotion Validation Tests", 
       if (vid.isPromoted) {
         assert.ok(vid.promotionExpiresAt, "Promoted video must have an expiry timestamp");
         const exp = new Date(vid.promotionExpiresAt).getTime();
-        assert.ok(exp > Date.now(), `Active promoted video must have future expiry date: ${vid.promotionExpiresAt}`);
+        assert.ok(
+          exp > Date.now(),
+          `Active promoted video must have future expiry date: ${vid.promotionExpiresAt}`,
+        );
       }
     }
   });
 });
 
+describe("Task 33: 7-Level Ads Referral Distribution & Counter Isolation Tests", () => {
+  const secret = "test_razorpay_secret_key_1234567890";
+  const env = {
+    RAZORPAY_KEY_ID: "rzp_test_1234567890",
+    RAZORPAY_KEY_SECRET: secret,
+    RAZORPAY_SKIP_REMOTE_CHECK: "true",
+  };
+
+  const fullUplineChain = [
+    { level: 1, userId: "UP_LEVEL_1", name: "Sponsor L1" },
+    { level: 2, userId: "UP_LEVEL_2", name: "Sponsor L2" },
+    { level: 3, userId: "UP_LEVEL_3", name: "Sponsor L3" },
+    { level: 4, userId: "UP_LEVEL_4", name: "Sponsor L4" },
+    { level: 5, userId: "UP_LEVEL_5", name: "Sponsor L5" },
+    { level: 6, userId: "UP_LEVEL_6", name: "Sponsor L6" },
+    { level: 7, userId: "UP_LEVEL_7", name: "Sponsor L7" },
+  ];
+
+  it("1. Evaluates all four ads promotion tiers with exact 7-level payouts and zero paise leakage", () => {
+    const plans = [
+      { amount: 100, label: "7 Days (₹100)", expectedReferral: 40, expectedAdmin: 60 },
+      { amount: 200, label: "15 Days (₹200)", expectedReferral: 80, expectedAdmin: 120 },
+      { amount: 300, label: "1 Month (₹300)", expectedReferral: 120, expectedAdmin: 180 },
+      { amount: 3000, label: "1 Year (₹3,000)", expectedReferral: 1200, expectedAdmin: 1800 },
+    ];
+
+    const expectedRates = [
+      { level: 1, pct: 15 },
+      { level: 2, pct: 10 },
+      { level: 3, pct: 5 },
+      { level: 4, pct: 4 },
+      { level: 5, pct: 3 },
+      { level: 6, pct: 2 },
+      { level: 7, pct: 1 },
+    ];
+
+    for (const plan of plans) {
+      const dist = evaluateAdsDistribution(plan.amount, fullUplineChain);
+      assert.equal(dist.planAmount, plan.amount);
+      assert.equal(dist.totalReferralAmount, plan.expectedReferral);
+      assert.equal(dist.adminAmount, plan.expectedAdmin);
+      assert.equal(dist.adminPercent, 60);
+      assert.equal(dist.missingLevels.length, 0);
+
+      // Verify each level
+      let sumPaise = 0;
+      for (const tier of expectedRates) {
+        const payout = dist.levelPayouts.find((p) => p.level === tier.level);
+        assert.ok(payout, `Missing payout for level ${tier.level} in ${plan.label}`);
+        const expectedTierPaise = Math.round(plan.amount * 100 * (tier.pct / 100));
+        assert.equal(payout.amountPaise, expectedTierPaise);
+        assert.equal(payout.amount, expectedTierPaise / 100);
+        sumPaise += payout.amountPaise;
+      }
+
+      assert.equal(sumPaise, plan.expectedReferral * 100);
+      assert.equal(sumPaise + dist.adminPaise, plan.amount * 100, `Paise leakage in ${plan.label}`);
+      assert.equal(dist.totalReferralAmount + dist.adminAmount, plan.amount);
+    }
+  });
+
+  it("2. Accurately redirects missing level percentages to Admin when partial or no upline exists", () => {
+    // 2 levels present (L1, L2): L1=15%, L2=10% -> 25% referral. Missing L3-L7 = 15%. Admin = 60% + 15% = 75%.
+    const partial2 = [
+      { level: 1, userId: "UP1" },
+      { level: 2, userId: "UP2" },
+    ];
+    const dist2 = evaluateAdsDistribution(100, partial2);
+    assert.equal(dist2.totalReferralAmount, 25);
+    assert.equal(dist2.adminAmount, 75);
+    assert.equal(dist2.adminPercent, 75);
+    assert.deepEqual(dist2.missingLevels, [3, 4, 5, 6, 7]);
+    assert.equal(dist2.totalReferralAmount + dist2.adminAmount, 100);
+
+    // 1 level present (L1 only): L1=15% -> 15% referral. Missing L2-L7 = 25%. Admin = 60% + 25% = 85%.
+    const partial1 = [{ level: 1, userId: "UP1" }];
+    const dist1 = evaluateAdsDistribution(300, partial1);
+    assert.equal(dist1.totalReferralAmount, 45); // 15% of 300
+    assert.equal(dist1.adminAmount, 255); // 85% of 300
+    assert.equal(dist1.adminPercent, 85);
+    assert.deepEqual(dist1.missingLevels, [2, 3, 4, 5, 6, 7]);
+    assert.equal(dist1.totalReferralAmount + dist1.adminAmount, 300);
+
+    // 0 levels present (orphan creator): Admin receives 100% (Base 60% + 40% redirected)
+    const dist0 = evaluateAdsDistribution(3000, []);
+    assert.equal(dist0.totalReferralAmount, 0);
+    assert.equal(dist0.adminAmount, 3000);
+    assert.equal(dist0.adminPercent, 100);
+    assert.equal(dist0.levelPayouts.length, 0);
+    assert.deepEqual(dist0.missingLevels, [1, 2, 3, 4, 5, 6, 7]);
+    assert.equal(dist0.totalReferralAmount + dist0.adminAmount, 3000);
+  });
+
+  it("3. Resolves upline sponsors safely and terminates without infinite loop on cycles or self-referrals", () => {
+    // Mock user dataset with circular loop: User A -> User B -> User C -> User A
+    const usersWithLoop = [
+      { user_id: "USER_A", referral_code: "USER_B" },
+      { user_id: "USER_B", referral_code: "USER_C" },
+      { user_id: "USER_C", referral_code: "USER_A" }, // Loop back to A
+    ];
+
+    const uplinesFromA = resolveUplineSponsors("USER_A", usersWithLoop);
+    // Should resolve B (L1), C (L2), then stop when encountering A (already visited)
+    assert.equal(uplinesFromA.length, 2);
+    assert.equal(uplinesFromA[0].level, 1);
+    assert.equal(uplinesFromA[0].userId, "USER_B");
+    assert.equal(uplinesFromA[1].level, 2);
+    assert.equal(uplinesFromA[1].userId, "USER_C");
+
+    // Self-referral case: User X refers User X
+    const selfRefUsers = [{ user_id: "USER_X", referral_code: "USER_X" }];
+    const uplinesSelf = resolveUplineSponsors("USER_X", selfRefUsers);
+    assert.equal(uplinesSelf.length, 0);
+
+    // Full 7-level clean chain
+    const deepChainUsers = [
+      { user_id: "CREATOR", referral_code: "SPONSOR_1" },
+      { user_id: "SPONSOR_1", referral_code: "SPONSOR_2" },
+      { user_id: "SPONSOR_2", referral_code: "SPONSOR_3" },
+      { user_id: "SPONSOR_3", referral_code: "SPONSOR_4" },
+      { user_id: "SPONSOR_4", referral_code: "SPONSOR_5" },
+      { user_id: "SPONSOR_5", referral_code: "SPONSOR_6" },
+      { user_id: "SPONSOR_6", referral_code: "SPONSOR_7" },
+      { user_id: "SPONSOR_7", referral_code: "SPONSOR_8" }, // Level 8 should not be included
+    ];
+
+    const deepUplines = resolveUplineSponsors("CREATOR", deepChainUsers);
+    assert.equal(deepUplines.length, 7);
+    assert.equal(deepUplines[0].userId, "SPONSOR_1");
+    assert.equal(deepUplines[6].userId, "SPONSOR_7");
+  });
+
+  it("4. Ads promotion payments do NOT increment or trigger the ₹6 special 11th/21st/31st counter", async () => {
+    const initialTxNum = await getPersistentPremiumTxNumber();
+
+    const orderId = `ord_ads_iso_${Date.now()}`;
+    const paymentId = `pay_ads_iso_${Date.now()}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    const res = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        purpose: "ads_promotion",
+        planId: "plan-monthly",
+      },
+      ["FT483921"],
+      "FT102857",
+      env,
+      fullUplineChain,
+    );
+
+    assert.equal(res.verified, true);
+    assert.equal(res.purpose, "ads_promotion");
+    assert.equal(res.specialTag, "ADS_PROMOTION");
+    assert.equal(res.isSpecialTransaction, false);
+
+    // The persistent sequence counter MUST NOT have incremented
+    const afterTxNum = await getPersistentPremiumTxNumber();
+    assert.equal(
+      afterTxNum,
+      initialTxNum,
+      "Ads promotion must not advance the premium video sequence counter",
+    );
+  });
+
+  it("5. Idempotent duplicate verification rejects double credit for ads promotion", async () => {
+    const orderId = `ord_ads_dup_${Date.now()}`;
+    const paymentId = `pay_ads_dup_${Date.now()}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    // First verification
+    const res1 = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        purpose: "ads_promotion",
+        planId: "plan-7-days",
+      },
+      ["FT483921"],
+      "FT102857",
+      env,
+      fullUplineChain,
+    );
+
+    assert.equal(res1.verified, true);
+    assert.equal(res1.amount, 100);
+    assert.equal(res1.duplicate, undefined);
+
+    // Second verification with identical payment ID
+    const res2 = await verifyServerPayment(
+      {
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        purpose: "ads_promotion",
+        planId: "plan-7-days",
+      },
+      ["FT483921"],
+      "FT102857",
+      env,
+      fullUplineChain,
+    );
+
+    assert.equal(res2.verified, true);
+    assert.equal(res2.duplicate, true);
+    assert.match(res2.error || "", /already been processed/i);
+    assert.equal(res2.amount, 100);
+  });
+
+  it("6. API endpoint /api/payments/verify processes ads promotion and returns 7-level distribution breakdown", async () => {
+    const orderId = `ord_api_ads_${Date.now()}`;
+    const paymentId = `pay_api_ads_${Date.now()}`;
+    const sig = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+
+    const req = new Request("http://localhost:3000/api/payments/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId,
+        paymentId,
+        signature: sig,
+        userId: "FT483921",
+        userName: "Alex Rivera",
+        purpose: "ads_promotion",
+        planId: "plan-yearly",
+        metadata: { planId: "plan-yearly" },
+      }),
+    });
+
+    const res = await handleApiRequest(req, env);
+    assert.ok(res);
+    assert.equal(res.status, 200);
+
+    const body = await res.json();
+    assert.equal(body.verified, true);
+    assert.equal(body.amount, 3000);
+    assert.equal(body.purpose, "ads_promotion");
+    assert.equal(body.specialTag, "ADS_PROMOTION");
+    assert.ok(body.distribution);
+    assert.ok(Array.isArray(body.distribution.levelPayouts));
+    assert.ok(Array.isArray(body.distribution.missingLevels));
+    assert.equal(typeof body.distribution.adminAmount, "number");
+    assert.equal(typeof body.distribution.totalReferralAmount, "number");
+    assert.equal(body.distribution.adminAmount + body.distribution.totalReferralAmount, 3000);
+  });
+});

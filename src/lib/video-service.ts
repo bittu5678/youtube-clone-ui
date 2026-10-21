@@ -297,7 +297,7 @@ export interface FetchVideosOptions {
  * An ad promotion is active ONLY IF:
  * 1. Marked as promoted (isPromoted / is_promoted is true)
  * 2. Expiry timestamp is present, valid, and strictly in the future (> Date.now())
- * 
+ *
  * Expired promotions, or those with null/missing/invalid expiry timestamps, return false.
  */
 export function isPromotionActive(video: {

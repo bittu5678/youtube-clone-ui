@@ -29,6 +29,167 @@ export const PRICING_CONFIG = {
 export type AdsPlanId = keyof typeof PRICING_CONFIG.ADS_PROMOTION;
 
 /**
+ * Task 33: 7-Level Ads Promotion Referral Commission Rates
+ * Level 1: 15%
+ * Level 2: 10%
+ * Level 3: 5%
+ * Level 4: 4%
+ * Level 5: 3%
+ * Level 6: 2%
+ * Level 7: 1%
+ * Total Referral = 40% (when all 7 valid uplines exist)
+ * Base Admin Share = 60%
+ * Missing level percentages dynamically redirect to Admin.
+ */
+export const ADS_REFERRAL_RATES = [
+  { level: 1, percent: 15, rate: 0.15 },
+  { level: 2, percent: 10, rate: 0.1 },
+  { level: 3, percent: 5, rate: 0.05 },
+  { level: 4, percent: 4, rate: 0.04 },
+  { level: 5, percent: 3, rate: 0.03 },
+  { level: 6, percent: 2, rate: 0.02 },
+  { level: 7, percent: 1, rate: 0.01 },
+] as const;
+
+export interface AdsUplineSponsor {
+  level: number;
+  userId: string;
+  name?: string | undefined;
+}
+
+export interface AdsLevelPayout {
+  level: number;
+  ratePercent: number;
+  userId: string;
+  name?: string | undefined;
+  amount: number;
+  amountPaise: number;
+}
+
+export interface AdsDistributionResult {
+  planAmount: number;
+  totalPaise: number;
+  totalReferralAmount: number;
+  totalReferralPaise: number;
+  adminAmount: number;
+  adminPaise: number;
+  adminPercent: number;
+  levelPayouts: AdsLevelPayout[];
+  missingLevels: number[];
+}
+
+/**
+ * Pure evaluation helper for 7-level Ads referral allocation.
+ * Uses integer paise to ensure that the sum of level payouts and Admin remainder
+ * strictly equals the exact plan amount with zero rounding loss.
+ */
+export function evaluateAdsDistribution(
+  planAmount: number,
+  uplines: (AdsUplineSponsor | { level: number; userId: string; name?: string | undefined })[] = [],
+): AdsDistributionResult {
+  const totalPaise = Math.round(planAmount * 100);
+  const uplineMap = new Map<number, { userId: string; name?: string | undefined }>();
+  for (const up of uplines) {
+    if (up.level >= 1 && up.level <= 7 && up.userId && !uplineMap.has(up.level)) {
+      uplineMap.set(up.level, { userId: up.userId, name: up.name });
+    }
+  }
+
+  const levelPayouts: AdsLevelPayout[] = [];
+  const missingLevels: number[] = [];
+  let allocatedPaise = 0;
+
+  for (const tier of ADS_REFERRAL_RATES) {
+    const sponsor = uplineMap.get(tier.level);
+    if (sponsor) {
+      const commPaise = Math.round(totalPaise * (tier.percent / 100));
+      allocatedPaise += commPaise;
+      levelPayouts.push({
+        level: tier.level,
+        ratePercent: tier.percent,
+        userId: sponsor.userId,
+        name: sponsor.name,
+        amount: commPaise / 100,
+        amountPaise: commPaise,
+      });
+    } else {
+      missingLevels.push(tier.level);
+    }
+  }
+
+  // Admin allocation is the exact mathematical remainder of total minus all allocated sponsor shares
+  const adminPaise = totalPaise - allocatedPaise;
+  const adminAmount = adminPaise / 100;
+  const totalReferralPaise = allocatedPaise;
+  const totalReferralAmount = totalReferralPaise / 100;
+  const adminPercent = Math.round((adminPaise / totalPaise) * 100);
+
+  return {
+    planAmount,
+    totalPaise,
+    totalReferralAmount,
+    totalReferralPaise,
+    adminAmount,
+    adminPaise,
+    adminPercent,
+    levelPayouts,
+    missingLevels,
+  };
+}
+
+/**
+ * Resolves up to 7 distinct valid upline sponsors using referral relationships.
+ * Implements strict cycle detection and self-referral prevention.
+ */
+export function resolveUplineSponsors(
+  uploaderUserId: string,
+  users: Array<{
+    user_id: string;
+    referral_code?: string | null | undefined;
+    name?: string | undefined;
+  }>,
+): AdsUplineSponsor[] {
+  const normUploader = uploaderUserId.trim().toUpperCase();
+  const visited = new Set<string>([normUploader]);
+  const uplines: AdsUplineSponsor[] = [];
+
+  let currentUserId = normUploader;
+
+  for (let level = 1; level <= 7; level++) {
+    const currentUser = users.find((u) => u.user_id.toUpperCase() === currentUserId);
+    if (!currentUser || !currentUser.referral_code) break;
+
+    const refCode = currentUser.referral_code.trim().toUpperCase();
+    if (!refCode) break;
+
+    const sponsor = users.find(
+      (u) =>
+        (u.user_id.toUpperCase() === refCode || u.referral_code?.toUpperCase() === refCode) &&
+        u.user_id.toUpperCase() !== currentUserId,
+    );
+
+    if (!sponsor) break;
+
+    const sponsorNormId = sponsor.user_id.toUpperCase();
+    if (visited.has(sponsorNormId)) {
+      // Loop or repeated sponsor detected — safely terminate chain
+      break;
+    }
+
+    visited.add(sponsorNormId);
+    uplines.push({
+      level,
+      userId: sponsor.user_id,
+      name: sponsor.name,
+    });
+
+    currentUserId = sponsorNormId;
+  }
+
+  return uplines;
+}
+
+/**
  * Checks if a premium transaction sequence number is a Special Transaction:
  * 11th, 21st, 31st, 41st, 51st... and every 10th transaction after 11th.
  *
@@ -86,9 +247,9 @@ export interface PersistentPremiumTxRecord {
   userName?: string;
   referrerId: string | null;
   amount: number;
-  transactionType: "premium_upload";
+  transactionType: "premium_upload" | "ads_promotion";
   isSpecial: boolean;
-  specialTag: "SPECIAL_GLOBAL_RULE" | "NORMAL_PREMIUM";
+  specialTag: "SPECIAL_GLOBAL_RULE" | "NORMAL_PREMIUM" | "ADS_PROMOTION";
   referralCommission: number;
   adminAllocation: number;
   globalPoolAllocation: number;
@@ -253,14 +414,18 @@ export interface PaymentVerifyResult {
   purpose: string;
   txNumber?: number;
   isSpecialTransaction?: boolean;
-  specialTag?: "SPECIAL_GLOBAL_RULE" | "NORMAL_PREMIUM";
+  specialTag?: "SPECIAL_GLOBAL_RULE" | "NORMAL_PREMIUM" | "ADS_PROMOTION";
   distribution?: {
     directReferralAmount: number;
     referrerId?: string | null;
     adminAmount: number;
+    adminPercent?: number;
     globalPoolAmount: number;
     eligibleMembersCount: number;
     perMemberShare: number;
+    totalReferralAmount?: number;
+    levelPayouts?: AdsLevelPayout[];
+    missingLevels?: number[];
   };
   duplicate?: boolean;
   error?: string;
@@ -382,6 +547,7 @@ export async function verifyServerPayment(
   eligiblePremiumCreatorIds: string[] = [],
   referrerUserId?: string | null,
   env?: Record<string, string | undefined>,
+  uplines?: AdsUplineSponsor[],
 ): Promise<PaymentVerifyResult> {
   const keyId = sanitizeSecret(env?.["RAZORPAY_KEY_ID"] || process.env["RAZORPAY_KEY_ID"]);
   const secretKey = sanitizeSecret(
@@ -573,19 +739,22 @@ export async function verifyServerPayment(
     // 1. DUPLICATE CHECK: Prevent duplicate processing of the same Razorpay payment
     const existingTx = state.transactions.find((t) => t.paymentId === req.paymentId);
     if (existingTx) {
-      const isSpec = existingTx.isSpecial;
+      const isAds =
+        existingTx.specialTag === "ADS_PROMOTION" ||
+        existingTx.transactionType === "ads_promotion" ||
+        req.purpose === "ads_promotion";
+      const isSpec = isAds ? false : existingTx.isSpecial;
       const eligibleCount = Math.max(1, eligiblePremiumCreatorIds.length);
-      const perMemberShare = isSpec
-        ? 0
-        : Number((existingTx.globalPoolAllocation / eligibleCount).toFixed(4));
+      const perMemberShare =
+        isSpec || isAds ? 0 : Number((existingTx.globalPoolAllocation / eligibleCount).toFixed(4));
 
       return {
         verified: true,
         paymentId: existingTx.paymentId,
         orderId: existingTx.orderId,
         amount: existingTx.amount,
-        purpose: req.purpose,
-        txNumber: existingTx.txNumber,
+        purpose: isAds ? "ads_promotion" : existingTx.transactionType,
+        txNumber: isAds ? 0 : existingTx.txNumber,
         isSpecialTransaction: isSpec,
         specialTag: existingTx.specialTag,
         distribution: {
@@ -593,8 +762,9 @@ export async function verifyServerPayment(
           referrerId: existingTx.referrerId,
           adminAmount: existingTx.adminAllocation,
           globalPoolAmount: existingTx.globalPoolAllocation,
-          eligibleMembersCount: isSpec ? 0 : eligibleCount,
+          eligibleMembersCount: isSpec || isAds ? 0 : eligibleCount,
           perMemberShare,
+          totalReferralAmount: existingTx.referralCommission,
         },
         duplicate: true,
         error: "Payment has already been processed (idempotent duplicate request)",
@@ -675,13 +845,20 @@ export async function verifyServerPayment(
       };
     }
 
-    // 3. ADS PROMOTION PROCESSING
+    // 3. ADS PROMOTION PROCESSING (Task 33: 7-Level Referral Distribution)
     const plan =
       PRICING_CONFIG.ADS_PROMOTION[rawPlanId] || PRICING_CONFIG.ADS_PROMOTION["plan-monthly"];
     const amount = plan.price;
     const refId = (referrerUserId || req.referrerUserId || null)?.trim().toUpperCase() || null;
 
+    // Use passed uplines if available, otherwise fallback to single direct sponsor if provided
+    const effectiveUplines =
+      uplines && uplines.length > 0 ? uplines : refId ? [{ level: 1, userId: refId }] : [];
+
+    const dist = evaluateAdsDistribution(amount, effectiveUplines);
+
     // Create persistent transaction record for ads promotion to enforce idempotency
+    // Note: txNumber remains unchanged because Ads promotions do NOT advance the ₹6 Premium Video sequence!
     const adsRecord: PersistentPremiumTxRecord = {
       txNumber: state.lastTxNumber,
       paymentId: req.paymentId,
@@ -691,17 +868,19 @@ export async function verifyServerPayment(
       userName: req.userName || req.metadata?.["userName"]?.toString() || "FaceTube Creator",
       referrerId: refId,
       amount,
-      transactionType: "premium_upload", // compatible with PersistentPremiumTxRecord
+      transactionType: "ads_promotion",
       isSpecial: false,
-      specialTag: "NORMAL_PREMIUM",
-      referralCommission: refId ? Math.round(amount * 0.1) : 0,
-      adminAllocation: amount * 0.9,
+      specialTag: "ADS_PROMOTION",
+      referralCommission: dist.totalReferralAmount,
+      adminAllocation: dist.adminAmount,
       globalPoolAllocation: 0,
       createdAt: new Date().toISOString(),
     };
 
     state.transactions.unshift(adsRecord);
     savePersistentState(state);
+
+    const directL1 = dist.levelPayouts.find((p) => p.level === 1);
 
     return {
       verified: true,
@@ -710,13 +889,18 @@ export async function verifyServerPayment(
       amount,
       purpose: req.purpose,
       isSpecialTransaction: false,
+      specialTag: "ADS_PROMOTION",
       distribution: {
-        directReferralAmount: refId ? Math.round(amount * 0.1) : 0, // 10% direct sponsor bonus
-        referrerId: refId,
-        adminAmount: amount * 0.9,
+        directReferralAmount: directL1 ? directL1.amount : 0,
+        referrerId: directL1 ? directL1.userId : null,
+        adminAmount: dist.adminAmount,
+        adminPercent: dist.adminPercent,
         globalPoolAmount: 0,
         eligibleMembersCount: 0,
         perMemberShare: 0,
+        totalReferralAmount: dist.totalReferralAmount,
+        levelPayouts: dist.levelPayouts,
+        missingLevels: dist.missingLevels,
       },
     };
   });
