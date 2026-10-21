@@ -1063,10 +1063,10 @@ describe("Task 33: 7-Level Ads Referral Distribution & Counter Isolation Tests",
     const uplinesFromA = resolveUplineSponsors("USER_A", usersWithLoop);
     // Should resolve B (L1), C (L2), then stop when encountering A (already visited)
     assert.equal(uplinesFromA.length, 2);
-    assert.equal(uplinesFromA[0].level, 1);
-    assert.equal(uplinesFromA[0].userId, "USER_B");
-    assert.equal(uplinesFromA[1].level, 2);
-    assert.equal(uplinesFromA[1].userId, "USER_C");
+    assert.equal(uplinesFromA[0]?.level, 1);
+    assert.equal(uplinesFromA[0]?.userId, "USER_B");
+    assert.equal(uplinesFromA[1]?.level, 2);
+    assert.equal(uplinesFromA[1]?.userId, "USER_C");
 
     // Self-referral case: User X refers User X
     const selfRefUsers = [{ user_id: "USER_X", referral_code: "USER_X" }];
@@ -1087,8 +1087,8 @@ describe("Task 33: 7-Level Ads Referral Distribution & Counter Isolation Tests",
 
     const deepUplines = resolveUplineSponsors("CREATOR", deepChainUsers);
     assert.equal(deepUplines.length, 7);
-    assert.equal(deepUplines[0].userId, "SPONSOR_1");
-    assert.equal(deepUplines[6].userId, "SPONSOR_7");
+    assert.equal(deepUplines[0]?.userId, "SPONSOR_1");
+    assert.equal(deepUplines[6]?.userId, "SPONSOR_7");
   });
 
   it("4. Ads promotion payments do NOT increment or trigger the ₹6 special 11th/21st/31st counter", async () => {
