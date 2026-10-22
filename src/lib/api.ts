@@ -4,13 +4,14 @@
  * Base URL configurable via VITE_API_BASE_URL (defaults to /api)
  */
 
-export const PRODUCTION_API_URL = "https://facetube.online/api";
+export const PRODUCTION_API_URL = "https://api.facetube.online";
 
 /**
  * Returns the base URL for FaceTube PHP API calls.
  * 1. Explicit override: VITE_API_BASE_URL (if provided)
- * 2. Production browser: Automatically defaults to https://facetube.online/api on facetube.online
- * 3. Local development / Preview: Defaults to /api (handled by Vite dev middleware)
+ * 2. Production browser: Automatically defaults to https://api.facetube.online on facetube.online
+ * 3. Production SSR: Defaults to https://api.facetube.online when NODE_ENV is production
+ * 4. Local development / Preview: Defaults to /api (handled by Vite dev middleware)
  */
 export function getApiBaseUrl(): string {
   // 1. Explicit environment variable override
@@ -28,15 +29,24 @@ export function getApiBaseUrl(): string {
     return rawApi;
   }
 
-  // 2. Production browser: Automatically route to live PHP + MySQL backend on facetube.online
+  // 2. Production browser: Automatically route to live PHP + MySQL backend on api.facetube.online
   if (typeof window !== "undefined") {
     const host = window.location.hostname.toLowerCase();
-    if (host === "facetube.online" || host === "www.facetube.online") {
+    if (
+      host === "facetube.online" ||
+      host === "www.facetube.online" ||
+      host === "api.facetube.online"
+    ) {
       return PRODUCTION_API_URL;
     }
   }
 
-  // 3. Local development / Preview fallback (handled by Vite dev middleware)
+  // 3. Production SSR (Server-Side Rendering): Must never silently call local loopback or local JSON data
+  if (typeof window === "undefined" && process.env["NODE_ENV"] === "production") {
+    return PRODUCTION_API_URL;
+  }
+
+  // 4. Local development / Preview fallback (handled by Vite dev middleware)
   return "/api";
 }
 

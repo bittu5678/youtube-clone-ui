@@ -55,6 +55,22 @@ export default {
       }
 
       if (url.pathname.startsWith("/api")) {
+        if (process.env["NODE_ENV"] === "production") {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error:
+                "Direct /api calls to the Node.js server are disabled in production. The authoritative backend is Hostinger PHP + MySQL on https://api.facetube.online.",
+            }),
+            {
+              status: 503,
+              headers: {
+                "Content-Type": "application/json; charset=utf-8",
+              },
+            },
+          );
+        }
+
         const { handleApiRequest } = await import("./server/api-handler.ts");
         const apiResponse = await handleApiRequest(
           request,

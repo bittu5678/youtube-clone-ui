@@ -4,10 +4,24 @@
  * Standardized response envelope, CORS handling, and Bearer token parsing
  */
 
-// Enable CORS for web, mobile apps, and APK access
+// Enable CORS restricted to approved FaceTube frontend origins
 function handleCors() {
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
-    header("Access-Control-Allow-Origin: {$origin}");
+    $allowedOrigins = [
+        'https://facetube.online',
+        'https://www.facetube.online',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+    ];
+
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if (!empty($origin) && in_array(strtolower(trim($origin)), $allowedOrigins, true)) {
+        header("Access-Control-Allow-Origin: {$origin}");
+        header('Vary: Origin');
+    } else {
+        header('Access-Control-Allow-Origin: https://facetube.online');
+        header('Vary: Origin');
+    }
+
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept');
     header('Access-Control-Allow-Credentials: true');
