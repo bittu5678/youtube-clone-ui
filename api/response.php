@@ -9,27 +9,55 @@ function handleCors() {
     $allowedOrigins = [
         'https://facetube.online',
         'https://www.facetube.online',
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
     ];
 
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-    if (!empty($origin) && in_array(strtolower(trim($origin)), $allowedOrigins, true)) {
-        header("Access-Control-Allow-Origin: {$origin}");
-        header('Vary: Origin');
-    } else {
-        header('Access-Control-Allow-Origin: https://facetube.online');
-        header('Vary: Origin');
+    // Allow local development origins only when an explicit development environment is set
+    $appEnv = strtolower(trim((string)(getenv('APP_ENV') ?: ($_ENV['APP_ENV'] ?? ($_SERVER['APP_ENV'] ?? '')))));
+    if (in_array($appEnv, ['development', 'dev', 'local', 'test'], true)) {
+        $allowedOrigins[] = 'http://localhost:3000';
+        $allowedOrigins[] = 'http://127.0.0.1:3000';
     }
 
-    header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept');
-    header('Access-Control-Allow-Credentials: true');
-    header('Access-Control-Max-Age: 86400');
+    $origin = trim($_SERVER['HTTP_ORIGIN'] ?? '');
+    $isOptions = isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS';
 
-    if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-        http_response_code(204);
-        exit;
+    // 1. If Origin header is present, enforce strict origin matching
+    if (!empty($origin)) {
+        $normalizedOrigin = strtolower($origin);
+        if (in_array($normalizedOrigin, $allowedOrigins, true)) {
+            // Approved origin: emit standard CORS headers
+            header("Access-Control-Allow-Origin: {$origin}");
+            header('Vary: Origin');
+            header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+            header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept');
+            header('Access-Control-Allow-Credentials: true');
+            header('Access-Control-Max-Age: 86400');
+
+            if ($isOptions) {
+                http_response_code(204);
+                exit;
+            }
+        } else {
+            // Unapproved origin: cleanly omit Access-Control-Allow-Origin
+            header('Vary: Origin');
+            if ($isOptions) {
+                http_response_code(403);
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'CORS origin denied by policy.'
+                ], JSON_UNESCAPED_SLASHES);
+                exit;
+            }
+        }
+    } else {
+        // 2. Request without Origin header (server-to-server, mobile app, cURL, or same-origin)
+        if ($isOptions) {
+            header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+            header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept');
+            http_response_code(204);
+            exit;
+        }
     }
 }
 
