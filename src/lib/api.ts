@@ -41,9 +41,12 @@ export function getApiBaseUrl(): string {
     }
   }
 
-  // 3. Production SSR (Server-Side Rendering): Must never silently call local loopback or local JSON data
+  // 3. Production SSR (Server-Side Rendering)
   if (typeof window === "undefined" && process.env["NODE_ENV"] === "production") {
-    return PRODUCTION_API_URL;
+    if (process.env["USE_REMOTE_PHP_API"] === "true") {
+      return PRODUCTION_API_URL;
+    }
+    return "/api";
   }
 
   // 4. Local development / Preview fallback (handled by Vite dev middleware)

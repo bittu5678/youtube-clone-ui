@@ -24,6 +24,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   fetchUploadedVideos,
   convertUploadedToCatalogVideo,
+  getVideoBadgeLabels,
   type UploadedVideo,
 } from "@/lib/video-service";
 import {
@@ -204,6 +205,26 @@ function WatchPage() {
           <h1 className="mt-4 text-xl font-extrabold leading-snug tracking-tight sm:text-2xl">
             {video.title}
           </h1>
+
+          {/* YouTube-style small Sponsor & Ads labels immediately below video title */}
+          {(() => {
+            const watchLabels = getVideoBadgeLabels(video);
+            if (!watchLabels.showSponsorLabel && !watchLabels.showAdsLabel) return null;
+            return (
+              <div className="mt-2 flex items-center gap-2">
+                {watchLabels.showSponsorLabel && (
+                  <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold tracking-wide bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                    Sponsor
+                  </span>
+                )}
+                {watchLabels.showAdsLabel && (
+                  <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-bold tracking-wide bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                    Ads
+                  </span>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <span

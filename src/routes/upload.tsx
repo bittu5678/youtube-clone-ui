@@ -1538,7 +1538,12 @@ function AdPromotionUploadView({
                   : "border-border bg-secondary/40 hover:bg-secondary/80"
               }`}
             >
-              <div className="text-sm font-bold text-foreground">Short Video Ad</div>
+              <div className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <span>Short Video</span>
+                <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                  Ads
+                </span>
+              </div>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Boost viral short-form video in feed
               </p>
@@ -1552,7 +1557,12 @@ function AdPromotionUploadView({
                   : "border-border bg-secondary/40 hover:bg-secondary/80"
               }`}
             >
-              <div className="text-sm font-bold text-foreground">Long Video Ad</div>
+              <div className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <span>Long Video</span>
+                <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                  Ads
+                </span>
+              </div>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 Featured placement for standard long videos
               </p>

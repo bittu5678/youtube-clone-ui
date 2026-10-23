@@ -297,7 +297,7 @@ function ReferralMembersPage() {
                   <th className="px-4 py-3 whitespace-nowrap">Mobile Number</th>
                   <th className="px-4 py-3 whitespace-nowrap">Joined</th>
                   <th className="px-4 py-3 text-center whitespace-nowrap">Free Videos</th>
-                  <th className="px-4 py-3 text-center whitespace-nowrap">Premium Videos</th>
+                  <th className="px-4 py-3 text-center whitespace-nowrap">Sponsor Videos</th>
                   <th className="px-4 py-3 text-right whitespace-nowrap">Direct Commission</th>
                   <th className="px-4 py-3 text-center whitespace-nowrap">Access</th>
                 </tr>

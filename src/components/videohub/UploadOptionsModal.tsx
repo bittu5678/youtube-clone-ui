@@ -43,8 +43,8 @@ export const UPLOAD_OPTIONS_LIST: UploadOptionItem[] = [
   {
     id: "ad_promotion",
     title: "Ad",
-    subtitle: "Short & Long Video Ad · 7d ₹100, 15d ₹200...",
-    badge: "Ad",
+    subtitle: "Short & Long Videos (Ads) · 7d ₹100, 15d ₹200...",
+    badge: "Ads",
     icon: Megaphone,
     accentClass:
       "border-emerald-500/30 hover:border-emerald-500/60 bg-emerald-500/5 hover:bg-emerald-500/10",

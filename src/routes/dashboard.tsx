@@ -266,12 +266,12 @@ function DashboardPage() {
               </div>
             </div>
 
-            {/* 3. Premium Short Video */}
+            {/* 3. Sponsor Short Video */}
             <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-b from-amber-500/15 via-card to-card p-5 space-y-2 shadow-[0_0_20px_rgba(245,158,11,0.08)]">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
                   <Zap className="h-3 w-3 fill-amber-400" />
-                  PREMIUM · Short
+                  SPONSOR · Short
                 </span>
                 <span className="grid h-8 w-8 place-items-center rounded-xl bg-amber-400/20 text-amber-400 font-bold">
                   ⚡
@@ -281,17 +281,17 @@ function DashboardPage() {
                 {videoCounts.premiumShort}
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-amber-500/20 text-[11px]">
-                <span className="font-bold text-amber-300">3. Premium Short Video</span>
+                <span className="font-bold text-amber-300">3. Sponsor Short Video</span>
                 <span className="text-amber-400/80 font-mono">Paid (₹6)</span>
               </div>
             </div>
 
-            {/* 4. Premium Long Video */}
+            {/* 4. Sponsor Long Video */}
             <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-b from-amber-500/15 via-card to-card p-5 space-y-2 shadow-[0_0_20px_rgba(245,158,11,0.08)]">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
                   <Zap className="h-3 w-3 fill-amber-400" />
-                  PREMIUM · Long Form
+                  SPONSOR · Long Form
                 </span>
                 <span className="grid h-8 w-8 place-items-center rounded-xl bg-amber-400/20 text-amber-400 font-bold">
                   ⚡
@@ -301,7 +301,7 @@ function DashboardPage() {
                 {videoCounts.premiumLong}
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-amber-500/20 text-[11px]">
-                <span className="font-bold text-amber-300">4. Premium Long Video</span>
+                <span className="font-bold text-amber-300">4. Sponsor Long Video</span>
                 <span className="text-amber-400/80 font-mono">Paid (₹6)</span>
               </div>
             </div>

@@ -13,7 +13,7 @@ import {
   resetPersistentPremiumState,
 } from "./payments";
 import { handleApiRequest, isAdPromotionActive } from "./api-handler";
-import { isPromotionActive } from "../lib/video-service";
+import { isPromotionActive, getVideoBadgeLabels } from "../lib/video-service";
 import { api } from "../lib/api";
 import { processWithdrawal } from "../lib/ledger-service";
 
@@ -1771,5 +1771,144 @@ describe("Task 34: Premium Video Global Pool & Admin Ledger Verification Tests",
     assert.equal(dist.totalReferralAmount, 80);
     assert.equal(dist.adminAmount, 120);
     assert.equal(dist.adminPercent, 60);
+  });
+});
+
+describe("Task 35: Free, Paid/Premium Sponsor, and Ads UI Label Validation Tests", () => {
+  it("1. Free videos appear normally with zero Sponsor, Ads, Premium, or price labels", () => {
+    const freeShort = {
+      id: "vid-free-001",
+      title: "Free React Masterclass",
+      videoType: "free" as const,
+      contentType: "short" as const,
+      duration: "0:45",
+      isPromoted: false,
+    };
+    const labels = getVideoBadgeLabels(freeShort);
+    assert.equal(labels.isFree, true);
+    assert.equal(labels.showSponsorLabel, false);
+    assert.equal(labels.showAdsLabel, false);
+    assert.equal(labels.badges.length, 0);
+
+    const freeLong = {
+      id: "vid-free-002",
+      title: "Full Stack Architecture Tutorial",
+      videoType: "free" as const,
+      contentType: "long" as const,
+      duration: "42:15",
+      isPromoted: false,
+    };
+    const longLabels = getVideoBadgeLabels(freeLong);
+    assert.equal(longLabels.isFree, true);
+    assert.equal(longLabels.showSponsorLabel, false);
+    assert.equal(longLabels.showAdsLabel, false);
+    assert.equal(longLabels.badges.length, 0);
+  });
+
+  it("2. Paid/premium uploads display a small 'Sponsor' label immediately below title and remove 'Premium' and '₹6' labels", () => {
+    const paidUpload = {
+      id: "vid-paid-001",
+      title: "Exclusive Creator Course",
+      videoType: "premium" as const,
+      contentType: "long" as const,
+      duration: "25:30",
+      isPromoted: false,
+    };
+    const labels = getVideoBadgeLabels(paidUpload);
+    assert.equal(labels.isFree, false);
+    assert.equal(labels.showSponsorLabel, true);
+    assert.equal(labels.showAdsLabel, false); // Must NOT be labeled as Ads!
+
+    // Validate badge text
+    assert.equal(labels.badges.length, 1);
+    assert.equal(labels.badges[0]?.type, "sponsor");
+    assert.equal(labels.badges[0]?.label, "Sponsor");
+
+    // Strictly ensure "Premium" and "₹6" do not appear in public badge text
+    const badgeText = labels.badges.map((b) => b.label).join(" ");
+    assert.ok(!badgeText.toLowerCase().includes("premium"));
+    assert.ok(!badgeText.includes("₹6"));
+    assert.ok(!badgeText.includes("6"));
+  });
+
+  it("3. Ads videos display small 'Ads' label only for genuine active advertising/promotional content", () => {
+    // Actively promoted video
+    const activeAdVideo = {
+      id: "vid-ad-001",
+      title: "Summer Sale Campaign",
+      videoType: "free" as const,
+      contentType: "short" as const,
+      duration: "0:30",
+      isPromoted: true,
+      promotionExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    const activeLabels = getVideoBadgeLabels(activeAdVideo);
+    assert.equal(activeLabels.showAdsLabel, true);
+    assert.equal(activeLabels.showSponsorLabel, false); // Do not create fake sponsor relationship!
+    assert.equal(activeLabels.badges.length, 1);
+    assert.equal(activeLabels.badges[0]?.type, "ads");
+    assert.equal(activeLabels.badges[0]?.label, "Ads");
+
+    // Expired promotion safely fails closed
+    const expiredAdVideo = {
+      id: "vid-ad-002",
+      title: "Expired Sale Campaign",
+      videoType: "free" as const,
+      contentType: "short" as const,
+      duration: "0:30",
+      isPromoted: true,
+      promotionExpiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    };
+    const expiredLabels = getVideoBadgeLabels(expiredAdVideo);
+    assert.equal(expiredLabels.showAdsLabel, false);
+    assert.equal(expiredLabels.isFree, true);
+  });
+
+  it("4. Video duration alone is NEVER used to decide whether a video is sponsored or an advertisement", () => {
+    // Short video with zero paid or promoted metadata
+    const shortVideo = {
+      id: "vid-short-001",
+      title: "Quick Tips",
+      videoType: "free" as const,
+      contentType: "short" as const,
+      duration: "0:15",
+      isPromoted: false,
+    };
+    const shortLabels = getVideoBadgeLabels(shortVideo);
+    assert.equal(shortLabels.showSponsorLabel, false);
+    assert.equal(shortLabels.showAdsLabel, false);
+
+    // Long video with zero paid or promoted metadata
+    const longVideo = {
+      id: "vid-long-001",
+      title: "Full Documentary",
+      videoType: "free" as const,
+      contentType: "long" as const,
+      duration: "1:45:00",
+      isPromoted: false,
+    };
+    const longLabels = getVideoBadgeLabels(longVideo);
+    assert.equal(longLabels.showSponsorLabel, false);
+    assert.equal(longLabels.showAdsLabel, false);
+  });
+
+  it("5. Supports combined Paid Sponsor + Active Ads promotion cleanly without label conflicts", () => {
+    const combinedVideo = {
+      id: "vid-combined-001",
+      title: "Partner Brand Showcase",
+      videoType: "premium" as const,
+      contentType: "long" as const,
+      duration: "18:20",
+      isPromoted: true,
+      promotionExpiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    const labels = getVideoBadgeLabels(combinedVideo);
+    assert.equal(labels.showSponsorLabel, true);
+    assert.equal(labels.showAdsLabel, true);
+    assert.equal(labels.badges.length, 2);
+    assert.deepEqual(labels.badges, [
+      { type: "sponsor", label: "Sponsor" },
+      { type: "ads", label: "Ads" },
+    ]);
   });
 });

@@ -161,7 +161,7 @@ export function PremiumVideosPage() {
                   Sponsor Videos
                 </h1>
                 <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-bold text-amber-400">
-                  ₹6 Verified Monetization
+                  Verified Monetization
                 </span>
               </div>
               <p className="text-sm text-muted-foreground mt-0.5">
@@ -284,9 +284,9 @@ export function PremiumVideosPage() {
         {filteredList.length === 0 ? (
           <div className="rounded-3xl border border-border bg-card p-12 text-center space-y-3">
             <Sparkles className="h-10 w-10 text-muted-foreground mx-auto" />
-            <h3 className="text-base font-bold text-foreground">No premium videos found</h3>
+            <h3 className="text-base font-bold text-foreground">No sponsor videos found</h3>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              There are currently no verified premium videos matching the selected format or
+              There are currently no verified sponsor videos matching the selected format or
               category.
             </p>
             <Link
@@ -333,9 +333,11 @@ export function PremiumVideosPage() {
 
                     {/* Badges on top of thumbnail */}
                     <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
-                      <span className="rounded-md bg-amber-500/95 backdrop-blur-sm px-2 py-0.5 text-[10px] font-black text-black shadow-sm flex items-center gap-1">
-                        <Lock className="h-2.5 w-2.5" /> ₹6 Sponsor
-                      </span>
+                      {video.isPromoted && (
+                        <span className="rounded-md bg-emerald-500/95 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-white shadow-sm flex items-center gap-1">
+                          Ads
+                        </span>
+                      )}
                       {video.contentType === "short" && (
                         <span className="rounded-md bg-rose-500/90 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
                           Short
@@ -369,6 +371,18 @@ export function PremiumVideosPage() {
                           {video.title}
                         </h3>
                       </Link>
+
+                      {/* YouTube-style small Sponsor & Ads labels immediately below video title */}
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                          Sponsor
+                        </span>
+                        {video.isPromoted && (
+                          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                            Ads
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
                         <span className="truncate">{video.channel}</span>
                         <span>·</span>

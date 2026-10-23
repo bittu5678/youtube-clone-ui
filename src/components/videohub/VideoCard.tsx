@@ -1,10 +1,12 @@
-import { MoreVertical, Play, Megaphone, Lock, Globe } from "lucide-react";
+import { MoreVertical, Play, Megaphone } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import type { Video } from "@/data/videos";
 import { resolveVideoThumbnail, SVG_FALLBACK_THUMBNAIL } from "@/lib/thumbnail-service";
+import { getVideoBadgeLabels } from "@/lib/video-service";
 
 export function VideoCard({ video }: { video: Video }) {
   const thumbSrc = resolveVideoThumbnail(video);
+  const labels = getVideoBadgeLabels(video);
 
   return (
     <article className="group cursor-pointer transition-transform duration-300 hover:-translate-y-0.5">
@@ -26,25 +28,14 @@ export function VideoCard({ video }: { video: Video }) {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-          {/* Top badges */}
-          <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
-            {video.isPromoted && (
+          {/* Top badges: Genuinely promoted content displays small Ads label. Free and price/₹6 labels are strictly omitted. */}
+          {labels.showAdsLabel && (
+            <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
               <span className="rounded-md bg-emerald-500/95 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-white shadow-sm flex items-center gap-1">
-                <Megaphone className="h-2.5 w-2.5" /> Promoted
+                <Megaphone className="h-2.5 w-2.5" /> Ads
               </span>
-            )}
-            {video.videoType === "premium" && (
-              <span className="rounded-md bg-amber-500/95 backdrop-blur-sm px-2 py-0.5 text-[10px] font-black text-black shadow-sm flex items-center gap-1">
-                <Lock className="h-2.5 w-2.5" /> ₹6 Sponsor
-              </span>
-            )}
-            {video.videoType === "free" &&
-              (video.id.startsWith("vid-") || video.id.startsWith("vid_")) && (
-                <span className="rounded-md bg-sky-500/90 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm flex items-center gap-1">
-                  <Globe className="h-2.5 w-2.5" /> Free
-                </span>
-              )}
-          </div>
+            </div>
+          )}
 
           <span className="absolute bottom-2 right-2 rounded-md bg-black/80 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white z-10">
             {video.duration || "0:00"}
@@ -68,6 +59,23 @@ export function VideoCard({ video }: { video: Video }) {
               {video.title}
             </h3>
           </Link>
+
+          {/* YouTube-style small Sponsor & Ads labels immediately below video title */}
+          {(labels.showSponsorLabel || labels.showAdsLabel) && (
+            <div className="mt-1 flex items-center gap-1.5">
+              {labels.showSponsorLabel && (
+                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                  Sponsor
+                </span>
+              )}
+              {labels.showAdsLabel && (
+                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                  Ads
+                </span>
+              )}
+            </div>
+          )}
+
           <p className="mt-1 truncate text-sm text-muted-foreground">{video.channel}</p>
           <p className="truncate text-sm text-muted-foreground">
             {video.views} · {video.age}

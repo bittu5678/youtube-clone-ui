@@ -670,6 +670,84 @@ export function isLongVideo(video: { contentType?: string; duration?: string }):
   return !isShortVideo(video);
 }
 
+export interface VideoBadgeLabels {
+  /**
+   * Free videos: must appear normally; no Premium, Sponsor, or price labels.
+   */
+  isFree: boolean;
+  /**
+   * For videos uploaded under paid/premium upload option, show small "Sponsor" label immediately below title.
+   * Never show "Premium" or upload fees like "₹6" as public video-card label.
+   */
+  showSponsorLabel: boolean;
+  /**
+   * For videos genuinely classified as advertising/promotional content by metadata or Ads upload.
+   * Shown as a small "Ads" label.
+   */
+  showAdsLabel: boolean;
+  /**
+   * Strictly public badge texts to display immediately below video title.
+   */
+  badges: Array<{
+    type: "sponsor" | "ads";
+    label: string;
+  }>;
+}
+
+/**
+ * Centrally determines the public badge labels for a video according to FaceTube guidelines:
+ * 1. Free videos: must appear normally. No Premium, Sponsor, or price labels.
+ * 2. Paid/premium uploads: show small "Sponsor" label immediately below title. No "Premium" or "₹6".
+ * 3. Ads videos: show small "Ads" label only for genuine advertising/promotional content.
+ * 4. Duration is never used to determine sponsor or ad status.
+ */
+export function getVideoBadgeLabels(video: {
+  videoType?: string | null | undefined;
+  video_type?: string | null | undefined;
+  isPromoted?: boolean | number | null | undefined;
+  is_promoted?: boolean | number | null | undefined;
+  promotionExpiresAt?: string | null | undefined;
+  promotion_expires_at?: string | null | undefined;
+  duration?: string | null | undefined;
+  contentType?: string | null | undefined;
+}): VideoBadgeLabels {
+  const videoType = (video.videoType ?? video.video_type ?? "free").toLowerCase();
+  const isPaidPremium = videoType === "premium";
+
+  // Check if genuinely active advertising / promotional content
+  const hasPromotedFlag = Boolean(video.isPromoted ?? video.is_promoted);
+  let showAds = false;
+  if (hasPromotedFlag) {
+    const expiry = video.promotionExpiresAt ?? video.promotion_expires_at;
+    if (expiry) {
+      showAds = isPromotionActive({
+        isPromoted: hasPromotedFlag,
+        promotionExpiresAt: expiry,
+      });
+    } else {
+      showAds = true;
+    }
+  }
+
+  const showSponsor = isPaidPremium;
+  const isFree = !showSponsor && !showAds;
+
+  const badges: Array<{ type: "sponsor" | "ads"; label: string }> = [];
+  if (showSponsor) {
+    badges.push({ type: "sponsor", label: "Sponsor" });
+  }
+  if (showAds) {
+    badges.push({ type: "ads", label: "Ads" });
+  }
+
+  return {
+    isFree,
+    showSponsorLabel: showSponsor,
+    showAdsLabel: showAds,
+    badges,
+  };
+}
+
 /**
  * Converts a Video or UploadedVideo into ShortItem format for display in ShortsShelf and /shorts.
  */

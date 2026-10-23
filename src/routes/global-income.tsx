@@ -107,7 +107,7 @@ function GlobalIncomePage() {
                 Database-Driven Rule
               </span>
               <h2 className="text-xl font-black text-foreground mt-0.5">
-                ₹6 Premium Video Transaction Distribution Breakup
+                ₹6 Sponsor Video Transaction Distribution Breakup
               </h2>
             </div>
             <span className="text-xs font-semibold text-muted-foreground font-mono">
@@ -156,7 +156,7 @@ function GlobalIncomePage() {
             <ShieldCheck className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
             <div>
               <strong className="text-amber-300">Global Income Pool Eligibility Rule:</strong> Only
-              eligible creators who have uploaded <strong>Premium Videos</strong> are counted for
+              eligible creators who have uploaded <strong>Sponsor Videos</strong> are counted for
               Global Income distribution. Creators who have uploaded only Free Videos are strictly
               excluded from the pool calculation. Currently{" "}
               <strong>{eligibleCreators.length} creators</strong> are eligible.
@@ -291,7 +291,7 @@ function GlobalIncomePage() {
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                       No global income pool distributions found for this account. Distributions
-                      occur automatically when users upload Premium Videos.
+                      occur automatically when users upload Sponsor Videos.
                     </td>
                   </tr>
                 )}

@@ -162,10 +162,10 @@ function YourVideosPage() {
             }`}
           >
             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-              PREMIUM (₹6)
+              SPONSOR
             </span>
             <div className="text-2xl font-black text-foreground mt-0.5">{counts.premiumShort}</div>
-            <div className="text-xs font-bold text-amber-300">3. Premium Short Video</div>
+            <div className="text-xs font-bold text-amber-300">3. Sponsor Short Video</div>
           </button>
 
           <button
@@ -178,10 +178,10 @@ function YourVideosPage() {
             }`}
           >
             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-              PREMIUM (₹6)
+              SPONSOR
             </span>
             <div className="text-2xl font-black text-foreground mt-0.5">{counts.premiumLong}</div>
-            <div className="text-xs font-bold text-amber-300">4. Premium Long Video</div>
+            <div className="text-xs font-bold text-amber-300">4. Sponsor Long Video</div>
           </button>
         </div>
 
@@ -245,7 +245,7 @@ function YourVideosPage() {
                     : "bg-secondary text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Premium Short
+                Sponsor Short
               </button>
               <button
                 type="button"
@@ -256,7 +256,7 @@ function YourVideosPage() {
                     : "bg-secondary text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Premium Long
+                Sponsor Long
               </button>
             </div>
           </div>
@@ -316,12 +316,12 @@ function YourVideosPage() {
                         {vid.userId}
                       </td>
 
-                      {/* Video Type (Free vs Premium) */}
+                      {/* Video Type (Free vs Sponsor) */}
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         {isPremium ? (
                           <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/50 bg-amber-400/15 px-2.5 py-0.5 text-[10px] font-black text-amber-300 shadow-[0_0_10px_rgba(251,191,36,0.2)]">
                             <Zap className="h-3 w-3 fill-amber-400 text-amber-300" />
-                            Premium Video
+                            Sponsor Video
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-0.5 text-[10px] font-bold text-sky-400">
@@ -368,7 +368,7 @@ function YourVideosPage() {
                         {vid.isPromoted ? (
                           <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-bold">
                             <Megaphone className="h-3 w-3" />
-                            Promoted
+                            Ads
                           </span>
                         ) : (
                           <span className="text-muted-foreground text-[11px]">—</span>

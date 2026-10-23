@@ -205,7 +205,7 @@ function DirectReferralIncomePage() {
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                       No referral commission transactions yet. Commission will trigger automatically
-                      when directly referred members upload Premium Videos.
+                      when directly referred members upload Sponsor Videos.
                     </td>
                   </tr>
                 )}

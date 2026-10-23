@@ -324,9 +324,11 @@ export function FreeVideosPage() {
 
                     {/* Badges on top of thumbnail */}
                     <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
-                      <span className="rounded-md bg-sky-500/90 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-white shadow-sm flex items-center gap-1">
-                        <Globe className="h-2.5 w-2.5" /> Free
-                      </span>
+                      {video.isPromoted && (
+                        <span className="rounded-md bg-emerald-500/95 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-white shadow-sm flex items-center gap-1">
+                          Ads
+                        </span>
+                      )}
                       {video.contentType === "short" && (
                         <span className="rounded-md bg-rose-500/90 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
                           Short
@@ -360,6 +362,13 @@ export function FreeVideosPage() {
                           {video.title}
                         </h3>
                       </Link>
+                      {video.isPromoted && (
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                            Ads
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
                         <span className="truncate">{video.channel}</span>
                         <span>·</span>
