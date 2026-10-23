@@ -682,9 +682,14 @@ export interface VideoBadgeLabels {
   showSponsorLabel: boolean;
   /**
    * For videos genuinely classified as advertising/promotional content by metadata or Ads upload.
-   * Shown as a small "Ads" label.
+   * Shown as a small "Ads" label immediately below title.
    */
   showAdsLabel: boolean;
+  /**
+   * Regression requirement: Video thumbnails MUST NOT display an "Ads" overlay badge or text.
+   * Always false across all cards and feeds.
+   */
+  showThumbnailAdsOverlay: false;
   /**
    * Strictly public badge texts to display immediately below video title.
    */
@@ -699,7 +704,8 @@ export interface VideoBadgeLabels {
  * 1. Free videos: must appear normally. No Premium, Sponsor, or price labels.
  * 2. Paid/premium uploads: show small "Sponsor" label immediately below title. No "Premium" or "₹6".
  * 3. Ads videos: show small "Ads" label only for genuine advertising/promotional content.
- * 4. Duration is never used to determine sponsor or ad status.
+ * 4. Thumbnail overlays: zero Ads badge overlay on thumbnails across all cards and feeds.
+ * 5. Duration is never used to determine sponsor or ad status.
  */
 export function getVideoBadgeLabels(video: {
   videoType?: string | null | undefined;
@@ -744,6 +750,7 @@ export function getVideoBadgeLabels(video: {
     isFree,
     showSponsorLabel: showSponsor,
     showAdsLabel: showAds,
+    showThumbnailAdsOverlay: false,
     badges,
   };
 }

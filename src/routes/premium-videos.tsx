@@ -331,24 +331,21 @@ export function PremiumVideosPage() {
                     {/* Gradient overlay on hover */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
-                    {/* Badges on top of thumbnail */}
-                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
-                      {video.isPromoted && (
-                        <span className="rounded-md bg-emerald-500/95 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-white shadow-sm flex items-center gap-1">
-                          Ads
-                        </span>
-                      )}
-                      {video.contentType === "short" && (
-                        <span className="rounded-md bg-rose-500/90 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
-                          Short
-                        </span>
-                      )}
-                      {isNewlyUploaded && (
-                        <span className="rounded-md bg-emerald-500/90 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
-                          New
-                        </span>
-                      )}
-                    </div>
+                    {/* Format / New status badges on top of thumbnail (No Ads overlay) */}
+                    {(video.contentType === "short" || isNewlyUploaded) && (
+                      <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
+                        {video.contentType === "short" && (
+                          <span className="rounded-md bg-rose-500/90 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                            Short
+                          </span>
+                        )}
+                        {isNewlyUploaded && (
+                          <span className="rounded-md bg-emerald-500/90 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                            New
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     {/* Duration badge */}
                     <span className="absolute bottom-2.5 right-2.5 rounded-md bg-black/85 backdrop-blur-sm px-1.5 py-0.5 font-mono text-[10px] font-bold text-white z-10">

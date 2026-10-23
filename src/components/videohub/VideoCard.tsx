@@ -1,4 +1,4 @@
-import { MoreVertical, Play, Megaphone } from "lucide-react";
+import { MoreVertical, Play } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import type { Video } from "@/data/videos";
 import { resolveVideoThumbnail, SVG_FALLBACK_THUMBNAIL } from "@/lib/thumbnail-service";
@@ -27,15 +27,6 @@ export function VideoCard({ video }: { video: Video }) {
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-
-          {/* Top badges: Genuinely promoted content displays small Ads label. Free and price/₹6 labels are strictly omitted. */}
-          {labels.showAdsLabel && (
-            <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
-              <span className="rounded-md bg-emerald-500/95 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-white shadow-sm flex items-center gap-1">
-                <Megaphone className="h-2.5 w-2.5" /> Ads
-              </span>
-            </div>
-          )}
 
           <span className="absolute bottom-2 right-2 rounded-md bg-black/80 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white z-10">
             {video.duration || "0:00"}

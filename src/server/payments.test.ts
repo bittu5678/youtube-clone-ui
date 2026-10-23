@@ -1911,4 +1911,70 @@ describe("Task 35: Free, Paid/Premium Sponsor, and Ads UI Label Validation Tests
       { type: "ads", label: "Ads" },
     ]);
   });
+
+  it("6. Regression test: Video thumbnails have NO Ads overlay badge while eligible active promotion shows Ads label below the title", () => {
+    // 1. Actively promoted video (e.g. Free video with active ad campaign)
+    const activePromotedVideo = {
+      id: "vid-regress-001",
+      title: "Active Promotion Tutorial",
+      videoType: "free" as const,
+      contentType: "long" as const,
+      duration: "10:15",
+      isPromoted: true,
+      promotionExpiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    const activeLabels = getVideoBadgeLabels(activePromotedVideo);
+    // Regression check: Video thumbnail overlay MUST NOT display an Ads badge
+    assert.equal(
+      activeLabels.showThumbnailAdsOverlay,
+      false,
+      "Thumbnail overlay must never show Ads badge",
+    );
+    // Below title: Must show small Ads label
+    assert.equal(
+      activeLabels.showAdsLabel,
+      true,
+      "Below title must show Ads label for active promotion",
+    );
+    assert.equal(activeLabels.badges.length, 1);
+    assert.equal(activeLabels.badges[0]?.type, "ads");
+    assert.equal(activeLabels.badges[0]?.label, "Ads");
+
+    // 2. Paid / Premium upload with active promotion
+    const paidWithPromotion = {
+      id: "vid-regress-002",
+      title: "Paid Upload with Active Ads",
+      videoType: "premium" as const,
+      contentType: "long" as const,
+      duration: "12:00",
+      isPromoted: true,
+      promotionExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    const paidLabels = getVideoBadgeLabels(paidWithPromotion);
+    // Neither Sponsor nor Ads badge is placed on the thumbnail overlay
+    assert.equal(
+      paidLabels.showThumbnailAdsOverlay,
+      false,
+      "Thumbnail overlay must not show Ads badge",
+    );
+    // Both Sponsor and Ads appear strictly below the title
+    assert.equal(paidLabels.showSponsorLabel, true);
+    assert.equal(paidLabels.showAdsLabel, true);
+
+    // 3. Normal Free video
+    const normalFreeVideo = {
+      id: "vid-regress-003",
+      title: "Normal Free Video",
+      videoType: "free" as const,
+      contentType: "long" as const,
+      duration: "08:30",
+      isPromoted: false,
+    };
+    const freeLabels = getVideoBadgeLabels(normalFreeVideo);
+    assert.equal(freeLabels.showThumbnailAdsOverlay, false);
+    assert.equal(freeLabels.showAdsLabel, false);
+    assert.equal(freeLabels.showSponsorLabel, false);
+    assert.equal(freeLabels.isFree, true);
+    assert.equal(freeLabels.badges.length, 0);
+  });
 });
