@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { Radio, Plus, Play, Calendar, Users, MessageSquare, DollarSign, Tv } from "lucide-react";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
+import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/live-videos")({
   head: () => ({
@@ -51,6 +53,30 @@ const mockStreams = [
 ];
 
 function LiveVideosPage() {
+  const [streamList, setStreamList] = useState(mockStreams);
+
+  useEffect(() => {
+    api.live
+      .listStreams()
+      .then((res) => {
+        if (res && res.streams && res.streams.length > 0) {
+          const mapped = res.streams.map((s: any) => ({
+            id: s.id,
+            title: s.title,
+            status: s.status === "live" ? "Live Now" : "Upcoming",
+            scheduledFor: "Active Stream",
+            duration: "Live",
+            views: `${s.viewers_count || 1200} viewers`,
+            superchats: "₹655.00",
+            thumbnail:
+              s.thumbnail_url ||
+              "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600",
+          }));
+          setStreamList([...mapped, ...mockStreams]);
+        }
+      })
+      .catch(() => {});
+  }, []);
   return (
     <VideoHubLayout>
       <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">
@@ -116,7 +142,7 @@ function LiveVideosPage() {
         <div className="space-y-4">
           <h2 className="text-base font-extrabold text-foreground">Live Broadcasts & Schedule</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {mockStreams.map((stream) => (
+            {streamList.map((stream) => (
               <div
                 key={stream.id}
                 className="group overflow-hidden rounded-2xl border border-border bg-card shadow-card transition duration-200 hover:-translate-y-1 hover:shadow-lift"

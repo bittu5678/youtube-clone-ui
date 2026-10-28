@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   User,
   Settings,
@@ -26,12 +26,15 @@ import {
   Landmark,
   Link2,
   Lock,
+  Camera,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/videohub/Logo";
 import { ThemeToggle } from "@/components/videohub/ThemeToggle";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api";
 import { recommended, recent, type Video as VideoType } from "@/data/videos";
 import { SHORTS_LIST } from "@/data/shorts";
 import { PersonalKycTab } from "@/components/profile/PersonalKycTab";
@@ -64,7 +67,17 @@ type ProfileTabType = "personal-kyc" | "bank-kyc" | "referral-link" | "change-pa
 
 function ProfilePage() {
   const searchParams = Route.useSearch();
-  const { user, profile, dbUser, role: _role, isAdmin, signOut, signIn, allUsers } = useAuth();
+  const {
+    user,
+    profile,
+    dbUser,
+    role: _role,
+    isAdmin,
+    signOut,
+    signIn,
+    allUsers,
+    refreshUsers,
+  } = useAuth();
   const [demoSwitchOpen, setDemoSwitchOpen] = useState(false);
   const [profileTab, setProfileTab] = useState<ProfileTabType>(
     searchParams.tab === "change-password" ||
@@ -95,9 +108,12 @@ function ProfilePage() {
     (typeof userMeta?.["mobile"] === "string" ? userMeta["mobile"] : "") ||
     "+1 555-014-8392";
 
-  // Editable Profile State
+  // Editable Profile State (Req 2: Channel Logo & Channel Name)
   const [channelName, setChannelName] = useState(
-    profile?.full_name || profile?.name || dbUser?.name || "Alex Rivera",
+    profile?.channel_name || profile?.full_name || profile?.name || dbUser?.name || "Alex Rivera",
+  );
+  const [channelLogoUrl, setChannelLogoUrl] = useState(
+    profile?.channel_logo_url || dbUser?.channel_logo_url || "",
   );
   const [channelHandle, setChannelHandle] = useState(
     profile?.username || currentUserId.toLowerCase(),
@@ -105,6 +121,8 @@ function ProfilePage() {
   const [channelBio, setChannelBio] = useState(
     "Building full-stack web applications, modern UI kits, and sharing creative tutorials weekly.",
   );
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   // User's own videos list with deletion capability
   const [userVideos, setUserVideos] = useState<VideoType[]>([
@@ -182,14 +200,71 @@ function ProfilePage() {
     toast.success(`Deleted "${title.slice(0, 24)}..."`);
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleLogoFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      toast.error("Please upload a JPG, PNG, or WEBP image for channel logo.");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image file size cannot exceed 10MB.");
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const uploadRes = await api.uploads.uploadImage(file);
+      if (uploadRes && uploadRes.url) {
+        setChannelLogoUrl(uploadRes.url);
+        await api.users.updateChannelLogo({
+          userId: currentUserId,
+          channelLogoUrl: uploadRes.url,
+          channelName,
+        });
+        await refreshUsers();
+        toast.success("🎉 Channel logo updated successfully!");
+      } else {
+        toast.error("Failed to upload channel logo image.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update channel logo.");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setEditProfileOpen(false);
-    toast.success("Profile updated successfully!");
+    try {
+      await api.users.updateChannelLogo({
+        userId: currentUserId,
+        channelLogoUrl,
+        channelName,
+      });
+      await refreshUsers();
+      setEditProfileOpen(false);
+      toast.success("Profile and channel branding updated successfully!");
+    } catch {
+      setEditProfileOpen(false);
+      toast.success("Profile saved locally!");
+    }
   };
 
   return (
     <div className="min-h-screen bg-background text-foreground antialiased selection:bg-brand selection:text-white pb-24 md:pb-28">
+      {/* Hidden Channel Logo Input */}
+      <input
+        ref={logoInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={handleLogoFileSelect}
+        className="hidden"
+      />
+
       {/* Top Header */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
@@ -220,8 +295,28 @@ function ProfilePage() {
         <div className="relative overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-sm">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
             <div className="flex items-center gap-4">
-              <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand via-brand-dark to-black text-2xl font-bold text-white ring-4 ring-brand/20 shadow-md">
-                {(channelName || "A").charAt(0).toUpperCase()}
+              {/* Channel Logo Avatar with Camera Upload Trigger */}
+              <div className="relative group shrink-0">
+                {channelLogoUrl ? (
+                  <img
+                    src={channelLogoUrl}
+                    alt={channelName}
+                    className="h-20 w-20 shrink-0 rounded-full object-cover ring-4 ring-brand/20 shadow-md"
+                  />
+                ) : (
+                  <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand via-brand-dark to-black text-2xl font-bold text-white ring-4 ring-brand/20 shadow-md">
+                    {(channelName || "A").charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={uploadingLogo}
+                  onClick={() => logoInputRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full bg-brand text-white shadow-md hover:bg-brand-dark transition active:scale-95 border-2 border-card"
+                  title="Upload Channel Logo"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                </button>
               </div>
 
               <div>
@@ -696,6 +791,33 @@ function ProfilePage() {
             </div>
 
             <form onSubmit={handleSaveProfile} className="mt-4 space-y-4">
+              {/* Channel Logo Upload */}
+              <div>
+                <label className="text-xs font-semibold text-foreground">Channel Logo</label>
+                <div className="mt-2 flex items-center gap-3">
+                  {channelLogoUrl ? (
+                    <img
+                      src={channelLogoUrl}
+                      alt={channelName}
+                      className="h-12 w-12 rounded-full object-cover ring-2 ring-brand/30"
+                    />
+                  ) : (
+                    <div className="grid h-12 w-12 place-items-center rounded-full bg-brand text-sm font-bold text-white">
+                      {(channelName || "A").charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    disabled={uploadingLogo}
+                    className="rounded-xl border border-border bg-secondary/80 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary flex items-center gap-1.5"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    <span>{uploadingLogo ? "Uploading..." : "Upload New Logo"}</span>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs font-semibold text-foreground">Channel Name</label>
                 <input

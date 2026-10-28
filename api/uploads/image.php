@@ -38,6 +38,23 @@ if (!empty($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
         ], 400);
     }
 
+    // Enforce 9:16 aspect ratio for image uploads
+    $imageInfo = @getimagesize($tmpName);
+    if ($imageInfo) {
+        $width = $imageInfo[0];
+        $height = $imageInfo[1];
+        if ($width > 0 && $height > 0) {
+            $ratio = $width / $height;
+            $targetRatio = 9 / 16; // 0.5625
+            if (abs($ratio - $targetRatio) > 0.08) {
+                jsonResponse([
+                    'success' => false,
+                    'error' => "Image must strictly be in 9:16 vertical aspect ratio (e.g. 1080x1920). Current dimensions: {$width}x{$height}."
+                ], 400);
+            }
+        }
+    }
+
     $uniqueId = time() . '_' . substr(md5(random_bytes(6)), 0, 6);
     $counter = 0;
     $candidateName = 'img_' . $uniqueId . '.' . ($ext ?: 'jpg');

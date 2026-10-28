@@ -421,6 +421,27 @@ export const api = {
         body: JSON.stringify(data),
       });
     },
+
+    getEarningsHistory: async (userId?: string, days = 14) => {
+      const params = new URLSearchParams();
+      if (userId) params.set("user_id", userId);
+      params.set("days", String(days));
+      return apiFetch<{
+        success: boolean;
+        user_id: string;
+        days: number;
+        history: Array<{
+          date: string;
+          day: string;
+          revenue: number;
+          referral_income: number;
+          global_income: number;
+          adsense_income: number;
+          affiliate_income: number;
+          tx_count: number;
+        }>;
+      }>(`/wallet/earnings-history.php?${params.toString()}`);
+    },
   },
 
   // KYC
@@ -593,6 +614,86 @@ export const api = {
       return apiFetch<{ success: boolean; message: string }>("/admin/role.php", {
         method: "POST",
         body: JSON.stringify({ targetUserId, role }),
+      });
+    },
+
+    listVideos: async (params?: { includeBlocked?: boolean }) => {
+      const q = params?.includeBlocked ? "?include_blocked=1" : "";
+      return apiFetch<{
+        success: boolean;
+        videos: any[];
+        counts: { total: number; blocked: number; shorts: number; long: number };
+      }>(`/admin/videos.php${q}`);
+    },
+
+    updateVideoStatus: async (params: { videoId: string; isBlocked: boolean; reason?: string }) => {
+      return apiFetch<{
+        success: boolean;
+        message: string;
+        video_id: string;
+        is_blocked: boolean;
+      }>("/admin/videos.php", {
+        method: "POST",
+        body: JSON.stringify({
+          videoId: params.videoId,
+          isBlocked: params.isBlocked,
+          reason: params.reason || "Content moderation",
+        }),
+      });
+    },
+
+    bulkPayout: async (params: {
+      payouts: Array<{ userId: string; amount: number; transactionId?: string }>;
+      notes?: string;
+    }) => {
+      return apiFetch<{
+        success: boolean;
+        message: string;
+        batch_id: string;
+        total_recipients: number;
+        total_amount: number;
+        processed: any[];
+      }>("/admin/bulk-payout.php", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+    },
+  },
+
+  // Live Streams
+  live: {
+    listStreams: async () => {
+      return apiFetch<{ success: boolean; streams: any[] }>("/live/streams.php");
+    },
+
+    createStream: async (params: {
+      title: string;
+      description?: string;
+      category?: string;
+      thumbnailUrl?: string;
+    }) => {
+      return apiFetch<{ success: boolean; message: string; stream: any }>("/live/streams.php", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+    },
+
+    getChatMessages: async (streamId: string) => {
+      return apiFetch<{ success: boolean; stream_id: string; messages: any[] }>(
+        `/live/chat.php?stream_id=${encodeURIComponent(streamId)}`,
+      );
+    },
+
+    sendChatMessage: async (params: {
+      streamId: string;
+      message: string;
+      isSuperchat?: boolean;
+      superchatAmount?: number;
+      userName?: string;
+    }) => {
+      return apiFetch<{ success: boolean; message: any }>("/live/chat.php", {
+        method: "POST",
+        body: JSON.stringify(params),
       });
     },
   },

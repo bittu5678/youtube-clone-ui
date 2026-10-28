@@ -28,6 +28,8 @@ export interface DbUser {
   email: string; // UNIQUE Email
   password_hash: string; // Secure SHA-256 password hash
   referral_code: string | null; // Optional referral code
+  channel_logo_url?: string | null;
+  channel_name?: string | null;
   created_at: string; // Timestamp
   role?: RoleType;
 }
@@ -40,6 +42,8 @@ export interface Profile {
   name?: string | null;
   mobile?: string | null;
   avatar_url?: string | null;
+  channel_logo_url?: string | null;
+  channel_name?: string | null;
   email?: string | null;
   referral_code?: string | null;
   created_at?: string;
@@ -62,6 +66,8 @@ export interface AuthUser {
   full_name?: string;
   mobile?: string;
   avatar_url?: string;
+  channel_logo_url?: string;
+  channel_name?: string;
   role: RoleType;
 }
 
@@ -74,6 +80,8 @@ export interface UserWithRole {
   mobile?: string;
   email: string;
   role: RoleType;
+  channel_logo_url?: string | null;
+  channel_name?: string | null;
   referral_code?: string | null;
   created_at: string;
 }

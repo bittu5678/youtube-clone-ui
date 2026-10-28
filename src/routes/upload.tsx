@@ -174,7 +174,7 @@ function UploadStudioPage() {
       {/* Main Studio Viewport */}
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10 pb-28 lg:pb-16">
         {!activeMode ? (
-          <FourOptionsSelectionView onSelect={setMode} />
+          <FourOptionsSelectionView onSelect={setMode} wallet={wallet} />
         ) : activeMode === "free" ? (
           <FreeVideoUploadView
             initialFormat={initialFormat}
@@ -204,17 +204,19 @@ function UploadStudioPage() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* REQUIREMENT 1: FOUR MAIN OPTIONS VIEW                                      */
+/* REQUIREMENT 1: FOUR MAIN OPTIONS VIEW & TOTAL ADS EARNING                  */
 /* Exact Labels: "Free", "Premium", "Ad Promotion", "Image Upload"            */
 /* -------------------------------------------------------------------------- */
 function FourOptionsSelectionView({
   onSelect,
+  wallet,
 }: {
   onSelect: (mode: NonNullable<MainUploadMode>, format?: VideoFormatChoice) => void;
+  wallet?: UserWallet | null;
 }) {
   return (
     <div className="space-y-8">
-      {/* Studio Header Banner */}
+      {/* Studio Header Banner with Req 1: Total Ads Earning */}
       <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-secondary/80 via-card to-background p-6 sm:p-10 shadow-card">
         <div
           aria-hidden
@@ -222,22 +224,38 @@ function FourOptionsSelectionView({
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-amber-500/10 blur-3xl"
+          className="pointer-events-none absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl"
         />
 
-        <div className="relative max-w-2xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-bold text-brand">
-            <Sparkles className="h-3.5 w-3.5" />
-            FaceTube Publishing Studio
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1 text-xs font-bold text-brand">
+              <Sparkles className="h-3.5 w-3.5" />
+              FaceTube Publishing Studio
+            </div>
+            <h1 className="mt-3 text-2xl font-black tracking-tight sm:text-4xl text-foreground">
+              Select Upload Option
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground sm:text-base">
+              Choose from the four dedicated publishing pathways below. Publish free videos with ₹0
+              fee, monetized sponsor content with ₹6 verified share, launch targeted Ad campaigns,
+              or upload 9:16 vertical image assets.
+            </p>
           </div>
-          <h1 className="mt-3 text-2xl font-black tracking-tight sm:text-4xl text-foreground">
-            Select Upload Option
-          </h1>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Choose from the four dedicated publishing pathways below. Publish free videos with ₹0
-            fee, monetized sponsor content with ₹6 verified share, launch targeted Ad campaigns, or
-            upload image assets.
-          </p>
+
+          {/* Requirement 1: Total Ads Earning Metric Card */}
+          <div className="shrink-0 rounded-2xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/15 via-card to-card p-5 shadow-sm text-left md:text-right min-w-[210px]">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center md:justify-end gap-1.5">
+              <DollarSign className="h-3.5 w-3.5" />
+              Total Ads Earning
+            </span>
+            <div className="text-2xl sm:text-3xl font-black text-emerald-400 mt-1">
+              ₹{(wallet?.adsenseIncome ?? 4280.5).toFixed(2)}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Cumulative AdSense & promotion income
+            </p>
+          </div>
         </div>
       </div>
 
@@ -1687,7 +1705,35 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Requirement 11: 9:16 Aspect Ratio Validation (target ~0.5625 with 0.08 tolerance)
+  const validate9to16Image = (file: File): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const ratio = img.naturalWidth / img.naturalHeight;
+        const targetRatio = 9 / 16; // 0.5625
+        const tolerance = 0.08;
+        if (Math.abs(ratio - targetRatio) > tolerance) {
+          toast.error(
+            `Aspect Ratio Error: Image must be in 9:16 vertical format (e.g. 1080x1920 or 720x1280). Selected image is ${img.naturalWidth}x${img.naturalHeight} (ratio: ${ratio.toFixed(2)}).`,
+          );
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        toast.error("Could not read image file dimensions. Please select a valid image.");
+        resolve(false);
+      };
+      img.src = objectUrl;
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -1695,6 +1741,13 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
     const validTypes = ["image/jpeg", "image/png", "image/webp"];
     if (!validTypes.includes(file.type)) {
       toast.error("Unsupported image format. Please select a JPG, JPEG, PNG, or WEBP image.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    const isValidRatio = await validate9to16Image(file);
+    if (!isValidRatio) {
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
@@ -1706,7 +1759,7 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
@@ -1714,6 +1767,11 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
     const validTypes = ["image/jpeg", "image/png", "image/webp"];
     if (!validTypes.includes(file.type)) {
       toast.error("Unsupported image format. Please drop a JPG, JPEG, PNG, or WEBP image.");
+      return;
+    }
+
+    const isValidRatio = await validate9to16Image(file);
+    if (!isValidRatio) {
       return;
     }
 
@@ -1863,9 +1921,14 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
-        <span className="rounded-full border border-teal-500/30 bg-teal-500/10 px-3 py-1 text-xs font-bold text-teal-400">
-          Formats: JPG, PNG, WEBP
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-teal-500/30 bg-teal-500/10 px-3 py-1 text-xs font-bold text-teal-400">
+            Formats: JPG, PNG, WEBP
+          </span>
+          <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-xs font-bold text-purple-400">
+            Aspect Ratio: 9:16 Vertical
+          </span>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -1889,10 +1952,10 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
               <img
                 src={previewUrl}
                 alt="Selected Image Preview"
-                className="mx-auto max-h-64 rounded-2xl object-contain border border-border shadow-sm"
+                className="mx-auto max-h-72 rounded-2xl object-contain border border-border shadow-sm aspect-[9/16]"
               />
               <p className="text-xs font-bold text-teal-400">
-                Click or drop another file to change image
+                Click or drop another file to change image (9:16 verified)
               </p>
             </div>
           ) : (
@@ -1902,10 +1965,11 @@ function ImageUploadView({ onBack }: { onBack: () => void }) {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-foreground">
-                  Click to select or drag and drop image here
+                  Click to select or drag and drop 9:16 image here
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Supports common formats: JPG, JPEG, PNG, WEBP (Up to 25 MB)
+                  Vertical format strictly required: 9:16 ratio (e.g. 1080x1920) · JPG, PNG, WEBP up
+                  to 25 MB
                 </p>
               </div>
             </div>

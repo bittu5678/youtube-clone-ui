@@ -115,7 +115,7 @@ function getAuthUser($pdo) {
 
     try {
         $stmt = $pdo->prepare('
-            SELECT u.id, u.user_id, u.name, u.mobile, u.email, u.role, u.referral_code, u.avatar_url, u.created_at
+            SELECT u.id, u.user_id, u.name, u.mobile, u.email, u.role, u.referral_code, u.avatar_url, u.channel_logo_url, u.channel_name, u.created_at
             FROM sessions s
             INNER JOIN users u ON s.user_id = u.id
             WHERE s.token = ? AND s.expires_at > NOW()

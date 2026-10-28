@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     try {
         $stmt = $pdo->prepare('
-            SELECT id, user_id, name, mobile, email, role, referral_code, avatar_url, created_at
+            SELECT id, user_id, name, mobile, email, role, referral_code, avatar_url, channel_logo_url, channel_name, created_at
             FROM users
             WHERE UPPER(user_id) = UPPER(?) OR LOWER(email) = LOWER(?) OR id = ?
             LIMIT 1
@@ -58,6 +58,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (isset($input['mobile']) && strlen(trim($input['mobile'])) >= 7) {
         $updates[] = 'mobile = ?';
         $params[] = trim($input['mobile']);
+    }
+
+    if (isset($input['channel_logo_url'])) {
+        $updates[] = 'channel_logo_url = ?';
+        $params[] = trim($input['channel_logo_url']);
+    }
+
+    if (isset($input['channel_name'])) {
+        $updates[] = 'channel_name = ?';
+        $params[] = trim($input['channel_name']);
     }
 
     if (isset($input['avatar_url'])) {

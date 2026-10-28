@@ -1,12 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
-import { Radio, Users, Send, Sparkles, Share2, Heart, Search, Video } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import {
+  Radio,
+  Users,
+  Send,
+  Sparkles,
+  Share2,
+  Heart,
+  Search,
+  Video,
+  DollarSign,
+  Plus,
+  X,
+  MessageSquare,
+  Gift,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/videohub/Logo";
 import { ThemeToggle } from "@/components/videohub/ThemeToggle";
 import { BottomNav } from "@/components/videohub/BottomNav";
 import { LIVE_STREAMS, type LiveStream } from "@/data/live";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/live")({
   head: () => ({
@@ -33,39 +48,196 @@ const DEFAULT_STREAM: LiveStream = {
   viewers: "12,450",
   category: "Coding & Tech",
   tags: ["typescript", "fullstack", "react"],
-  thumb: "",
+  thumb:
+    "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&auto=format&fit=crop&q=80",
   isLive: true,
   startedTime: "Started 2 hours ago",
-  chatMessages: [],
+  chatMessages: [
+    {
+      user: "DevForge (Host)",
+      text: "Welcome everyone! Feel free to ask architecture questions.",
+      color: "text-red-400 font-bold",
+    },
+    {
+      user: "Alex Rivera",
+      text: "Excited for this session! How do you handle database sharding?",
+      color: "text-emerald-400",
+    },
+    { user: "Priya Sharma", text: "Audio and video are crystal clear!", color: "text-sky-400" },
+  ],
 };
 
-function LivePage() {
+export function LivePage() {
   const { user, profile } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState("All Live");
+  const [streams, setStreams] = useState<LiveStream[]>(LIVE_STREAMS);
   const [activeStream, setActiveStream] = useState<LiveStream>(LIVE_STREAMS[0] ?? DEFAULT_STREAM);
   const [chatInput, setChatInput] = useState("");
-  const [chatMessages, setChatMessages] = useState(activeStream.chatMessages);
+  const [chatMessages, setChatMessages] = useState<any[]>(activeStream.chatMessages || []);
   const [liked, setLiked] = useState(false);
+  const [superchatOpen, setSuperchatOpen] = useState(false);
+  const [superchatAmount, setSuperchatAmount] = useState(100);
+  const [superchatMsg, setSuperchatMsg] = useState("");
+  const [createStreamOpen, setCreateStreamOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newCategory, setNewCategory] = useState("Coding & Tech");
+
+  // Load real streams from backend
+  const loadStreams = useCallback(async () => {
+    try {
+      const res = await api.live.listStreams();
+      if (res && res.streams && res.streams.length > 0) {
+        const mapped: LiveStream[] = res.streams.map((s: any) => ({
+          id: s.id,
+          title: s.title,
+          streamer: s.creator_name || s.streamer || "FaceTube Creator",
+          streamerHandle: `@${(s.creator_name || "creator").toLowerCase().replace(/\s+/g, "")}`,
+          initials: (s.creator_name || "FT").substring(0, 2).toUpperCase(),
+          viewers: `${s.viewers_count || 1200} viewers`,
+          category: s.category || "Coding & Tech",
+          tags: ["live", "stream"],
+          thumb:
+            s.thumbnail_url || "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800",
+          isLive: s.status === "live",
+          startedTime: "Live now",
+          chatMessages: [],
+        }));
+        setStreams(mapped);
+        if (!activeStream || activeStream.id === "live-default") {
+          setActiveStream(mapped[0]);
+        }
+      }
+    } catch {
+      // Keep initial fallback streams
+    }
+  }, [activeStream]);
+
+  // Load chat messages for active stream
+  const loadChat = useCallback(async (streamId: string) => {
+    try {
+      const res = await api.live.getChatMessages(streamId);
+      if (res && Array.isArray(res.messages) && res.messages.length > 0) {
+        setChatMessages(
+          res.messages.map((m: any) => ({
+            user: m.user_name || m.user,
+            text: m.message || m.text,
+            isSuperchat: Boolean(m.is_superchat),
+            superchatAmount: m.superchat_amount,
+            color: m.is_superchat ? "text-amber-400 font-bold" : "text-brand font-bold",
+          })),
+        );
+      }
+    } catch {
+      // Use existing messages
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStreams();
+  }, [loadStreams]);
+
+  useEffect(() => {
+    if (activeStream?.id) {
+      loadChat(activeStream.id);
+    }
+  }, [activeStream?.id, loadChat]);
 
   const filteredStreams =
     selectedCategory === "All Live"
-      ? LIVE_STREAMS
-      : LIVE_STREAMS.filter((s) => s.category === selectedCategory);
+      ? streams
+      : streams.filter((s) => s.category === selectedCategory);
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
     const authorName =
-      profile?.full_name || profile?.username || user?.email?.split("@")[0] || "You";
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        user: authorName,
-        text: chatInput.trim(),
-        color: "text-brand font-bold",
-      },
-    ]);
+      profile?.channel_name ||
+      profile?.full_name ||
+      profile?.name ||
+      profile?.username ||
+      user?.email?.split("@")[0] ||
+      "You";
+
+    const newMsg = {
+      user: authorName,
+      text: chatInput.trim(),
+      color: "text-brand font-bold",
+    };
+
+    setChatMessages((prev) => [...prev, newMsg]);
     setChatInput("");
+
+    try {
+      await api.live.sendChatMessage({
+        streamId: activeStream.id,
+        message: newMsg.text,
+        userName: authorName,
+      });
+    } catch {
+      // Succeeded locally
+    }
+  };
+
+  const handleSendSuperChat = async () => {
+    const authorName =
+      profile?.channel_name ||
+      profile?.full_name ||
+      profile?.name ||
+      user?.email?.split("@")[0] ||
+      "SuperFan";
+
+    const text = superchatMsg.trim() || `Sent a ₹${superchatAmount} SuperChat! 🚀`;
+    const superMsg = {
+      user: authorName,
+      text,
+      isSuperchat: true,
+      superchatAmount,
+      color: "text-amber-400 font-bold",
+    };
+
+    setChatMessages((prev) => [...prev, superMsg]);
+    setSuperchatOpen(false);
+    setSuperchatMsg("");
+    toast.success(`🎉 SuperChat of ₹${superchatAmount} sent to ${activeStream.streamer}!`);
+
+    try {
+      await api.live.sendChatMessage({
+        streamId: activeStream.id,
+        message: text,
+        isSuperchat: true,
+        superchatAmount,
+        userName: authorName,
+      });
+    } catch {
+      // Done locally
+    }
+  };
+
+  const handleCreateStream = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim()) {
+      toast.error("Please enter a stream title.");
+      return;
+    }
+
+    try {
+      const res = await api.live.createStream({
+        title: newTitle.trim(),
+        category: newCategory,
+        description: "Official FaceTube Creator Live Broadcast",
+      });
+
+      if (res && res.stream) {
+        toast.success(`🔴 Broadcast "${newTitle.slice(0, 24)}" is now live!`);
+        setCreateStreamOpen(false);
+        setNewTitle("");
+        await loadStreams();
+      } else {
+        toast.error("Failed to start broadcast.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to start broadcast.");
+    }
   };
 
   return (
@@ -82,14 +254,14 @@ function LivePage() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link
-              to="/upload"
-              search={{ format: "long" }}
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 active:scale-95"
+            <button
+              type="button"
+              onClick={() => setCreateStreamOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 active:scale-95"
             >
               <Radio className="h-3.5 w-3.5" />
-              Go Live
-            </Link>
+              <span>Go Live</span>
+            </button>
             <ThemeToggle showLabelsOnWide={false} />
           </div>
         </div>
@@ -119,112 +291,142 @@ function LivePage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Video Stream Container (2 cols) */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-xl border border-border">
-              <img
-                src={activeStream.thumb}
-                alt={activeStream.title}
-                className="h-full w-full object-cover opacity-80"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
+            <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-lg ring-1 ring-border">
+              {activeStream.thumb ? (
+                <img
+                  src={activeStream.thumb}
+                  alt={activeStream.title}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="grid h-full w-full place-items-center bg-zinc-950 text-muted-foreground">
+                  <Video className="h-16 w-16 opacity-30" />
+                </div>
+              )}
 
-              {/* Pulsing Live Badge and Viewer Count */}
-              <div className="absolute top-4 left-4 flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-lg">
-                  <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+              {/* Live overlay badges */}
+              <div className="absolute top-3 left-3 flex items-center gap-2">
+                <span className="flex items-center gap-1.5 rounded-full bg-red-600/90 px-3 py-1 text-xs font-black uppercase tracking-wider text-white backdrop-blur-sm shadow-md animate-pulse">
+                  <span className="h-2 w-2 rounded-full bg-white" />
                   Live
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white backdrop-blur-md">
-                  <Users className="h-3.5 w-3.5 text-red-400" />
-                  {activeStream.viewers} viewers
+                <span className="flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
+                  <Users className="h-3.5 w-3.5" />
+                  {activeStream.viewers}
                 </span>
               </div>
+            </div>
 
-              {/* Category tag on stream */}
-              <div className="absolute top-4 right-4">
-                <span className="rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur-md">
-                  {activeStream.category}
-                </span>
-              </div>
-
-              {/* Stream bottom overlay */}
-              <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-white">
-                <div className="flex items-center gap-2.5">
-                  <div className="grid h-10 w-10 place-items-center rounded-full bg-brand text-white font-bold text-xs ring-2 ring-white/50">
-                    {activeStream.initials}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-white drop-shadow-md">
-                      {activeStream.streamer}
-                    </h3>
-                    <p className="text-xs text-white/80">{activeStream.startedTime}</p>
-                  </div>
+            {/* Stream Information & Actions */}
+            <div className="rounded-2xl border border-border bg-card p-5 space-y-4 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <h1 className="text-lg sm:text-xl font-black text-foreground leading-snug">
+                    {activeStream.title}
+                  </h1>
+                  <p className="text-xs text-muted-foreground">
+                    {activeStream.category} · {activeStream.startedTime}
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setLiked((l) => !l)}
-                    className={`grid h-9 w-9 place-items-center rounded-full backdrop-blur-md transition active:scale-95 ${
-                      liked ? "bg-red-600 text-white" : "bg-black/60 text-white hover:bg-black/80"
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition border ${
+                      liked
+                        ? "border-red-500 bg-red-500/10 text-red-500"
+                        : "border-border bg-secondary/60 text-muted-foreground hover:text-foreground"
                     }`}
-                    aria-label="Like stream"
                   >
-                    <Heart className={`h-4 w-4 ${liked ? "fill-white" : ""}`} />
+                    <Heart className={`h-3.5 w-3.5 ${liked ? "fill-red-500" : ""}`} />
+                    <span>{liked ? "Liked" : "Like"}</span>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => {
-                      if (navigator.share) {
-                        navigator
-                          .share({ title: activeStream.title, url: window.location.href })
-                          .catch(() => {});
-                      } else {
-                        navigator.clipboard.writeText(window.location.href);
-                      }
+                      navigator.clipboard.writeText(window.location.href);
+                      toast.success("Stream link copied!");
                     }}
-                    className="grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white hover:bg-black/80 backdrop-blur-md transition active:scale-95"
-                    aria-label="Share stream"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/60 px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition"
                   >
-                    <Share2 className="h-4 w-4" />
+                    <Share2 className="h-3.5 w-3.5" />
+                    <span>Share</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSuperchatOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-amber-500 hover:bg-amber-400 text-black px-3.5 py-1.5 text-xs font-bold shadow-sm transition active:scale-95"
+                  >
+                    <Gift className="h-3.5 w-3.5" />
+                    <span>SuperChat</span>
                   </button>
                 </div>
               </div>
-            </div>
 
-            {/* Stream Title & Details */}
-            <div className="p-1">
-              <h1 className="text-lg sm:text-xl font-bold text-foreground">{activeStream.title}</h1>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                {activeStream.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-md bg-secondary px-2 py-0.5 text-xs text-muted-foreground font-medium"
-                  >
-                    #{tag}
-                  </span>
-                ))}
+              {/* Streamer Profile Snippet */}
+              <div className="flex items-center justify-between pt-3 border-t border-border">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-full bg-brand text-white font-bold text-sm shadow-md">
+                    {activeStream.initials}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">{activeStream.streamer}</h3>
+                    <p className="text-xs text-muted-foreground">{activeStream.streamerHandle}</p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => toast.success(`Subscribed to ${activeStream.streamer}!`)}
+                  className="rounded-full bg-foreground text-background px-4 py-1.5 text-xs font-bold hover:opacity-90 transition active:scale-95"
+                >
+                  Subscribe
+                </button>
               </div>
             </div>
           </div>
 
           {/* Live Chat Panel (1 col) */}
-          <div className="flex flex-col h-[480px] rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="flex flex-col h-[520px] rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
             <div className="flex items-center justify-between border-b border-border/70 px-4 py-3 bg-secondary/30">
               <div className="flex items-center gap-2">
-                <Radio className="h-4 w-4 text-red-500" />
+                <Radio className="h-4 w-4 text-red-500 animate-pulse" />
                 <span className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  Live Chat
+                  Live Chat Stream
                 </span>
               </div>
-              <span className="text-[11px] text-muted-foreground">Top Chat</span>
+              <button
+                type="button"
+                onClick={() => setSuperchatOpen(true)}
+                className="text-[11px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-md hover:bg-amber-400/20 transition flex items-center gap-1"
+              >
+                <DollarSign className="h-3 w-3" /> SuperChat
+              </button>
             </div>
 
             {/* Chat message stream */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {chatMessages.map((msg, i) => (
-                <div key={i} className="text-xs leading-relaxed flex items-start gap-2">
-                  <span className={`font-semibold shrink-0 ${msg.color}`}>{msg.user}:</span>
-                  <span className="text-foreground/90 break-words">{msg.text}</span>
+                <div
+                  key={i}
+                  className={`text-xs leading-relaxed p-2 rounded-xl transition ${
+                    msg.isSuperchat
+                      ? "bg-gradient-to-r from-amber-500/20 via-card to-card border border-amber-500/40"
+                      : "hover:bg-secondary/20"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={`font-semibold shrink-0 ${msg.color}`}>{msg.user}</span>
+                    {msg.isSuperchat && (
+                      <span className="rounded-md bg-amber-500 text-black px-1.5 py-0.2 text-[10px] font-black">
+                        ₹{msg.superchatAmount}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-foreground/90 break-words mt-0.5">{msg.text}</p>
                 </div>
               ))}
             </div>
@@ -267,7 +469,7 @@ function LivePage() {
                 key={stream.id}
                 onClick={() => {
                   setActiveStream(stream);
-                  setChatMessages(stream.chatMessages);
+                  setChatMessages(stream.chatMessages || []);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className={`group cursor-pointer rounded-2xl border p-2 transition-all hover:shadow-md ${
@@ -286,7 +488,7 @@ function LivePage() {
                     Live
                   </span>
                   <span className="absolute bottom-2 right-2 rounded-md bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white">
-                    {stream.viewers} viewers
+                    {stream.viewers}
                   </span>
                 </div>
 
@@ -298,10 +500,7 @@ function LivePage() {
                     <h4 className="text-xs font-bold text-foreground line-clamp-2 group-hover:text-brand transition-colors">
                       {stream.title}
                     </h4>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                      {stream.streamer}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground/80">{stream.category}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{stream.streamer}</p>
                   </div>
                 </div>
               </div>
@@ -310,7 +509,157 @@ function LivePage() {
         </section>
       </main>
 
-      {/* Fixed Bottom Navigation with 5 tabs */}
+      {/* SuperChat Modal */}
+      {superchatOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-sm rounded-3xl border border-amber-500/40 bg-card p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <Gift className="h-5 w-5 text-amber-400" />
+                <h3 className="text-base font-bold text-foreground">Send SuperChat</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSuperchatOpen(false)}
+                className="rounded-full p-1 text-muted-foreground hover:bg-secondary"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Highlight your message in live chat and directly support{" "}
+              <strong>{activeStream.streamer}</strong>.
+            </p>
+
+            {/* Quick Amount Selector */}
+            <div className="grid grid-cols-4 gap-2">
+              {[50, 100, 200, 500].map((amt) => (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => setSuperchatAmount(amt)}
+                  className={`rounded-xl py-2 text-xs font-bold transition ${
+                    superchatAmount === amt
+                      ? "bg-amber-500 text-black shadow-md ring-2 ring-amber-400/50"
+                      : "bg-secondary text-foreground hover:bg-secondary/80"
+                  }`}
+                >
+                  ₹{amt}
+                </button>
+              ))}
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">
+                Message (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="Awesome live stream! Keep it up! 🚀"
+                value={superchatMsg}
+                onChange={(e) => setSuperchatMsg(e.target.value)}
+                className="mt-1.5 w-full rounded-xl border border-border bg-secondary/50 px-3 py-2 text-xs text-foreground outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setSuperchatOpen(false)}
+                className="rounded-full px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendSuperChat}
+                className="rounded-full bg-amber-500 px-5 py-2 text-xs font-bold text-black shadow-lift hover:bg-amber-400 transition"
+              >
+                Send ₹{superchatAmount} SuperChat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Go Live Stream Creation Modal */}
+      {createStreamOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl border border-red-500/40 bg-card p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <Radio className="h-5 w-5 text-red-500 animate-pulse" />
+                <h3 className="text-base font-bold text-foreground">Launch Live Broadcast</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCreateStreamOpen(false)}
+                className="rounded-full p-1 text-muted-foreground hover:bg-secondary"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateStream} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-foreground">Broadcast Title *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Building Next-Gen React Apps Live!"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border border-border bg-secondary/50 px-3 py-2 text-xs text-foreground outline-none focus:border-brand"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-foreground">Category</label>
+                <select
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border border-border bg-secondary/50 px-3 py-2 text-xs text-foreground outline-none focus:border-brand"
+                >
+                  {LIVE_CATEGORIES.filter((c) => c !== "All Live").map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="rounded-xl border border-border bg-secondary/20 p-3 text-xs text-muted-foreground space-y-1">
+                <div className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-brand" />
+                  RTMP Stream Key Configured
+                </div>
+                <p className="font-mono text-[11px] text-muted-foreground">
+                  rtmp://live.facetube.app/live/key-ft-{user?.id?.substring(0, 8) || "stream"}
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setCreateStreamOpen(false)}
+                  className="rounded-full px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-full bg-red-600 px-5 py-2 text-xs font-bold text-white shadow-lift hover:bg-red-500 transition"
+                >
+                  Start Live Broadcast
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Bottom Navigation */}
       <BottomNav />
     </div>
   );

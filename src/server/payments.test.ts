@@ -7,6 +7,7 @@ import {
   PRICING_CONFIG,
   evaluateAdsDistribution,
   evaluatePremiumDistribution,
+  calculateWeightedPoolPayouts,
   resolveUplineSponsors,
   ADS_REFERRAL_RATES,
   getPersistentPremiumTxNumber,
@@ -1976,5 +1977,66 @@ describe("Task 35: Free, Paid/Premium Sponsor, and Ads UI Label Validation Tests
     assert.equal(freeLabels.showSponsorLabel, false);
     assert.equal(freeLabels.isFree, true);
     assert.equal(freeLabels.badges.length, 0);
+  });
+
+  it("59. Requirement 9: calculateWeightedPoolPayouts weights video share by actual ad earnings", () => {
+    // 3 creators with different ad earnings: 100, 200, 700 (Total = 1000)
+    // Pool = ₹3.00 (300 paise)
+    // Creator 1: 10% -> 30 paise
+    // Creator 2: 20% -> 60 paise
+    // Creator 3: 70% -> 210 paise
+    const creators = [
+      { userId: "creator_a", adEarnings: 100 },
+      { userId: "creator_b", adEarnings: 200 },
+      { userId: "creator_c", adEarnings: 700 },
+    ];
+
+    const result = calculateWeightedPoolPayouts(300, creators);
+    assert.equal(result.payouts.length, 3);
+    assert.equal(result.payouts[0]?.userId, "creator_a");
+    assert.equal(result.payouts[0]?.amountPaise, 30);
+    assert.equal(result.payouts[0]?.amount, 0.3);
+
+    assert.equal(result.payouts[1]?.userId, "creator_b");
+    assert.equal(result.payouts[1]?.amountPaise, 60);
+    assert.equal(result.payouts[1]?.amount, 0.6);
+
+    assert.equal(result.payouts[2]?.userId, "creator_c");
+    assert.equal(result.payouts[2]?.amountPaise, 210);
+    assert.equal(result.payouts[2]?.amount, 2.1);
+
+    assert.equal(result.distributedPaise, 300);
+    assert.equal(result.residualPaise, 0);
+
+    // Verify evaluatePremiumDistribution uses weighted distribution and balances exactly to ₹6.00
+    const evalResult = evaluatePremiumDistribution(1, "sponsor_ref", 3, creators);
+    assert.equal(evalResult.isSpecial, false);
+    assert.equal(evalResult.directReferralAmount, 1.0);
+    assert.equal(evalResult.globalPoolAmount, 3.0);
+    assert.equal(evalResult.adminAmount, 1.0);
+    assert.equal(evalResult.taxAndFees, 1.0);
+    const sum =
+      evalResult.directReferralAmount +
+      evalResult.globalPoolAmount +
+      evalResult.adminAmount +
+      evalResult.taxAndFees;
+    assert.equal(Math.round(sum * 100) / 100, 6.0);
+    assert.equal(evalResult.weightedPayouts?.length, 3);
+  });
+
+  it("60. Requirement 9: calculateWeightedPoolPayouts gracefully falls back to equal share when no ad earnings exist", () => {
+    const creators = [
+      { userId: "creator_1", adEarnings: 0 },
+      { userId: "creator_2", adEarnings: 0 },
+      { userId: "creator_3", adEarnings: 0 },
+    ];
+
+    const result = calculateWeightedPoolPayouts(300, creators);
+    assert.equal(result.payouts.length, 3);
+    assert.equal(result.payouts[0]?.amountPaise, 100);
+    assert.equal(result.payouts[1]?.amountPaise, 100);
+    assert.equal(result.payouts[2]?.amountPaise, 100);
+    assert.equal(result.distributedPaise, 300);
+    assert.equal(result.residualPaise, 0);
   });
 });

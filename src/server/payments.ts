@@ -202,13 +202,73 @@ export function isSpecialGlobalTransaction(txNumber: number): boolean {
 }
 
 /**
+ * Calculates creator pool payouts weighted by each creator's actual video ad earnings.
+ * If total ad earnings > 0, each creator receives floor(300 * (earnings_i / total_earnings)) paise.
+ * Residual indivisible paise from floor division is safely redirected to Admin ledger (zero leakage).
+ * If total ad earnings == 0, falls back gracefully to equal integer division floor(300 / N).
+ */
+export function calculateWeightedPoolPayouts(
+  poolPaise: number,
+  creators: Array<{ userId: string; adEarnings: number }>,
+): {
+  payouts: Array<{ userId: string; amountPaise: number; amount: number; weight: number }>;
+  distributedPaise: number;
+  residualPaise: number;
+} {
+  if (!creators || creators.length === 0) {
+    return { payouts: [], distributedPaise: 0, residualPaise: poolPaise };
+  }
+
+  const totalAdEarnings = creators.reduce((sum, c) => sum + Math.max(0, c.adEarnings || 0), 0);
+
+  if (totalAdEarnings <= 0) {
+    const perCreatorPaise = Math.floor(poolPaise / creators.length);
+    const distributedPaise = perCreatorPaise * creators.length;
+    const residualPaise = poolPaise - distributedPaise;
+    return {
+      payouts: creators.map((c) => ({
+        userId: c.userId,
+        amountPaise: perCreatorPaise,
+        amount: perCreatorPaise / 100,
+        weight: 1 / creators.length,
+      })),
+      distributedPaise,
+      residualPaise,
+    };
+  }
+
+  let totalAllocated = 0;
+  const payouts = creators.map((c) => {
+    const earnings = Math.max(0, c.adEarnings || 0);
+    const weight = earnings / totalAdEarnings;
+    const amountPaise = Math.floor(weight * poolPaise);
+    totalAllocated += amountPaise;
+    return {
+      userId: c.userId,
+      amountPaise,
+      amount: amountPaise / 100,
+      weight,
+    };
+  });
+
+  const residualPaise = Math.max(0, poolPaise - totalAllocated);
+
+  return {
+    payouts,
+    distributedPaise: totalAllocated,
+    residualPaise,
+  };
+}
+
+/**
  * Pure evaluation helper for test & verification of distributions across any transaction number.
- * Implements Option A for missing referrers and integer paise division for global pool.
+ * Supports both equal division and actual ad-earnings-weighted pool distribution (Requirement 9).
  */
 export function evaluatePremiumDistribution(
   txNumber: number,
   referrerId?: string | null,
   eligibleCreatorsCount = 1,
+  creatorEarnings?: Array<{ userId: string; adEarnings: number }>,
 ): {
   txNumber: number;
   isSpecial: boolean;
@@ -220,6 +280,7 @@ export function evaluatePremiumDistribution(
   totalAmount: number;
   eligibleMembersCount: number;
   perMemberShare: number;
+  weightedPayouts?: Array<{ userId: string; amountPaise: number; amount: number; weight: number }>;
 } {
   const isSpecial = isSpecialGlobalTransaction(txNumber);
   const hasValidReferrer = Boolean(referrerId && referrerId.trim().length > 0);
@@ -229,6 +290,9 @@ export function evaluatePremiumDistribution(
   let adminAmount = 0.0;
   let globalPoolAmount = 0.0;
   let perMemberShare = 0.0;
+  let weightedPayouts:
+    Array<{ userId: string; amountPaise: number; amount: number; weight: number }> | undefined =
+    undefined;
 
   if (isSpecial) {
     // Special: ₹4 Admin + ₹1 (if no referrer redirected to Admin) = ₹4 or ₹5
@@ -241,7 +305,14 @@ export function evaluatePremiumDistribution(
     // Normal: Base Admin = ₹1.00 (+ ₹1.00 unallocated referrer if no referrer)
     const baseAdminPaise = 100 + unallocatedReferrerPaise;
 
-    if (eligibleCreatorsCount <= 0) {
+    if (creatorEarnings && creatorEarnings.length > 0) {
+      const poolPaise = 300;
+      const weighted = calculateWeightedPoolPayouts(poolPaise, creatorEarnings);
+      adminAmount = (baseAdminPaise + weighted.residualPaise) / 100;
+      globalPoolAmount = weighted.distributedPaise / 100;
+      perMemberShare = weighted.payouts.length > 0 ? weighted.payouts[0]?.amount || 0 : 0;
+      weightedPayouts = weighted.payouts;
+    } else if (eligibleCreatorsCount <= 0) {
       // First transaction / no eligible creators: redirect entire ₹3 pool to Admin
       adminAmount = (baseAdminPaise + 300) / 100;
       globalPoolAmount = 0.0;
@@ -258,7 +329,24 @@ export function evaluatePremiumDistribution(
     }
   }
 
-  return {
+  const result: {
+    txNumber: number;
+    isSpecial: boolean;
+    specialTag: "SPECIAL_GLOBAL_RULE" | "NORMAL_PREMIUM";
+    directReferralAmount: number;
+    adminAmount: number;
+    globalPoolAmount: number;
+    taxAndFees: number;
+    totalAmount: number;
+    eligibleMembersCount: number;
+    perMemberShare: number;
+    weightedPayouts?: Array<{
+      userId: string;
+      amountPaise: number;
+      amount: number;
+      weight: number;
+    }>;
+  } = {
     txNumber,
     isSpecial,
     specialTag: isSpecial ? "SPECIAL_GLOBAL_RULE" : "NORMAL_PREMIUM",
@@ -267,9 +355,19 @@ export function evaluatePremiumDistribution(
     globalPoolAmount,
     taxAndFees: PRICING_CONFIG.PREMIUM_VIDEO.TAX_AND_FEES, // ₹1.00
     totalAmount: PRICING_CONFIG.PREMIUM_VIDEO.TOTAL_PRICE, // ₹6.00
-    eligibleMembersCount: isSpecial ? 0 : eligibleCreatorsCount,
+    eligibleMembersCount: isSpecial
+      ? 0
+      : creatorEarnings
+        ? creatorEarnings.length
+        : eligibleCreatorsCount,
     perMemberShare,
   };
+
+  if (weightedPayouts) {
+    result.weightedPayouts = weightedPayouts;
+  }
+
+  return result;
 }
 
 export interface PersistentPremiumTxRecord {

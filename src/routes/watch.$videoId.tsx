@@ -227,12 +227,20 @@ function WatchPage() {
           })()}
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-bold text-white"
-              style={{ backgroundColor: video.tint }}
-            >
-              {video.initials}
-            </span>
+            {(video as any).channelLogoUrl || (video as any).channel_logo_url ? (
+              <img
+                src={(video as any).channelLogoUrl || (video as any).channel_logo_url}
+                alt={video.channel}
+                className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-brand/30 shadow-sm"
+              />
+            ) : (
+              <span
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-bold text-white shadow-sm"
+                style={{ backgroundColor: video.tint || "#ef4444" }}
+              >
+                {video.initials}
+              </span>
+            )}
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{video.channel}</p>
               <p className="truncate text-xs text-muted-foreground">1.2M subscribers</p>

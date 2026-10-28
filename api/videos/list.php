@@ -17,8 +17,10 @@ $search = trim($_GET['search'] ?? ($_GET['q'] ?? ''));
 $limit = max(1, min(100, intval($_GET['limit'] ?? 50)));
 $offset = max(0, intval($_GET['offset'] ?? 0));
 
-$where = [];
-$params = [];
+$includeBlocked = !empty($_GET['include_blocked']) || !empty($_GET['includeBlocked']);
+if (!$includeBlocked) {
+    $where[] = 'COALESCE(is_blocked, 0) = 0';
+}
 
 if (!empty($userId)) {
     $where[] = 'UPPER(user_id) = UPPER(?)';

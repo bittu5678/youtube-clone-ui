@@ -32,6 +32,7 @@ import {
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
 import { DashboardSummaryCards } from "@/components/videohub/DashboardSummaryCards";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api";
 import { calculateUserVideoCounts, type VideoCategoryCounts } from "@/lib/video-service";
 import { getUserWallet, type UserWallet } from "@/lib/ledger-service";
 import { getReferralDashboardData, type ReferralDashboardData } from "@/lib/referral-service";
@@ -98,6 +99,9 @@ function DashboardPage() {
 
   const [wallet, setWallet] = useState<UserWallet | null>(null);
   const [referralData, setReferralData] = useState<ReferralDashboardData | null>(null);
+  const [earningsHistory, setEarningsHistory] = useState<
+    Array<{ day: string; revenue: number; date: string }>
+  >([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const userId = profile?.user_id || dbUser?.user_id || user?.email?.split("@")[0] || "FT483921";
@@ -106,15 +110,25 @@ function DashboardPage() {
     let mounted = true;
     async function loadRealData() {
       try {
-        const [counts, userWallet, refData] = await Promise.all([
+        const [counts, userWallet, refData, historyRes] = await Promise.all([
           calculateUserVideoCounts(userId),
           getUserWallet(userId),
           getReferralDashboardData(userId),
+          api.wallet.getEarningsHistory(userId, 14).catch(() => null),
         ]);
         if (mounted) {
           setVideoCounts(counts);
           setWallet(userWallet);
           setReferralData(refData);
+          if (historyRes && Array.isArray(historyRes.history) && historyRes.history.length > 0) {
+            setEarningsHistory(
+              historyRes.history.map((h) => ({
+                day: h.day,
+                revenue: Number(h.revenue) || 0,
+                date: h.date,
+              })),
+            );
+          }
           setIsLoading(false);
         }
       } catch (err) {
@@ -407,26 +421,26 @@ function DashboardPage() {
             </p>
           </div>
 
-          {/* Chart 3: Estimated Revenue Section */}
+          {/* Chart 3: FaceTube Earnings Growth Graph Section (Req 4 & Req 6) */}
           <div className="rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-card space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                   <DollarSign className="h-3.5 w-3.5 text-emerald-400" />
-                  Estimated Revenue
+                  FaceTube Earnings Growth Graph
                 </span>
                 <div className="text-2xl font-black text-emerald-400 mt-0.5">
                   {wallet ? `₹${wallet.totalEarned.toFixed(2)}` : "₹7,430.50"}
                 </div>
               </div>
               <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                <TrendingUp className="h-3 w-3" /> +26.8%
+                <TrendingUp className="h-3 w-3" /> Real Time
               </span>
             </div>
 
             <div className="h-44 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={REVENUE_CHART_DATA}>
+                <AreaChart data={earningsHistory.length > 0 ? earningsHistory : REVENUE_CHART_DATA}>
                   <defs>
                     <linearGradient id="revGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
@@ -439,7 +453,7 @@ function DashboardPage() {
                     stroke="#71717a"
                     fontSize={11}
                     tickLine={false}
-                    tickFormatter={(v) => `$${v}`}
+                    tickFormatter={(v) => `₹${v}`}
                   />
                   <Tooltip
                     contentStyle={{
@@ -448,6 +462,7 @@ function DashboardPage() {
                       borderRadius: "12px",
                       fontSize: "12px",
                     }}
+                    formatter={(v: any) => [`₹${Number(v).toFixed(2)}`, "Earnings"]}
                   />
                   <Area
                     type="monotone"
@@ -461,7 +476,7 @@ function DashboardPage() {
               </ResponsiveContainer>
             </div>
             <p className="text-[11px] text-muted-foreground text-center">
-              Direct Referral + Global Pool + AdSense split
+              Direct Referral + Global Pool + AdSense revenue history
             </p>
           </div>
         </div>

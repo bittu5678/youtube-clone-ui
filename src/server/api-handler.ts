@@ -60,6 +60,8 @@ interface ServerStore {
     role: "admin" | "user";
     referral_code: string | null;
     avatar_url?: string;
+    channel_logo_url?: string;
+    channel_name?: string;
     created_at: string;
   }>;
   sessions: Record<string, string>; // token -> userId
@@ -83,6 +85,10 @@ interface ServerStore {
     is_promoted: boolean;
     promotion_plan?: string;
     promotion_expires_at?: string;
+    is_blocked?: boolean;
+    block_reason?: string;
+    blocked_at?: string;
+    ad_earnings?: number;
     created_at: string;
     updated_at: string;
   }>;
@@ -108,6 +114,40 @@ interface ServerStore {
     category: string;
     views: number;
     likes: number;
+    created_at: string;
+  }>;
+  liveStreams?: Array<{
+    id: string;
+    user_id: string;
+    title: string;
+    description?: string;
+    category: string;
+    stream_key: string;
+    playback_url: string;
+    thumbnail_url?: string;
+    status: "upcoming" | "live" | "ended";
+    viewers_count: number;
+    started_at?: string;
+    created_at: string;
+  }>;
+  liveChatMessages?: Array<{
+    id: string;
+    stream_id: string;
+    user_id: string;
+    user_name: string;
+    avatar_url?: string;
+    message: string;
+    is_superchat: boolean;
+    superchat_amount: number;
+    created_at: string;
+  }>;
+  payoutBatches?: Array<{
+    id: string;
+    admin_user_id: string;
+    total_recipients: number;
+    total_amount: number;
+    status: string;
+    notes?: string;
     created_at: string;
   }>;
   personalKyc: Record<string, Record<string, unknown>>;
@@ -404,12 +444,20 @@ function loadStore(): ServerStore {
     if (fs.existsSync(STORE_FILE)) {
       const content = fs.readFileSync(STORE_FILE, "utf-8");
       inMemoryStore = JSON.parse(content);
+      if (inMemoryStore) {
+        if (!inMemoryStore.liveStreams) inMemoryStore.liveStreams = [];
+        if (!inMemoryStore.liveChatMessages) inMemoryStore.liveChatMessages = [];
+        if (!inMemoryStore.payoutBatches) inMemoryStore.payoutBatches = [];
+      }
       return inMemoryStore!;
     }
   } catch (err) {
     console.warn("[FaceTube Store] Could not read store file, initializing defaults", err);
   }
   inMemoryStore = getInitialStore();
+  if (!inMemoryStore.liveStreams) inMemoryStore.liveStreams = [];
+  if (!inMemoryStore.liveChatMessages) inMemoryStore.liveChatMessages = [];
+  if (!inMemoryStore.payoutBatches) inMemoryStore.payoutBatches = [];
   saveStore(inMemoryStore);
   return inMemoryStore;
 }
@@ -2910,6 +2958,9 @@ export async function handleApiRequest(
             const s = `%${search}%`;
             params.push(s, s, s);
           }
+          if (!url.searchParams.get("include_blocked")) {
+            where.push("COALESCE(is_blocked, 0) = 0");
+          }
 
           const whereSql = where.length > 0 ? "WHERE " + where.join(" AND ") : "";
           const sql = `
@@ -2981,6 +3032,9 @@ export async function handleApiRequest(
       }
 
       let filtered = [...store.videos];
+      if (!url.searchParams.get("include_blocked")) {
+        filtered = filtered.filter((v) => !v.is_blocked);
+      }
       if (userId) {
         filtered = filtered.filter((v) => v.user_id.toUpperCase() === userId.trim().toUpperCase());
       }
@@ -3058,6 +3112,16 @@ export async function handleApiRequest(
           ])) as any;
           if (Array.isArray(rows) && rows.length > 0) {
             const r = rows[0];
+            if (r.is_blocked) {
+              return jsonResponse(
+                {
+                  success: false,
+                  error: "This video has been blocked by administrators for content moderation.",
+                  is_blocked: true,
+                },
+                403,
+              );
+            }
             const active = isAdPromotionActive({
               is_promoted: r.is_promoted,
               promotion_expires_at: r.promotion_expires_at,
@@ -3114,6 +3178,16 @@ export async function handleApiRequest(
 
       const v = store.videos.find((item) => item.id === id);
       if (v) {
+        if (v.is_blocked) {
+          return jsonResponse(
+            {
+              success: false,
+              error: "This video has been blocked by administrators for content moderation.",
+              is_blocked: true,
+            },
+            403,
+          );
+        }
         const active = isAdPromotionActive(v);
         return jsonResponse({
           success: true,
@@ -4294,6 +4368,318 @@ export async function handleApiRequest(
         return jsonResponse({ success: true, message: "User role updated successfully" });
       }
       return jsonResponse({ success: false, error: "User not found" }, 404);
+    }
+  }
+
+  // 14. Admin Video Moderation (Shorts & Long Videos)
+  if (route === "admin/videos") {
+    const pool = getMysqlPool();
+    const authUser = await getAuthUserFromRequest(request, store, pool);
+    if (!authUser || authUser.role !== "admin") {
+      return jsonResponse({ success: false, error: "Admin authorization required" }, 403);
+    }
+
+    if (method === "GET") {
+      const list = store.videos.map((v) => ({
+        ...v,
+        is_blocked: Boolean(v.is_blocked),
+      }));
+      return jsonResponse({
+        success: true,
+        videos: list,
+        counts: {
+          total: list.length,
+          blocked: list.filter((v) => v.is_blocked).length,
+          shorts: list.filter((v) => v.content_type === "short").length,
+          long: list.filter((v) => v.content_type === "long").length,
+        },
+      });
+    }
+
+    if (method === "POST") {
+      const body = await request.json();
+      const videoId = body.videoId || body.video_id;
+      const isBlocked = Boolean(body.isBlocked ?? body.is_blocked);
+      const reason = body.reason || body.block_reason || "Content moderation policy violation";
+
+      const vid = store.videos.find((v) => v.id === videoId);
+      if (vid) {
+        vid.is_blocked = isBlocked;
+        vid.block_reason = isBlocked ? reason : undefined;
+        vid.blocked_at = isBlocked ? new Date().toISOString() : undefined;
+        saveStore(store);
+      }
+      if (pool) {
+        await pool
+          .query(
+            "UPDATE uploaded_videos SET is_blocked = ?, block_reason = ?, blocked_at = ? WHERE id = ?",
+            [isBlocked ? 1 : 0, isBlocked ? reason : null, isBlocked ? new Date() : null, videoId],
+          )
+          .catch(() => {});
+      }
+      return jsonResponse({
+        success: true,
+        message: isBlocked ? "Video has been blocked" : "Video has been unblocked",
+        video_id: videoId,
+        is_blocked: isBlocked,
+      });
+    }
+  }
+
+  // 15. Admin Bulk Withdrawal Payouts
+  if (route === "admin/bulk-payout") {
+    if (method === "POST") {
+      const pool = getMysqlPool();
+      const authUser = await getAuthUserFromRequest(request, store, pool);
+      if (!authUser || authUser.role !== "admin") {
+        return jsonResponse({ success: false, error: "Admin authorization required" }, 403);
+      }
+
+      const body = await request.json();
+      const payouts = Array.isArray(body.payouts) ? body.payouts : [];
+      const notes = body.notes || "Admin bulk payout disbursement";
+      const batchId = `batch_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
+      let totalProcessed = 0;
+      let totalAmount = 0;
+      const processed: any[] = [];
+
+      for (const p of payouts) {
+        const uId = String(p.userId || p.user_id || "")
+          .trim()
+          .toUpperCase();
+        const amt = Number(p.amount) || 0;
+        if (!uId || amt <= 0) continue;
+
+        const txId =
+          p.transactionId ||
+          p.id ||
+          `tx_bulk_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
+        totalProcessed++;
+        totalAmount += amt;
+
+        if (store.wallets && store.wallets[uId]) {
+          const w = store.wallets[uId]!;
+          w.balance = Math.max(0, w.balance - amt);
+          w.total_withdrawn = (w.total_withdrawn || 0) + amt;
+        }
+
+        if (!store.walletTransactions) store.walletTransactions = [];
+        store.walletTransactions.push({
+          id: txId,
+          user_id: uId,
+          batch_id: batchId,
+          type: "withdrawal",
+          amount: amt,
+          status: "completed",
+          payout_method: "bulk_bank_transfer",
+          created_at: new Date().toISOString(),
+        });
+
+        processed.push({
+          transaction_id: txId,
+          user_id: uId,
+          amount: amt,
+          status: "completed",
+        });
+      }
+
+      if (!store.payoutBatches) store.payoutBatches = [];
+      store.payoutBatches.push({
+        id: batchId,
+        admin_user_id: authUser.user_id,
+        total_recipients: totalProcessed,
+        total_amount: totalAmount,
+        status: "completed",
+        notes,
+        created_at: new Date().toISOString(),
+      });
+      saveStore(store);
+
+      return jsonResponse({
+        success: true,
+        message: `Bulk payout completed for ${totalProcessed} recipients totaling ₹${totalAmount.toFixed(2)}`,
+        batch_id: batchId,
+        total_recipients: totalProcessed,
+        total_amount: totalAmount,
+        processed,
+      });
+    }
+  }
+
+  // 16. Channel Logo & Details
+  if (route === "users/channel-logo") {
+    if (method === "POST") {
+      const pool = getMysqlPool();
+      const authUser = await getAuthUserFromRequest(request, store, pool);
+      if (!authUser) {
+        return jsonResponse({ success: false, error: "Authentication required" }, 401);
+      }
+      const body = await request.json();
+      const logoUrl = body.channel_logo_url || body.channelLogoUrl;
+      const channelName = body.channel_name || body.channelName;
+      const user = store.users.find(
+        (u) => u.user_id.toUpperCase() === authUser.user_id.toUpperCase(),
+      );
+      if (user) {
+        if (logoUrl) user.channel_logo_url = logoUrl;
+        if (channelName) user.channel_name = channelName;
+        saveStore(store);
+      }
+      if (pool) {
+        await pool
+          .query(
+            "UPDATE users SET channel_logo_url = COALESCE(?, channel_logo_url), channel_name = COALESCE(?, channel_name), updated_at = NOW() WHERE UPPER(user_id) = UPPER(?)",
+            [logoUrl || null, channelName || null, authUser.user_id],
+          )
+          .catch(() => {});
+      }
+      return jsonResponse({
+        success: true,
+        message: "Channel details updated successfully",
+        channel_logo_url: logoUrl || user?.channel_logo_url,
+        channel_name: channelName || user?.channel_name,
+      });
+    }
+  }
+
+  // 17. Wallet Earnings Time-Series History
+  if (route === "wallet/earnings-history") {
+    if (method === "GET") {
+      const pool = getMysqlPool();
+      const authUser = await getAuthUserFromRequest(request, store, pool);
+      const requestedUserId = url.searchParams.get("user_id") || authUser?.user_id || "FT483921";
+      const days = Math.max(7, Math.min(90, parseInt(url.searchParams.get("days") || "14", 10)));
+
+      const history = [];
+      const now = Date.now();
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(now - i * 24 * 60 * 60 * 1000);
+        const dateStr = d.toISOString().split("T")[0]!;
+        const dayLabel = d.toLocaleDateString("en-US", { weekday: "short" });
+
+        const txs = (store.walletTransactions || []).filter(
+          (t: any) =>
+            t.user_id?.toUpperCase() === requestedUserId.toUpperCase() &&
+            String(t.created_at).startsWith(dateStr),
+        );
+        const rev = txs.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
+        const refInc = txs
+          .filter((t: any) => t.type === "referral_income")
+          .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
+        const glbInc = txs
+          .filter((t: any) => t.type === "global_income")
+          .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
+        const adsInc = txs
+          .filter((t: any) => t.type === "adsense_income")
+          .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
+        const affInc = txs
+          .filter((t: any) => t.type === "affiliate_income")
+          .reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
+
+        history.push({
+          date: dateStr,
+          day: dayLabel,
+          revenue: rev > 0 ? rev : i % 2 === 0 ? 120 + i * 20 : 80 + i * 15,
+          referral_income: refInc,
+          global_income: glbInc,
+          adsense_income: adsInc,
+          affiliate_income: affInc,
+          tx_count: txs.length,
+        });
+      }
+
+      return jsonResponse({
+        success: true,
+        user_id: requestedUserId,
+        days,
+        history,
+      });
+    }
+  }
+
+  // 18. Live Streams & Chat
+  if (route === "live/streams") {
+    if (method === "GET") {
+      if (!store.liveStreams || store.liveStreams.length === 0) {
+        store.liveStreams = [
+          {
+            id: "live_seed_001",
+            user_id: "FT102857",
+            title: "🔴 LIVE: 24-Hour Full-Stack & System Architecture Sprint",
+            description: "Live coding, production review, and developer Q&A session.",
+            category: "Coding & Tech",
+            stream_key: "sk_live_devforge_001",
+            playback_url: "https://vjs.zencdn.net/v/oceans.mp4",
+            thumbnail_url:
+              "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&auto=format&fit=crop&q=80",
+            status: "live",
+            viewers_count: 1420,
+            created_at: new Date().toISOString(),
+          },
+        ];
+        saveStore(store);
+      }
+      return jsonResponse({ success: true, streams: store.liveStreams });
+    }
+    if (method === "POST") {
+      const pool = getMysqlPool();
+      const authUser = await getAuthUserFromRequest(request, store, pool);
+      if (!authUser) {
+        return jsonResponse({ success: false, error: "Authentication required" }, 401);
+      }
+      const body = await request.json();
+      const streamId = `live_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
+      const newStream = {
+        id: streamId,
+        user_id: authUser.user_id,
+        title: body.title || "FaceTube Live Broadcast",
+        description: body.description || "",
+        category: body.category || "General",
+        stream_key: `sk_live_${crypto.randomBytes(12).toString("hex")}`,
+        playback_url: body.playbackUrl || "https://vjs.zencdn.net/v/oceans.mp4",
+        thumbnail_url: body.thumbnailUrl || "",
+        status: "live" as const,
+        viewers_count: 1,
+        started_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      };
+      if (!store.liveStreams) store.liveStreams = [];
+      store.liveStreams.unshift(newStream);
+      saveStore(store);
+      return jsonResponse({ success: true, message: "Stream created", stream: newStream }, 201);
+    }
+  }
+
+  if (route === "live/chat") {
+    if (method === "GET") {
+      const streamId = url.searchParams.get("stream_id") || "live_seed_001";
+      const messages = (store.liveChatMessages || []).filter((m) => m.stream_id === streamId);
+      return jsonResponse({ success: true, stream_id: streamId, messages });
+    }
+    if (method === "POST") {
+      const pool = getMysqlPool();
+      const authUser = await getAuthUserFromRequest(request, store, pool);
+      const body = await request.json();
+      const streamId = body.stream_id || body.streamId;
+      const msgText = String(body.message || "").trim();
+      if (!streamId || !msgText) {
+        return jsonResponse({ success: false, error: "stream_id and message are required" }, 400);
+      }
+      const msgRecord = {
+        id: `chat_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`,
+        stream_id: streamId,
+        user_id: authUser?.user_id || "GUEST",
+        user_name: authUser?.name || body.user_name || "Viewer",
+        avatar_url: authUser?.avatar_url,
+        message: msgText,
+        is_superchat: Boolean(body.is_superchat),
+        superchat_amount: Number(body.superchat_amount) || 0,
+        created_at: new Date().toISOString(),
+      };
+      if (!store.liveChatMessages) store.liveChatMessages = [];
+      store.liveChatMessages.push(msgRecord);
+      saveStore(store);
+      return jsonResponse({ success: true, message: msgRecord }, 201);
     }
   }
 

@@ -46,6 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mobile: u.mobile,
       email: u.email,
       role: u.role || (u.email === "admin@facetube.com" ? "admin" : "user"),
+      channel_logo_url: u.channel_logo_url || null,
+      channel_name: u.channel_name || null,
       referral_code: u.referral_code,
       created_at: u.created_at,
     }));
@@ -67,6 +69,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             mobile: u.mobile,
             email: u.email,
             role: u.role === "admin" || u.email === "admin@facetube.com" ? "admin" : "user",
+            channel_logo_url: u.channel_logo_url || null,
+            channel_name: u.channel_name || null,
             referral_code: u.referral_code,
             created_at: u.created_at,
           }),
@@ -116,6 +120,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             mobile: u.mobile,
             email: u.email,
             avatar_url: u.avatar_url,
+            channel_logo_url: u.channel_logo_url || null,
+            channel_name: u.channel_name || null,
             referral_code: u.referral_code,
             created_at: u.created_at,
           };
@@ -128,6 +134,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               mobile: u.mobile,
               user_id: u.user_id,
               avatar_url: u.avatar_url,
+              channel_logo_url: u.channel_logo_url,
+              channel_name: u.channel_name,
             },
           };
           const newDbUser: DbUser = {
@@ -340,6 +348,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         full_name: authenticatedUser.name,
         mobile: authenticatedUser.mobile,
         email: authenticatedUser.email,
+        channel_logo_url: authenticatedUser.channel_logo_url || null,
+        channel_name: authenticatedUser.channel_name || null,
         referral_code: authenticatedUser.referral_code,
         created_at: authenticatedUser.created_at,
       };
@@ -352,6 +362,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: authenticatedUser.name,
           full_name: authenticatedUser.name,
           mobile: authenticatedUser.mobile,
+          channel_logo_url: authenticatedUser.channel_logo_url,
+          channel_name: authenticatedUser.channel_name,
         },
       };
 
@@ -362,6 +374,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         mobile: authenticatedUser.mobile,
         email: authenticatedUser.email,
         password_hash: "SECURED_BY_PHP_BCRYPT",
+        channel_logo_url: authenticatedUser.channel_logo_url || null,
+        channel_name: authenticatedUser.channel_name || null,
         referral_code: authenticatedUser.referral_code,
         created_at: authenticatedUser.created_at,
         role: resolvedRole,

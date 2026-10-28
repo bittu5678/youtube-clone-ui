@@ -24,6 +24,15 @@ try {
         jsonResponse(['success' => false, 'error' => 'Video not found.'], 404);
     }
 
+    if (!empty($row['is_blocked'])) {
+        jsonResponse([
+            'success' => false,
+            'error' => 'This video has been blocked by administrators for content moderation.',
+            'is_blocked' => true,
+            'block_reason' => $row['block_reason'] ?? 'Content moderation',
+        ], 403);
+    }
+
     // Increment views counter
     $pdo->prepare('UPDATE uploaded_videos SET views = views + 1 WHERE id = ?')->execute([$id]);
 
