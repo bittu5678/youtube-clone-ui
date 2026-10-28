@@ -2040,3 +2040,225 @@ describe("Task 35: Free, Paid/Premium Sponsor, and Ads UI Label Validation Tests
     assert.equal(result.residualPaise, 0);
   });
 });
+
+describe("Phase 1 Security & Production Safety Tests", () => {
+  const secret = "test_razorpay_secret_key_1234567890";
+  const env = {
+    RAZORPAY_KEY_ID: "rzp_test_1234567890",
+    RAZORPAY_KEY_SECRET: secret,
+    RAZORPAY_SKIP_REMOTE_CHECK: "true",
+  };
+
+  it("1. Admin role endpoint rejects unauthenticated requests with 401", async () => {
+    const req = new Request("http://localhost:3000/api/admin/role", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: "FT483921", role: "admin" }),
+    });
+    const res = await handleApiRequest(req, env);
+    assert.ok(res);
+    assert.equal(res.status, 401);
+    const body = await res.json();
+    assert.equal(body.success, false);
+    assert.match(body.error, /Authentication required/i);
+  });
+
+  it("2. Admin role endpoint rejects non-admin users with 403 Forbidden", async () => {
+    // Log in as Alex Rivera (role: user) to obtain valid token
+    const loginReq = new Request("http://localhost:3000/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: "FT483921", password: "password" }),
+    });
+    const loginRes = await handleApiRequest(loginReq, env);
+    assert.ok(loginRes);
+    assert.equal(loginRes.status, 200);
+    const { token } = await loginRes.json();
+
+    // Attempt to self-promote or update role
+    const req = new Request("http://localhost:3000/api/admin/role", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ userId: "FT483921", role: "admin" }),
+    });
+    const res = await handleApiRequest(req, env);
+    assert.ok(res);
+    assert.equal(res.status, 403);
+    const body = await res.json();
+    assert.equal(body.success, false);
+    assert.match(body.error, /Admin authorization required|Administrator privileges required/i);
+  });
+
+  it("3. Admin role endpoint allows authenticated administrator to update user role", async () => {
+    // Log in as FaceTube Administrator (FT102857)
+    const loginReq = new Request("http://localhost:3000/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: "FT102857", password: "password" }),
+    });
+    const loginRes = await handleApiRequest(loginReq, env);
+    assert.ok(loginRes);
+    assert.equal(loginRes.status, 200);
+    const { token } = await loginRes.json();
+
+    const req = new Request("http://localhost:3000/api/admin/role", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ userId: "FT900431", role: "admin" }),
+    });
+    const res = await handleApiRequest(req, env);
+    assert.ok(res);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    assert.match(body.message, /updated to admin successfully/i);
+  });
+
+  it("4. Withdrawal endpoint rejects unauthenticated requests with 401", async () => {
+    const req = new Request("http://localhost:3000/api/wallet/withdraw", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: 1000 }),
+    });
+    const res = await handleApiRequest(req, env);
+    assert.ok(res);
+    assert.equal(res.status, 401);
+    const body = await res.json();
+    assert.equal(body.success, false);
+    assert.match(body.error, /Authentication required/i);
+  });
+
+  it("5. Withdrawal enforces min withdrawal (₹1,000) and balance sufficiency for authenticated user", async () => {
+    // Log in as Alex Rivera
+    const loginReq = new Request("http://localhost:3000/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: "FT483921", password: "password" }),
+    });
+    const loginRes = await handleApiRequest(loginReq, env);
+    assert.ok(loginRes);
+    const { token } = await loginRes.json();
+
+    // Less than minimum ₹1,000
+    const reqBelowMin = new Request("http://localhost:3000/api/wallet/withdraw", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ amount: 500 }),
+    });
+    const resBelowMin = await handleApiRequest(reqBelowMin, env);
+    assert.ok(resBelowMin);
+    assert.equal(resBelowMin.status, 400);
+    const bodyBelowMin = await resBelowMin.json();
+    assert.match(bodyBelowMin.error, /Minimum withdrawal/i);
+  });
+
+  it("6. Hardcoded password bypass ('admin123' / incorrect password) is strictly rejected", async () => {
+    const bypassReq = new Request("http://localhost:3000/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: "FT483921", password: "admin123" }),
+    });
+    const res = await handleApiRequest(bypassReq, env);
+    assert.ok(res);
+    assert.equal(res.status, 401);
+    const body = await res.json();
+    assert.equal(body.success, false);
+    assert.match(body.error, /Incorrect password/i);
+  });
+
+  it("7. Production mode (NODE_ENV=production) safely fails closed with 503 when MySQL pool is unavailable", async () => {
+    // Obtain valid tokens while still in test mode
+    const userLogin = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "FT483921", password: "password" }),
+      }),
+      env,
+    );
+    const { token: userToken } = await userLogin.json();
+
+    const adminLogin = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "FT102857", password: "password" }),
+      }),
+      env,
+    );
+    const { token: adminToken } = await adminLogin.json();
+
+    const prevEnv = process.env["NODE_ENV"];
+    try {
+      process.env["NODE_ENV"] = "production";
+
+      // 1. Withdrawal fails closed with 503
+      const withdrawReq = new Request("http://localhost:3000/api/wallet/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${userToken}` },
+        body: JSON.stringify({ amount: 1000 }),
+      });
+      const withdrawRes = await handleApiRequest(withdrawReq, env);
+      assert.ok(withdrawRes);
+      assert.equal(withdrawRes.status, 503);
+      const withdrawBody = await withdrawRes.json();
+      assert.equal(withdrawBody.success, false);
+      assert.match(withdrawBody.error, /Database connection unavailable/i);
+
+      // 2. Balance fails closed with 503
+      const balanceReq = new Request("http://localhost:3000/api/wallet/balance?userId=FT483921", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
+      const balanceRes = await handleApiRequest(balanceReq, env);
+      assert.ok(balanceRes);
+      assert.equal(balanceRes.status, 503);
+      const balanceBody = await balanceRes.json();
+      assert.equal(balanceBody.success, false);
+      assert.match(balanceBody.error, /Database connection unavailable/i);
+
+      // 3. Admin role fails closed with 503
+      const adminReq = new Request("http://localhost:3000/api/admin/role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ userId: "FT483921", role: "admin" }),
+      });
+      const adminRes = await handleApiRequest(adminReq, env);
+      assert.ok(adminRes);
+      assert.equal(adminRes.status, 503);
+      const adminBody = await adminRes.json();
+      assert.equal(adminBody.success, false);
+      assert.match(adminBody.error, /Database connection unavailable/i);
+
+      // 4. Payment verify fails closed with 503
+      const payReq = new Request("http://localhost:3000/api/payments/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: "ord_prod_fail",
+          paymentId: "pay_prod_fail",
+          signature: "some_sig",
+          userId: "FT483921",
+        }),
+      });
+      const payRes = await handleApiRequest(payReq, env);
+      assert.ok(payRes);
+      assert.equal(payRes.status, 503);
+      const payBody = await payRes.json();
+      assert.equal(payBody.verified, false);
+      assert.match(payBody.error, /Database connection unavailable/i);
+    } finally {
+      process.env["NODE_ENV"] = prevEnv;
+    }
+  });
+});
+

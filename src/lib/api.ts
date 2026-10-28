@@ -269,6 +269,26 @@ export const api = {
     listUsers: async () => {
       return apiFetch<{ success: boolean; users: any[]; total: number }>("/users/list.php");
     },
+
+    updateChannelLogo: async (data: {
+      userId?: string;
+      channelLogoUrl?: string;
+      channelName?: string;
+    }) => {
+      return apiFetch<{
+        success: boolean;
+        message?: string;
+        channel_logo_url?: string;
+        channel_name?: string;
+      }>("/users/channel-logo.php", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: data.userId,
+          channel_logo_url: data.channelLogoUrl,
+          channel_name: data.channelName,
+        }),
+      });
+    },
   },
 
   // Videos

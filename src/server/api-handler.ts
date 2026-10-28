@@ -59,9 +59,9 @@ interface ServerStore {
     password_hash: string;
     role: "admin" | "user";
     referral_code: string | null;
-    avatar_url?: string;
-    channel_logo_url?: string;
-    channel_name?: string;
+    avatar_url?: string | undefined;
+    channel_logo_url?: string | undefined;
+    channel_name?: string | undefined;
     created_at: string;
   }>;
   sessions: Record<string, string>; // token -> userId
@@ -80,15 +80,15 @@ interface ServerStore {
     views: number;
     likes: number;
     payment_status: "not_required" | "pending" | "paid" | "failed";
-    payment_id?: string;
+    payment_id?: string | undefined;
     payment_amount: number;
     is_promoted: boolean;
-    promotion_plan?: string;
-    promotion_expires_at?: string;
-    is_blocked?: boolean;
-    block_reason?: string;
-    blocked_at?: string;
-    ad_earnings?: number;
+    promotion_plan?: string | undefined;
+    promotion_expires_at?: string | undefined;
+    is_blocked?: boolean | undefined;
+    block_reason?: string | undefined;
+    blocked_at?: string | undefined;
+    ad_earnings?: number | undefined;
     created_at: string;
     updated_at: string;
   }>;
@@ -97,7 +97,7 @@ interface ServerStore {
     video_id: string;
     user_id: string;
     user_name: string;
-    avatar_url?: string;
+    avatar_url?: string | undefined;
     comment: string;
     created_at: string;
   }>;
@@ -109,8 +109,8 @@ interface ServerStore {
     description: string;
     image_url: string;
     thumbnail_url: string;
-    format?: string;
-    file_size?: string;
+    format?: string | undefined;
+    file_size?: string | undefined;
     category: string;
     views: number;
     likes: number;
@@ -120,14 +120,14 @@ interface ServerStore {
     id: string;
     user_id: string;
     title: string;
-    description?: string;
+    description?: string | undefined;
     category: string;
     stream_key: string;
     playback_url: string;
-    thumbnail_url?: string;
+    thumbnail_url?: string | undefined;
     status: "upcoming" | "live" | "ended";
     viewers_count: number;
-    started_at?: string;
+    started_at?: string | undefined;
     created_at: string;
   }>;
   liveChatMessages?: Array<{
@@ -135,7 +135,7 @@ interface ServerStore {
     stream_id: string;
     user_id: string;
     user_name: string;
-    avatar_url?: string;
+    avatar_url?: string | undefined;
     message: string;
     is_superchat: boolean;
     superchat_amount: number;
@@ -147,7 +147,7 @@ interface ServerStore {
     total_recipients: number;
     total_amount: number;
     status: string;
-    notes?: string;
+    notes?: string | undefined;
     created_at: string;
   }>;
   personalKyc: Record<string, Record<string, unknown>>;
@@ -487,9 +487,27 @@ function jsonResponse(data: unknown, status = 200): Response {
 }
 
 function verifyPassword(plain: string, hash: string): boolean {
-  if (plain === "password" || plain === "admin123") return true;
+  if (!plain || !hash) return false;
+  // Support standard bcrypt hashes ($2a$, $2b$, $2y$)
+  if (hash.startsWith("$2")) {
+    try {
+      if (bcrypt.compareSync(plain, hash)) {
+        return true;
+      }
+    } catch {
+      // Ignore bcrypt comparison error
+    }
+  }
+  // Support legacy SHA-256 hashes
   const sha256 = crypto.createHash("sha256").update(plain).digest("hex");
   if (sha256 === hash) return true;
+  // Backward compatibility strictly for initial seed accounts
+  if (
+    hash === "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f" &&
+    (plain === "password" || plain === "password123")
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -1599,7 +1617,20 @@ export async function handleApiRequest(
             conn.release();
           }
         } else {
-          // In-memory/JSON store verification with concurrency protection
+          if (process.env["NODE_ENV"] === "production") {
+            return jsonResponse(
+              {
+                verified: false,
+                paymentId,
+                orderId,
+                error:
+                  "Database connection unavailable. In production, payments must be verified and credited against the persistent database.",
+              },
+              503,
+            );
+          }
+
+          // In-memory/JSON store verification with concurrency protection (non-production preview only)
           let verifiedReferrerId: string | null = null;
           if (uploaderId) {
             const uploaderUser = store.users.find((u) => u.user_id.toUpperCase() === uploaderId);
@@ -2214,7 +2245,11 @@ export async function handleApiRequest(
           } else if (user.password_hash.length === 64) {
             // Legacy SHA256 seed check
             const sha256 = crypto.createHash("sha256").update(password).digest("hex");
-            if (sha256 === user.password_hash || password === "password") {
+            if (
+              sha256 === user.password_hash ||
+              (user.password_hash === "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f" &&
+                (password === "password" || password === "password123"))
+            ) {
               isValid = true;
               const newHash = await bcrypt.hash(password, 10);
               pool
@@ -2222,8 +2257,11 @@ export async function handleApiRequest(
                 .catch(() => {});
             }
           } else {
-            isValid =
-              password === "password" || (await bcrypt.compare(password, user.password_hash));
+            try {
+              isValid = await bcrypt.compare(password, user.password_hash);
+            } catch {
+              isValid = false;
+            }
           }
 
           if (!isValid) {
@@ -2252,7 +2290,18 @@ export async function handleApiRequest(
             message: "Login successful.",
           });
         } else {
-          // In-memory/JSON store authentication fallback
+          if (process.env["NODE_ENV"] === "production") {
+            return jsonResponse(
+              {
+                success: false,
+                error:
+                  "Database connection unavailable. In production, persistent database storage is required.",
+              },
+              503,
+            );
+          }
+
+          // In-memory/JSON store authentication fallback (non-production preview only)
           const user = store.users.find(
             (u) => u.user_id.toUpperCase() === identifier || u.email.toUpperCase() === identifier,
           );
@@ -2273,12 +2322,19 @@ export async function handleApiRequest(
             isValid = await bcrypt.compare(password, user.password_hash);
           } else if (user.password_hash.length === 64) {
             const sha256 = crypto.createHash("sha256").update(password).digest("hex");
-            if (sha256 === user.password_hash || password === "password") {
+            if (
+              sha256 === user.password_hash ||
+              (user.password_hash === "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f" &&
+                (password === "password" || password === "password123"))
+            ) {
               isValid = true;
             }
           } else {
-            isValid =
-              password === "password" || (await bcrypt.compare(password, user.password_hash));
+            try {
+              isValid = await bcrypt.compare(password, user.password_hash);
+            } catch {
+              isValid = false;
+            }
           }
 
           if (!isValid) {
@@ -2412,12 +2468,19 @@ export async function handleApiRequest(
             isCurrentValid = await bcrypt.compare(currentPassword, storedHash);
           } else if (storedHash.length === 64) {
             const sha256 = crypto.createHash("sha256").update(currentPassword).digest("hex");
-            if (sha256 === storedHash || currentPassword === "password") {
+            if (
+              sha256 === storedHash ||
+              (storedHash === "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f" &&
+                (currentPassword === "password" || currentPassword === "password123"))
+            ) {
               isCurrentValid = true;
             }
           } else {
-            isCurrentValid =
-              currentPassword === "password" || (await bcrypt.compare(currentPassword, storedHash));
+            try {
+              isCurrentValid = await bcrypt.compare(currentPassword, storedHash);
+            } catch {
+              isCurrentValid = false;
+            }
           }
 
           if (!isCurrentValid) {
@@ -2456,13 +2519,19 @@ export async function handleApiRequest(
             isCurrentValid = await bcrypt.compare(currentPassword, user.password_hash);
           } else if (user.password_hash.length === 64) {
             const sha256 = crypto.createHash("sha256").update(currentPassword).digest("hex");
-            if (sha256 === user.password_hash || currentPassword === "password") {
+            if (
+              sha256 === user.password_hash ||
+              (user.password_hash === "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f" &&
+                (currentPassword === "password" || currentPassword === "password123"))
+            ) {
               isCurrentValid = true;
             }
           } else {
-            isCurrentValid =
-              currentPassword === "password" ||
-              (await bcrypt.compare(currentPassword, user.password_hash));
+            try {
+              isCurrentValid = await bcrypt.compare(currentPassword, user.password_hash);
+            } catch {
+              isCurrentValid = false;
+            }
           }
 
           if (!isCurrentValid) {
@@ -3821,8 +3890,27 @@ export async function handleApiRequest(
             });
           }
         } catch (_e) {
-          // fallback to store
+          if (process.env["NODE_ENV"] === "production") {
+            return jsonResponse(
+              {
+                success: false,
+                error: "Database error while retrieving wallet balance.",
+              },
+              503,
+            );
+          }
         }
+      }
+
+      if (process.env["NODE_ENV"] === "production") {
+        return jsonResponse(
+          {
+            success: false,
+            error:
+              "Database connection unavailable. In production, wallet balance requires a persistent database connection.",
+          },
+          503,
+        );
       }
 
       const w = store.wallets?.[userId] || {
@@ -3901,8 +3989,27 @@ export async function handleApiRequest(
             });
           }
         } catch (_e) {
-          // fallback to store
+          if (process.env["NODE_ENV"] === "production") {
+            return jsonResponse(
+              {
+                success: false,
+                error: "Database error while retrieving wallet transactions.",
+              },
+              503,
+            );
+          }
         }
+      }
+
+      if (process.env["NODE_ENV"] === "production") {
+        return jsonResponse(
+          {
+            success: false,
+            error:
+              "Database connection unavailable. In production, wallet transactions require a persistent database connection.",
+          },
+          503,
+        );
       }
 
       const filtered =
@@ -4039,7 +4146,18 @@ export async function handleApiRequest(
         }
       }
 
-      // In-memory/JSON store withdrawal
+      if (process.env["NODE_ENV"] === "production") {
+        return jsonResponse(
+          {
+            success: false,
+            error:
+              "Database connection unavailable. In production, withdrawals require a persistent database connection.",
+          },
+          503,
+        );
+      }
+
+      // In-memory/JSON store withdrawal (non-production preview only)
       if (!store.wallets) store.wallets = {};
       const currentWallet = store.wallets[effectiveUserId] || {
         balance: 0,
@@ -4358,14 +4476,79 @@ export async function handleApiRequest(
 
   if (route === "admin/role") {
     if (method === "POST") {
+      const pool = getMysqlPool();
+      const authUser = await getAuthUserFromRequest(request, store, pool);
+      if (!authUser) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Authentication required. Please provide a valid Bearer session token.",
+          },
+          401,
+        );
+      }
+      if (authUser.role !== "admin") {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Admin authorization required to modify user roles.",
+          },
+          403,
+        );
+      }
+
+      if (process.env["NODE_ENV"] === "production" && !pool) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Database connection unavailable. In production, persistent database storage is required.",
+          },
+          503,
+        );
+      }
+
       const body = await request.json();
+      const targetUserId = String(
+        body.targetUserId || body.target_user_id || body.userId || body.user_id || "",
+      ).trim();
+      const newRole = body.role === "admin" ? "admin" : "user";
+
+      if (!targetUserId) {
+        return jsonResponse({ success: false, error: "Target user ID is required." }, 400);
+      }
+
+      if (pool) {
+        try {
+          const [res]: any = await pool.query(
+            "UPDATE users SET role = ?, updated_at = NOW() WHERE UPPER(user_id) = UPPER(?) OR id = ?",
+            [newRole, targetUserId, targetUserId],
+          );
+          if (res && res.affectedRows > 0) {
+            return jsonResponse({
+              success: true,
+              message: `User role updated to ${newRole} successfully.`,
+            });
+          }
+          return jsonResponse({ success: false, error: "User not found" }, 404);
+        } catch (dbErr: any) {
+          if (process.env["NODE_ENV"] === "production") {
+            return jsonResponse({ success: false, error: "Database error during role update: " + dbErr.message }, 503);
+          }
+        }
+      }
+
       const user = store.users.find(
-        (u) => u.user_id.toUpperCase() === String(body.targetUserId || "").toUpperCase(),
+        (u) =>
+          u.user_id.toUpperCase() === targetUserId.toUpperCase() ||
+          u.id.toLowerCase() === targetUserId.toLowerCase(),
       );
       if (user) {
-        user.role = body.role || "user";
+        user.role = newRole;
         saveStore(store);
-        return jsonResponse({ success: true, message: "User role updated successfully" });
+        return jsonResponse({
+          success: true,
+          message: `User role updated to ${newRole} successfully.`,
+        });
       }
       return jsonResponse({ success: false, error: "User not found" }, 404);
     }

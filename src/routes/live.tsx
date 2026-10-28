@@ -104,7 +104,9 @@ export function LivePage() {
         }));
         setStreams(mapped);
         if (!activeStream || activeStream.id === "live-default") {
-          setActiveStream(mapped[0]);
+          if (mapped[0]) {
+            setActiveStream(mapped[0]);
+          }
         }
       }
     } catch {
