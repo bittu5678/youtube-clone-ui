@@ -32,10 +32,19 @@ export function getApiBaseUrl(): string {
   // 2. Production browser: Automatically route to live PHP + MySQL backend on api.facetube.online
   if (typeof window !== "undefined") {
     const host = window.location.hostname.toLowerCase();
+    const isLocalOrPreview =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.endsWith(".local") ||
+      host.includes("run.app") ||
+      host.includes("aistudio");
+
     if (
       host === "facetube.online" ||
       host === "www.facetube.online" ||
-      host === "api.facetube.online"
+      host === "api.facetube.online" ||
+      host.endsWith(".facetube.online") ||
+      (!isLocalOrPreview && (import.meta.env?.PROD || process.env["NODE_ENV"] === "production"))
     ) {
       return PRODUCTION_API_URL;
     }

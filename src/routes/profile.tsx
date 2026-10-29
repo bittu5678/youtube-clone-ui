@@ -186,13 +186,11 @@ function ProfilePage() {
 
   const historyVideos: VideoType[] = recent.slice(0, 4);
 
-  const handleSwitchUser = async (email: string) => {
-    try {
-      await signIn({ identifier: email, password: "password123" });
-      setDemoSwitchOpen(false);
-    } catch {
-      // ignore
-    }
+  const handleSwitchUser = (email: string) => {
+    signOut();
+    setDemoSwitchOpen(false);
+    toast.info(`Please enter your password to sign in as ${email}`);
+    window.location.href = `/auth?identifier=${encodeURIComponent(email)}`;
   };
 
   const handleDeleteVideo = (id: string, title: string) => {

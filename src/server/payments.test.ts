@@ -242,7 +242,7 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
   it("5. Authenticates regular user and generates valid session token", async () => {
     const { status, data } = await makeApiCall("/api/auth/login.php", "POST", {
       identifier: "alex@facetube.com",
-      password: "password",
+      password: "password123",
     });
     assert.equal(status, 200);
     assert.equal(data.success, true);
@@ -255,7 +255,7 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
     // Log in as Alex
     const login = await makeApiCall("/api/auth/login.php", "POST", {
       identifier: "alex@facetube.com",
-      password: "password",
+      password: "password123",
     });
     const token = login.data.token;
 
@@ -274,7 +274,7 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
     // Log in as Alex (role: user)
     const login = await makeApiCall("/api/auth/login.php", "POST", {
       identifier: "alex@facetube.com",
-      password: "password",
+      password: "password123",
     });
     const token = login.data.token;
 
@@ -294,7 +294,7 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
     // Log in as Alex
     const login = await makeApiCall("/api/auth/login.php", "POST", {
       identifier: "alex@facetube.com",
-      password: "password",
+      password: "password123",
     });
     const token = login.data.token;
 
@@ -368,7 +368,7 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
   it("11. Rejects payment verification for mismatched amount or unsupported purpose", async () => {
     const login = await makeApiCall("/api/auth/login.php", "POST", {
       identifier: "alex@facetube.com",
-      password: "password",
+      password: "password123",
     });
     const token = login.data.token;
 
@@ -415,7 +415,7 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
     // Maya Lin attempting to verify Alex's video (vid-seed-001)
     const login = await makeApiCall("/api/auth/login.php", "POST", {
       identifier: "maya@facetube.com",
-      password: "password",
+      password: "password123",
     });
     const token = login.data.token;
 
@@ -760,7 +760,7 @@ describe("Razorpay Real Order Creation & Gateway Verification Tests", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         identifier: "maya@facetube.com",
-        password: "password",
+        password: "password123",
       }),
     });
     const loginRes = await handleApiRequest(loginReq);
@@ -2068,7 +2068,7 @@ describe("Phase 1 Security & Production Safety Tests", () => {
     const loginReq = new Request("http://localhost:3000/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier: "FT483921", password: "password" }),
+      body: JSON.stringify({ identifier: "FT483921", password: "password123" }),
     });
     const loginRes = await handleApiRequest(loginReq, env);
     assert.ok(loginRes);
@@ -2104,20 +2104,34 @@ describe("Phase 1 Security & Production Safety Tests", () => {
     assert.equal(loginRes.status, 200);
     const { token } = await loginRes.json();
 
-    const req = new Request("http://localhost:3000/api/admin/role", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ userId: "FT900431", role: "admin" }),
-    });
-    const res = await handleApiRequest(req, env);
-    assert.ok(res);
-    assert.equal(res.status, 200);
-    const body = await res.json();
-    assert.equal(body.success, true);
-    assert.match(body.message, /updated to admin successfully/i);
+    try {
+      const req = new Request("http://localhost:3000/api/admin/role", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId: "FT900431", role: "admin" }),
+      });
+      const res = await handleApiRequest(req, env);
+      assert.ok(res);
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.success, true);
+      assert.match(body.message, /updated to admin successfully/i);
+    } finally {
+      await handleApiRequest(
+        new Request("http://localhost:3000/api/admin/role", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ userId: "FT900431", role: "user" }),
+        }),
+        env,
+      );
+    }
   });
 
   it("4. Withdrawal endpoint rejects unauthenticated requests with 401", async () => {
@@ -2139,7 +2153,7 @@ describe("Phase 1 Security & Production Safety Tests", () => {
     const loginReq = new Request("http://localhost:3000/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier: "FT483921", password: "password" }),
+      body: JSON.stringify({ identifier: "FT483921", password: "password123" }),
     });
     const loginRes = await handleApiRequest(loginReq, env);
     assert.ok(loginRes);
@@ -2181,10 +2195,11 @@ describe("Phase 1 Security & Production Safety Tests", () => {
       new Request("http://localhost:3000/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier: "FT483921", password: "password" }),
+        body: JSON.stringify({ identifier: "FT483921", password: "password123" }),
       }),
       env,
     );
+    assert.ok(userLogin);
     const { token: userToken } = await userLogin.json();
 
     const adminLogin = await handleApiRequest(
@@ -2195,6 +2210,7 @@ describe("Phase 1 Security & Production Safety Tests", () => {
       }),
       env,
     );
+    assert.ok(adminLogin);
     const { token: adminToken } = await adminLogin.json();
 
     const prevEnv = process.env["NODE_ENV"];
@@ -2261,4 +2277,3 @@ describe("Phase 1 Security & Production Safety Tests", () => {
     }
   });
 });
-

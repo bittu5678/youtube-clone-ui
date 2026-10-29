@@ -50,7 +50,7 @@ try {
     $isValid = password_verify($password, $storedHash);
 
     // Backward-compat check for legacy SHA-256 seed passwords
-    if (!$isValid && strlen($storedHash) === 64 && (hash('sha256', $password) === $storedHash || ($storedHash === 'ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f' && ($password === 'password' || $password === 'password123')))) {
+    if (!$isValid && strlen($storedHash) === 64 && hash('sha256', $password) === $storedHash) {
         $isValid = true;
         // Upgrade to modern bcrypt hash in database
         $newHash = password_hash($password, PASSWORD_BCRYPT);

@@ -501,13 +501,6 @@ function verifyPassword(plain: string, hash: string): boolean {
   // Support legacy SHA-256 hashes
   const sha256 = crypto.createHash("sha256").update(plain).digest("hex");
   if (sha256 === hash) return true;
-  // Backward compatibility strictly for initial seed accounts
-  if (
-    hash === "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f" &&
-    (plain === "password" || plain === "password123")
-  ) {
-    return true;
-  }
   return false;
 }
 
@@ -815,6 +808,7 @@ export async function handleApiRequest(
   if (route === "payments/verify" || route === "payment/verify") {
     if (method === "POST") {
       try {
+        const pool = getMysqlPool();
         const payload = await request.json();
         const orderId = String(payload.orderId || payload.order_id || "").trim();
         const paymentId = String(payload.paymentId || payload.payment_id || "").trim();
@@ -837,6 +831,19 @@ export async function handleApiRequest(
               error: "Invalid payment verification request: orderId and paymentId are required.",
             },
             400,
+          );
+        }
+
+        if (process.env["NODE_ENV"] === "production" && !pool) {
+          return jsonResponse(
+            {
+              verified: false,
+              paymentId,
+              orderId,
+              error:
+                "Database connection unavailable. In production, payments must be verified and credited against the persistent database.",
+            },
+            503,
           );
         }
 
@@ -1033,7 +1040,6 @@ export async function handleApiRequest(
         }
 
         // 2. AUTHORIZATION & OWNERSHIP VERIFICATION
-        const pool = getMysqlPool();
         const authUser = await getAuthUserFromRequest(request, store, pool);
         let uploaderId = requestedUserId;
         if (authUser) {
@@ -2245,11 +2251,7 @@ export async function handleApiRequest(
           } else if (user.password_hash.length === 64) {
             // Legacy SHA256 seed check
             const sha256 = crypto.createHash("sha256").update(password).digest("hex");
-            if (
-              sha256 === user.password_hash ||
-              (user.password_hash === "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f" &&
-                (password === "password" || password === "password123"))
-            ) {
+            if (sha256 === user.password_hash) {
               isValid = true;
               const newHash = await bcrypt.hash(password, 10);
               pool
@@ -2322,11 +2324,7 @@ export async function handleApiRequest(
             isValid = await bcrypt.compare(password, user.password_hash);
           } else if (user.password_hash.length === 64) {
             const sha256 = crypto.createHash("sha256").update(password).digest("hex");
-            if (
-              sha256 === user.password_hash ||
-              (user.password_hash === "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f" &&
-                (password === "password" || password === "password123"))
-            ) {
+            if (sha256 === user.password_hash) {
               isValid = true;
             }
           } else {
@@ -2468,11 +2466,7 @@ export async function handleApiRequest(
             isCurrentValid = await bcrypt.compare(currentPassword, storedHash);
           } else if (storedHash.length === 64) {
             const sha256 = crypto.createHash("sha256").update(currentPassword).digest("hex");
-            if (
-              sha256 === storedHash ||
-              (storedHash === "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f" &&
-                (currentPassword === "password" || currentPassword === "password123"))
-            ) {
+            if (sha256 === storedHash) {
               isCurrentValid = true;
             }
           } else {
@@ -2519,11 +2513,7 @@ export async function handleApiRequest(
             isCurrentValid = await bcrypt.compare(currentPassword, user.password_hash);
           } else if (user.password_hash.length === 64) {
             const sha256 = crypto.createHash("sha256").update(currentPassword).digest("hex");
-            if (
-              sha256 === user.password_hash ||
-              (user.password_hash === "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f" &&
-                (currentPassword === "password" || currentPassword === "password123"))
-            ) {
+            if (sha256 === user.password_hash) {
               isCurrentValid = true;
             }
           } else {
@@ -3355,6 +3345,17 @@ export async function handleApiRequest(
 
       // Persist to MySQL uploaded_videos table if pool is configured
       const pool = getMysqlPool();
+      if (process.env["NODE_ENV"] === "production" && !pool) {
+        return jsonResponse(
+          {
+            success: false,
+            error:
+              "Database connection unavailable. In production, video creation requires a persistent database connection.",
+          },
+          503,
+        );
+      }
+
       if (pool) {
         try {
           await pool.query(
@@ -3395,9 +3396,30 @@ export async function handleApiRequest(
               newVideo.is_promoted ? 1 : 0,
             ],
           );
+          return jsonResponse({ success: true, video: newVideo }, 201);
         } catch (dbErr: any) {
           console.warn("MySQL uploaded_videos insert warning:", dbErr?.message);
+          if (process.env["NODE_ENV"] === "production") {
+            return jsonResponse(
+              {
+                success: false,
+                error: "Database error during video creation: " + dbErr.message,
+              },
+              503,
+            );
+          }
         }
+      }
+
+      if (process.env["NODE_ENV"] === "production") {
+        return jsonResponse(
+          {
+            success: false,
+            error:
+              "Database connection unavailable. In production, persistent database storage is required.",
+          },
+          503,
+        );
       }
 
       store.videos.unshift(newVideo);
@@ -3479,15 +3501,52 @@ export async function handleApiRequest(
       const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
       const pool = getMysqlPool();
+      if (process.env["NODE_ENV"] === "production" && !pool) {
+        return jsonResponse(
+          {
+            success: false,
+            error:
+              "Database connection unavailable. In production, video promotion requires a persistent database connection.",
+          },
+          503,
+        );
+      }
+
       if (pool) {
         try {
           await pool.query(
             "UPDATE uploaded_videos SET is_promoted = 1, promotion_plan = ?, promotion_expires_at = ?, updated_at = NOW() WHERE id = ?",
             [planId, expiresAt, videoId],
           );
-        } catch (dbErr) {
+          return jsonResponse({
+            success: true,
+            message: "Video promoted successfully.",
+            promotionExpiresAt: expiresAt,
+          });
+        } catch (dbErr: any) {
           console.warn("MySQL promote error:", dbErr);
+          if (process.env["NODE_ENV"] === "production") {
+            return jsonResponse(
+              {
+                success: false,
+                error:
+                  "Database error during video promotion: " + (dbErr?.message || String(dbErr)),
+              },
+              503,
+            );
+          }
         }
+      }
+
+      if (process.env["NODE_ENV"] === "production") {
+        return jsonResponse(
+          {
+            success: false,
+            error:
+              "Database connection unavailable. In production, persistent database storage is required.",
+          },
+          503,
+        );
       }
 
       const vid = store.videos.find((v) => v.id === videoId);
@@ -4215,6 +4274,16 @@ export async function handleApiRequest(
 
   // 9. KYC
   if (route === "kyc/personal") {
+    if (process.env["NODE_ENV"] === "production") {
+      return jsonResponse(
+        {
+          success: false,
+          error:
+            "Database connection unavailable. In production, KYC information cannot be stored in ephemeral storage.",
+        },
+        503,
+      );
+    }
     if (method === "GET") {
       const userId = (url.searchParams.get("userId") || "FT102857").toUpperCase();
       const kyc = store.personalKyc[userId] || null;
@@ -4238,6 +4307,16 @@ export async function handleApiRequest(
   }
 
   if (route === "kyc/bank") {
+    if (process.env["NODE_ENV"] === "production") {
+      return jsonResponse(
+        {
+          success: false,
+          error:
+            "Database connection unavailable. In production, KYC information cannot be stored in ephemeral storage.",
+        },
+        503,
+      );
+    }
     if (method === "GET") {
       const userId = (url.searchParams.get("userId") || "FT102857").toUpperCase();
       const kyc = store.bankKyc[userId] || null;
@@ -4501,7 +4580,8 @@ export async function handleApiRequest(
         return jsonResponse(
           {
             success: false,
-            error: "Database connection unavailable. In production, persistent database storage is required.",
+            error:
+              "Database connection unavailable. In production, persistent database storage is required.",
           },
           503,
         );
@@ -4532,7 +4612,10 @@ export async function handleApiRequest(
           return jsonResponse({ success: false, error: "User not found" }, 404);
         } catch (dbErr: any) {
           if (process.env["NODE_ENV"] === "production") {
-            return jsonResponse({ success: false, error: "Database error during role update: " + dbErr.message }, 503);
+            return jsonResponse(
+              { success: false, error: "Database error during role update: " + dbErr.message },
+              503,
+            );
           }
         }
       }

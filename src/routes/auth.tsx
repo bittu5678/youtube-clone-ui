@@ -682,7 +682,6 @@ function AuthPage() {
                       type="button"
                       onClick={() => {
                         setLoginIdentifier("FT102857");
-                        setLoginPassword("password123");
                       }}
                       className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-left hover:border-brand/40"
                     >
@@ -693,7 +692,6 @@ function AuthPage() {
                       type="button"
                       onClick={() => {
                         setLoginIdentifier("FT483921");
-                        setLoginPassword("password123");
                       }}
                       className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-left hover:border-brand/40"
                     >
@@ -716,12 +714,11 @@ function AuthPage() {
                     key={p}
                     type="button"
                     onClick={() => {
-                      setLoginIdentifier(p === "Google" ? "FT102857" : "FT483921");
-                      setLoginPassword("password123");
+                      toast.info(`${p} sign-in is not configured. Please enter your User ID or Email and password.`);
                     }}
                     className="h-11 rounded-xl border border-border text-sm font-semibold text-foreground transition hover:border-brand/40 hover:bg-secondary"
                   >
-                    {p} (Demo)
+                    {p}
                   </button>
                 ))}
               </div>
