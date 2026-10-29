@@ -174,11 +174,44 @@ interface ServerStore {
       updated_at: string;
     }
   >;
+  categories?: Array<{
+    id: string | number;
+    name: string;
+    slug: string;
+    created_by?: string;
+    created_at: string;
+  }>;
+}
+
+function getInitialCategories() {
+  const baseline = [
+    "Cartoon",
+    "Agriculture",
+    "Motivational",
+    "Comedy",
+    "Blog",
+    "Movie",
+    "Entertainment",
+    "Cooking",
+    "Finance",
+    "Share Market",
+    "Business",
+    "Crypto",
+    "Coding",
+  ];
+  return baseline.map((name, idx) => ({
+    id: idx + 1,
+    name,
+    slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+    created_by: "SYSTEM",
+    created_at: "2026-10-01 00:00:00",
+  }));
 }
 
 function getInitialStore(): ServerStore {
   return {
     wallets: {},
+    categories: getInitialCategories(),
     users: [
       {
         id: "a0000000-0000-0000-0000-000000000001",
@@ -448,6 +481,9 @@ function loadStore(): ServerStore {
         if (!inMemoryStore.liveStreams) inMemoryStore.liveStreams = [];
         if (!inMemoryStore.liveChatMessages) inMemoryStore.liveChatMessages = [];
         if (!inMemoryStore.payoutBatches) inMemoryStore.payoutBatches = [];
+        if (!inMemoryStore.categories || inMemoryStore.categories.length === 0) {
+          inMemoryStore.categories = getInitialCategories();
+        }
       }
       return inMemoryStore!;
     }
@@ -458,6 +494,9 @@ function loadStore(): ServerStore {
   if (!inMemoryStore.liveStreams) inMemoryStore.liveStreams = [];
   if (!inMemoryStore.liveChatMessages) inMemoryStore.liveChatMessages = [];
   if (!inMemoryStore.payoutBatches) inMemoryStore.payoutBatches = [];
+  if (!inMemoryStore.categories || inMemoryStore.categories.length === 0) {
+    inMemoryStore.categories = getInitialCategories();
+  }
   saveStore(inMemoryStore);
   return inMemoryStore;
 }
@@ -5215,6 +5254,190 @@ export async function handleApiRequest(
       store.liveChatMessages.push(msgRecord);
       saveStore(store);
       return jsonResponse({ success: true, message: msgRecord }, 201);
+    }
+  }
+
+  // 19. Categories List
+  if (route === "categories/list") {
+    if (method === "GET") {
+      const pool = getMysqlPool();
+      if (pool) {
+        try {
+          const [rows]: any = await pool.query(
+            "SELECT id, name, slug, created_by, created_at FROM categories ORDER BY name ASC",
+          );
+          if (rows && rows.length > 0) {
+            return jsonResponse({
+              success: true,
+              source: "database",
+              categories: rows,
+            });
+          }
+        } catch (_e) {
+          // Fall back gracefully to store baseline
+        }
+      }
+
+      if (!store.categories || store.categories.length === 0) {
+        store.categories = getInitialCategories();
+        saveStore(store);
+      }
+
+      return jsonResponse({
+        success: true,
+        source: "baseline_fallback",
+        categories: store.categories,
+      });
+    }
+  }
+
+  // 20. Admin Category Creation
+  if (route === "admin/categories") {
+    if (method === "POST") {
+      const pool = getMysqlPool();
+      const authUser = await getAuthUserFromRequest(request, store, pool);
+      if (!authUser) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Authentication required. Please provide a valid Bearer session token.",
+          },
+          401,
+        );
+      }
+      if (authUser.role !== "admin") {
+        return jsonResponse(
+          {
+            success: false,
+            error:
+              "Admin authorization required. Only verified administrators can create categories.",
+          },
+          403,
+        );
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const name = String(body.name || body.category || "").trim();
+
+      if (!name) {
+        return jsonResponse({ success: false, error: "Category name is required." }, 400);
+      }
+      if (name.length < 2) {
+        return jsonResponse(
+          { success: false, error: "Category name must be at least 2 characters." },
+          400,
+        );
+      }
+      if (name.length > 100) {
+        return jsonResponse(
+          { success: false, error: "Category name must not exceed 100 characters." },
+          400,
+        );
+      }
+
+      const slug =
+        name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "") || `cat-${Date.now()}`;
+
+      if (pool) {
+        try {
+          const [existing]: any = await pool.query(
+            "SELECT id, name FROM categories WHERE LOWER(TRIM(name)) = LOWER(?) OR LOWER(slug) = LOWER(?) LIMIT 1",
+            [name, slug],
+          );
+          if (existing && existing.length > 0) {
+            return jsonResponse(
+              {
+                success: false,
+                error: `Category "${existing[0].name}" already exists.`,
+              },
+              409,
+            );
+          }
+
+          const [ins]: any = await pool.query(
+            "INSERT INTO categories (name, slug, created_by, created_at) VALUES (?, ?, ?, NOW())",
+            [name, slug, authUser.user_id],
+          );
+          const newCat = {
+            id: ins?.insertId || Date.now(),
+            name,
+            slug,
+            created_by: authUser.user_id,
+            created_at: new Date().toISOString(),
+          };
+
+          if (!store.categories) store.categories = getInitialCategories();
+          store.categories.push(newCat);
+          saveStore(store);
+
+          return jsonResponse(
+            {
+              success: true,
+              message: "Category created successfully.",
+              category: newCat,
+            },
+            201,
+          );
+        } catch (dbErr: any) {
+          const isTableMissing =
+            dbErr?.code === "ER_NO_SUCH_TABLE" ||
+            String(dbErr?.message || "").includes("doesn't exist");
+          if (isTableMissing) {
+            return jsonResponse(
+              {
+                success: false,
+                error:
+                  "Database migration pending: 'categories' table has not been created yet. Please execute the proposed database migration first.",
+              },
+              503,
+            );
+          }
+          if (process.env["NODE_ENV"] === "production") {
+            return jsonResponse({ success: false, error: "Database error: " + dbErr.message }, 500);
+          }
+        }
+      }
+
+      if (!store.categories || store.categories.length === 0) {
+        store.categories = getInitialCategories();
+      }
+
+      const isDuplicate = store.categories.some(
+        (c) =>
+          c.name.trim().toLowerCase() === name.toLowerCase() ||
+          c.slug.toLowerCase() === slug.toLowerCase(),
+      );
+      if (isDuplicate) {
+        return jsonResponse(
+          {
+            success: false,
+            error: `Category "${name}" already exists.`,
+          },
+          409,
+        );
+      }
+
+      const newCat = {
+        id: store.categories.length + 1,
+        name,
+        slug,
+        created_by: authUser.user_id,
+        created_at: new Date().toISOString(),
+      };
+      store.categories.push(newCat);
+      saveStore(store);
+
+      return jsonResponse(
+        {
+          success: true,
+          message: "Category created successfully.",
+          category: newCat,
+        },
+        201,
+      );
     }
   }
 

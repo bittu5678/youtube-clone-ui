@@ -27,6 +27,29 @@ export const VIDEO_CATEGORIES = [
 
 export type VideoCategory = (typeof VIDEO_CATEGORIES)[number];
 
+export interface CategoryRecord {
+  id: string | number;
+  name: string;
+  slug: string;
+  created_by?: string;
+  created_at?: string;
+}
+
+/**
+ * Loads managed categories from the API with graceful fallback to static VIDEO_CATEGORIES.
+ */
+export async function getAvailableCategories(): Promise<string[]> {
+  try {
+    const res = await api.categories.list();
+    if (res?.categories && res.categories.length > 0) {
+      return res.categories.map((c) => c.name);
+    }
+  } catch (_err) {
+    // Fallback to static baseline while migration is pending
+  }
+  return [...VIDEO_CATEGORIES];
+}
+
 export interface UploadedVideo {
   id: string;
   userId: string; // e.g. "FT102857" or UUID

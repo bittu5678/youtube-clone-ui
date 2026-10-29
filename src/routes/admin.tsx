@@ -21,6 +21,9 @@ import {
   CheckSquare,
   Square,
   AlertTriangle,
+  Tag,
+  PlusCircle,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Navbar } from "@/components/videohub/Navbar";
@@ -45,7 +48,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-type AdminTab = "users" | "moderation" | "payouts" | "database";
+type AdminTab = "users" | "moderation" | "categories" | "payouts" | "database";
 
 interface ModerationVideo {
   id: string;
@@ -201,12 +204,94 @@ function AdminPage() {
     }
   }, []);
 
+  // Category Management State (Priority 3)
+  const [categoriesList, setCategoriesList] = useState<
+    Array<{
+      id: string | number;
+      name: string;
+      slug: string;
+      created_by?: string;
+      created_at?: string;
+    }>
+  >([]);
+  const [categoriesSource, setCategoriesSource] = useState<string>("baseline_fallback");
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+
+  const loadCategories = useCallback(async () => {
+    setIsLoadingCategories(true);
+    try {
+      const res = await api.categories.list();
+      if (res && res.categories) {
+        setCategoriesList(res.categories);
+        if (res.source) setCategoriesSource(res.source);
+      }
+    } catch (err) {
+      console.error("Failed to load categories:", err);
+    } finally {
+      setIsLoadingCategories(false);
+    }
+  }, []);
+
+  const handleCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newCategoryName.trim();
+    setCategoryError(null);
+
+    if (!trimmed) {
+      setCategoryError("Please enter a category name.");
+      return;
+    }
+    if (trimmed.length < 2) {
+      setCategoryError("Category name must be at least 2 characters.");
+      return;
+    }
+    if (trimmed.length > 100) {
+      setCategoryError("Category name must not exceed 100 characters.");
+      return;
+    }
+
+    const isDup = categoriesList.some(
+      (c) => c.name.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (isDup) {
+      const msg = `Category "${trimmed}" already exists.`;
+      setCategoryError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    setIsCreatingCategory(true);
+    try {
+      const res = await api.admin.createCategory(trimmed);
+      if (res && res.success) {
+        toast.success(res.message || `Category "${trimmed}" created successfully.`);
+        setNewCategoryName("");
+        await loadCategories();
+      } else {
+        const errMsg = res?.error || "Failed to create category.";
+        setCategoryError(errMsg);
+        toast.error(errMsg);
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || "Failed to create category.";
+      setCategoryError(errMsg);
+      toast.error(errMsg);
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  };
+
   useEffect(() => {
     if (isAdmin) {
       loadModerationVideos();
       loadPendingPayouts();
+      loadCategories();
     }
-  }, [isAdmin, loadModerationVideos, loadPendingPayouts]);
+  }, [isAdmin, loadModerationVideos, loadPendingPayouts, loadCategories]);
 
   if (isLoading) {
     return (
@@ -430,6 +515,7 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                   refreshUsers();
                   loadModerationVideos();
                   loadPendingPayouts();
+                  loadCategories();
                   toast.success("Admin datasets refreshed.");
                 }}
                 className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary/70 px-4 py-2 text-sm font-medium text-foreground transition hover:bg-secondary"
@@ -448,7 +534,7 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
           </div>
 
           {/* Metric Cards */}
-          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <div className="rounded-2xl border border-border bg-secondary/30 p-5 shadow-card">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -489,6 +575,21 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
               <p className="mt-3 text-2xl font-black">{payoutList.length}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Total ₹{payoutList.reduce((s, p) => s + p.amount, 0).toLocaleString("en-IN")}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-secondary/30 p-5 shadow-card">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Categories
+                </p>
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-amber-500/10 text-amber-500">
+                  <Tag className="h-4 w-4" />
+                </span>
+              </div>
+              <p className="mt-3 text-2xl font-black">{categoriesList.length}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {categoriesSource === "database" ? "Database synchronized" : "Baseline active (migration pending)"}
               </p>
             </div>
 
@@ -537,6 +638,19 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                   {videoCounts.blocked}
                 </span>
               )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("categories")}
+              className={`rounded-xl px-4 py-2 text-xs font-bold transition flex items-center gap-2 ${
+                activeTab === "categories"
+                  ? "bg-brand text-brand-foreground shadow-sm"
+                  : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+            >
+              <Tag className="h-4 w-4" />
+              <span>Categories ({categoriesList.length})</span>
             </button>
 
             <button
@@ -1048,6 +1162,202 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                 </table>
               </div>
             </section>
+          )}
+
+          {/* TAB 3: CATEGORY MANAGEMENT (Priority 3) */}
+          {activeTab === "categories" && (
+            <div className="mt-6 space-y-6">
+              {/* Migration Status Notice */}
+              {categoriesSource === "baseline_fallback" ? (
+                <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200">
+                  <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-400 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-amber-300">
+                      Baseline Mode Active (Database Migration Pending)
+                    </p>
+                    <p className="text-amber-200/90 leading-relaxed">
+                      The Hostinger MySQL{" "}
+                      <code className="bg-black/30 px-1.5 py-0.5 rounded text-amber-100 font-mono">
+                        categories
+                      </code>{" "}
+                      table is not yet executed in production. Categories are currently loaded from
+                      the baseline catalog. Once the proposed migration{" "}
+                      <code className="bg-black/30 px-1.5 py-0.5 rounded text-amber-100 font-mono">
+                        database/migrations/20261030_create_categories_table.sql
+                      </code>{" "}
+                      is approved and executed in phpMyAdmin, all categories will be dynamically
+                      managed in MySQL.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 font-medium">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <span>
+                    Synchronized with Hostinger MySQL{" "}
+                    <code className="font-mono">categories</code> table.
+                  </span>
+                </div>
+              )}
+
+              {/* Form & List Grid */}
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                {/* Create Category Card */}
+                <section className="rounded-2xl border border-border bg-card p-6 shadow-card h-fit lg:col-span-1">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand/15 text-brand">
+                      <PlusCircle className="h-4 w-4" />
+                    </span>
+                    <h2 className="text-base font-bold">Create New Category</h2>
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+                    Add a new verified category for creators. Category names are unique and checked
+                    case-insensitively.
+                  </p>
+
+                  <form onSubmit={handleCreateCategory} className="mt-5 space-y-4">
+                    <div>
+                      <div className="flex justify-between items-center text-xs mb-1.5">
+                        <label htmlFor="cat-name-input" className="font-semibold text-foreground">
+                          Category Name
+                        </label>
+                        <span className="text-[11px] text-muted-foreground font-mono">
+                          {newCategoryName.trim().length} / 100
+                        </span>
+                      </div>
+                      <input
+                        id="cat-name-input"
+                        type="text"
+                        value={newCategoryName}
+                        onChange={(e) => {
+                          setNewCategoryName(e.target.value);
+                          if (categoryError) setCategoryError(null);
+                        }}
+                        maxLength={100}
+                        placeholder="e.g. Technology, Gaming, Podcasting"
+                        disabled={isCreatingCategory}
+                        className="w-full rounded-xl border border-border bg-secondary/40 px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:border-brand focus:ring-1 focus:ring-brand disabled:opacity-50"
+                      />
+                    </div>
+
+                    {categoryError && (
+                      <div className="flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+                        <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                        <span>{categoryError}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isCreatingCategory || !newCategoryName.trim()}
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-xs font-bold text-brand-foreground shadow-lift transition hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isCreatingCategory ? (
+                        <>
+                          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-foreground border-t-transparent" />
+                          <span>Creating Category...</span>
+                        </>
+                      ) : (
+                        <>
+                          <PlusCircle className="h-4 w-4" />
+                          <span>Create Category</span>
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </section>
+
+                {/* Existing Categories Directory Card */}
+                <section className="rounded-2xl border border-border bg-card p-6 shadow-card lg:col-span-2">
+                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-base font-bold">Category Catalog</h2>
+                        <span className="rounded-full bg-brand/15 px-2 py-0.5 text-xs font-bold text-brand">
+                          {categoriesList.length} total
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        All categories currently available across FaceTube video feeds and uploads.
+                      </p>
+                    </div>
+
+                    <div className="flex h-9 w-full max-w-xs items-center rounded-xl border border-border bg-secondary/50 px-3 transition focus-within:border-brand">
+                      <Search className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                      <input
+                        type="search"
+                        value={categoryFilter}
+                        onChange={(e) => setCategoryFilter(e.target.value)}
+                        placeholder="Search categories..."
+                        className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {isLoadingCategories ? (
+                    <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+                      <p className="text-xs">Loading categories...</p>
+                    </div>
+                  ) : (
+                    <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {categoriesList
+                        .filter(
+                          (c) =>
+                            c.name.toLowerCase().includes(categoryFilter.toLowerCase()) ||
+                            c.slug.toLowerCase().includes(categoryFilter.toLowerCase()),
+                        )
+                        .map((cat) => (
+                          <div
+                            key={String(cat.id || cat.slug || cat.name)}
+                            className="flex flex-col justify-between rounded-xl border border-border bg-secondary/20 p-3.5 transition hover:border-brand/40"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h3 className="text-sm font-bold text-foreground">{cat.name}</h3>
+                                <p className="text-[11px] font-mono text-muted-foreground">
+                                  #{cat.slug}
+                                </p>
+                              </div>
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                  cat.created_by === "SYSTEM"
+                                    ? "bg-secondary text-muted-foreground"
+                                    : "bg-brand/15 text-brand"
+                                }`}
+                              >
+                                {cat.created_by || "System"}
+                              </span>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-2 text-[10px] text-muted-foreground">
+                              <span>ID: {String(cat.id)}</span>
+                              <span>
+                                {cat.created_at
+                                  ? new Date(cat.created_at).toLocaleDateString("en-IN", {
+                                      month: "short",
+                                      day: "numeric",
+                                    })
+                                  : "Baseline"}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+
+                  {!isLoadingCategories &&
+                    categoriesList.filter(
+                      (c) =>
+                        c.name.toLowerCase().includes(categoryFilter.toLowerCase()) ||
+                        c.slug.toLowerCase().includes(categoryFilter.toLowerCase()),
+                    ).length === 0 && (
+                      <div className="py-12 text-center text-xs text-muted-foreground">
+                        No categories match "{categoryFilter}".
+                      </div>
+                    )}
+                </section>
+              </div>
+            </div>
           )}
 
           {/* TAB 4: DATABASE & SQL INFO */}

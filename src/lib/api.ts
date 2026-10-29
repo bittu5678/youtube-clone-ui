@@ -717,6 +717,41 @@ export const api = {
         body: JSON.stringify(params),
       });
     },
+
+    createCategory: async (name: string) => {
+      return apiFetch<{
+        success: boolean;
+        message: string;
+        category?: {
+          id: string | number;
+          name: string;
+          slug: string;
+          created_by?: string;
+          created_at?: string;
+        };
+        error?: string;
+      }>("/admin/categories.php", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+    },
+  },
+
+  // Categories
+  categories: {
+    list: async () => {
+      return apiFetch<{
+        success: boolean;
+        source?: string;
+        categories: Array<{
+          id: string | number;
+          name: string;
+          slug: string;
+          created_by?: string;
+          created_at?: string;
+        }>;
+      }>("/categories/list.php");
+    },
   },
 
   // Live Streams
