@@ -18,6 +18,7 @@ import {
   Network,
   Video,
   Zap,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
@@ -139,6 +140,16 @@ function ReferralMembersPage() {
             </Link>
           </div>
         </div>
+
+        {data.isStale && (
+          <div className="flex items-center gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-400">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>
+              <strong>Offline Cache:</strong> Showing locally cached referral data. Live team
+              statistics could not be synced from the server.
+            </span>
+          </div>
+        )}
 
         {/* Top Referral Information Card */}
         <div className="rounded-3xl border border-brand/40 bg-gradient-to-br from-brand/10 via-card to-card p-6 shadow-card space-y-6">

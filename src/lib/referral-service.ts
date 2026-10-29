@@ -27,6 +27,7 @@ export interface ReferralDashboardData {
   referralNumber: string;
   referralLink: string;
   members: ReferralMemberSummary[];
+  isStale?: boolean | undefined;
 }
 
 /**
@@ -63,6 +64,7 @@ export async function getReferralDashboardData(
           directCommissionEarned: Number(m.directCommissionEarned) || 0,
           access: m.access || "Granted",
         })),
+        isStale: false,
       };
     }
   } catch (_e) {
@@ -199,6 +201,7 @@ export async function getReferralDashboardData(
     referralNumber,
     referralLink,
     members,
+    isStale: true,
   };
 }
 

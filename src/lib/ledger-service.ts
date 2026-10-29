@@ -24,6 +24,7 @@ export interface LedgerTransaction {
   specialTag?: "SPECIAL_GLOBAL_RULE" | "SPECIAL_TRANSACTION" | undefined;
   description: string;
   createdAt: string;
+  isStale?: boolean | undefined;
 }
 
 export interface UserWallet {
@@ -36,6 +37,7 @@ export interface UserWallet {
   adsenseIncome: number;
   affiliateIncome: number;
   updatedAt: string;
+  isStale?: boolean | undefined;
 }
 
 const LOCAL_STORAGE_LEDGER_KEY = "facetube_income_ledger_v3";
@@ -104,7 +106,7 @@ export async function getUserWallet(userId: string): Promise<UserWallet> {
     const res = await api.wallet.getBalance(norm);
     if (res && res.wallet) {
       const data = res.wallet;
-      return {
+      const wallet: UserWallet = {
         userId: data.user_id || data.userId || norm,
         balance: Number(data.balance) || 0,
         totalEarned: Number(data.total_earned || data.totalEarned) || 0,
@@ -114,19 +116,28 @@ export async function getUserWallet(userId: string): Promise<UserWallet> {
         adsenseIncome: Number(data.adsense_income || data.adsenseIncome) || 0,
         affiliateIncome: Number(data.affiliate_income || data.affiliateIncome) || 0,
         updatedAt: data.updated_at || data.updatedAt || new Date().toISOString(),
+        isStale: false,
       };
+      // Keep local cache synced with authoritative server wallet
+      const wallets = getStoredWallets();
+      wallets[norm] = wallet;
+      saveStoredWallets(wallets);
+      return wallet;
     }
-  } catch (_e) {
-    // fallback to local cache
+  } catch (err) {
+    console.warn("getUserWallet: failed to fetch live wallet from server:", err);
   }
 
   const wallets = getStoredWallets();
   if (wallets[norm]) {
-    return wallets[norm];
+    return {
+      ...wallets[norm]!,
+      isStale: true,
+    };
   }
 
-  // Create default wallet
-  const newWallet: UserWallet = {
+  // Create default unconfirmed wallet without overwriting stored storage
+  const unconfirmedWallet: UserWallet = {
     userId: norm,
     balance: 0,
     totalEarned: 0,
@@ -136,10 +147,9 @@ export async function getUserWallet(userId: string): Promise<UserWallet> {
     adsenseIncome: 0,
     affiliateIncome: 0,
     updatedAt: new Date().toISOString(),
+    isStale: true,
   };
-  wallets[norm] = newWallet;
-  saveStoredWallets(wallets);
-  return newWallet;
+  return unconfirmedWallet;
 }
 
 /**
@@ -149,8 +159,8 @@ export async function getUserLedger(userId?: string): Promise<LedgerTransaction[
   try {
     const res = await api.wallet.getTransactions(userId);
     if (res && res.transactions && res.transactions.length > 0) {
-      return res.transactions.map((d: any) => ({
-        id: d.id,
+      const mapped: LedgerTransaction[] = res.transactions.map((d: any) => ({
+        id: String(d.id),
         transactionId: d.transaction_id || d.transactionId,
         userId: d.user_id || d.userId,
         sourceUserId: d.source_user_id || d.sourceUserId || undefined,
@@ -162,18 +172,24 @@ export async function getUserLedger(userId?: string): Promise<LedgerTransaction[
         specialTag: d.special_tag || d.specialTag || undefined,
         description: d.description || "",
         createdAt: d.created_at || d.createdAt,
+        isStale: false,
       }));
+      if (mapped.length > 0 && !userId) {
+        saveStoredLedger(mapped);
+      }
+      return mapped;
     }
-  } catch (_e) {
-    // fallback to local cache
+  } catch (err) {
+    console.warn("getUserLedger: failed to fetch live transactions from server:", err);
   }
 
   const all = getStoredLedger();
+  const markedStale = all.map((tx) => ({ ...tx, isStale: true }));
   if (userId) {
     const norm = userId.trim().toUpperCase();
-    return all.filter((tx) => tx.userId.trim().toUpperCase() === norm);
+    return markedStale.filter((tx) => tx.userId.trim().toUpperCase() === norm);
   }
-  return all;
+  return markedStale;
 }
 
 /**
@@ -647,22 +663,98 @@ export async function processWithdrawal(
     };
   }
 
-  const ledger = getStoredLedger();
-  const wallets = getStoredWallets();
-  let wallet = wallets[norm] || (await getUserWallet(norm));
+  // 1. Prepare bank payload
+  let withdrawBankPayload:
+    | {
+        accountHolder?: string;
+        accountNumber?: string;
+        ifscCode?: string;
+        upiId?: string;
+        bankName?: string;
+      }
+    | undefined = undefined;
 
-  const txId = `TX_WD_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  if (bankDetails) {
+    const payload: {
+      accountHolder?: string;
+      accountNumber?: string;
+      ifscCode?: string;
+      upiId?: string;
+      bankName?: string;
+    } = {};
+    if (bankDetails.accountHolder !== undefined && bankDetails.accountHolder !== "") {
+      payload.accountHolder = bankDetails.accountHolder;
+    }
+    if (bankDetails.accountNumber !== undefined && bankDetails.accountNumber !== "") {
+      payload.accountNumber = bankDetails.accountNumber;
+    }
+    if (bankDetails.ifscCode !== undefined && bankDetails.ifscCode !== "") {
+      payload.ifscCode = bankDetails.ifscCode;
+    }
+    if (bankDetails.upiId !== undefined && bankDetails.upiId !== "") {
+      payload.upiId = bankDetails.upiId;
+    }
+    if (bankDetails.bankName !== undefined && bankDetails.bankName !== "") {
+      payload.bankName = bankDetails.bankName;
+    }
+    if (Object.keys(payload).length > 0) {
+      withdrawBankPayload = payload;
+    }
+  }
+
+  // 2. Authoritative Server Call: Submit withdrawal to the Hostinger / MySQL backend
+  let res: {
+    success: boolean;
+    error?: string;
+    message?: string;
+    transaction?: any;
+    updatedWallet?: any;
+  };
+
+  try {
+    res = await api.wallet.withdraw({
+      userId: norm,
+      amount,
+      ...(withdrawBankPayload !== undefined ? { bankDetails: withdrawBankPayload } : {}),
+    });
+  } catch (err: unknown) {
+    const errorMsg =
+      err instanceof Error ? err.message : "Server connection failed or response was invalid.";
+    console.error("[Withdrawal Service Error] API withdrawal failed:", err);
+    return {
+      success: false,
+      error: `Withdrawal could not be verified by server: ${errorMsg}. No funds were deducted. Please verify your connection before trying again.`,
+    };
+  }
+
+  // 3. Strict verification: Never treat unconfirmed or failed responses as successful
+  if (!res || !res.success) {
+    const errorMsg =
+      res?.error ||
+      res?.message ||
+      "Withdrawal was declined by server. No funds were deducted from your wallet.";
+    return {
+      success: false,
+      error: errorMsg,
+    };
+  }
+
+  // 4. Server confirmed: apply confirmed deductions and ledger record
+  const breakdown = calculateWithdrawalBreakdown(amount);
   const destinationDesc = bankDetails?.upiId
     ? `UPI: ${bankDetails.upiId}`
     : bankDetails?.accountNumber
       ? `Bank: ${bankDetails.bankName || "Account"} (****${bankDetails.accountNumber.slice(-4)})`
       : "Direct Bank Settlement";
 
-  const breakdown = calculateWithdrawalBreakdown(amount);
+  const confirmedTxId =
+    res.transaction?.transaction_id ||
+    res.transaction?.id ||
+    `TX_WD_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
   const tx: LedgerTransaction = {
     id: `wd-tx-${Date.now()}`,
-    transactionId: txId,
+    transactionId: confirmedTxId,
     userId: norm,
     incomeType: "withdrawal",
     amount: -amount,
@@ -671,93 +763,55 @@ export async function processWithdrawal(
     status: "settled",
     description: `Withdrawal payout to ${destinationDesc} - Requested: ₹${amount.toLocaleString("en-IN")}, Admin/GST Charges: ₹${breakdown.totalCharge}, Net Payable: ₹${breakdown.netPayable.toLocaleString("en-IN")}`,
     createdAt: new Date().toISOString(),
+    isStale: false,
   };
 
+  const ledger = getStoredLedger();
   ledger.unshift(tx);
-  wallet.balance = Math.max(0, wallet.balance - amount);
-  wallet.totalWithdrawn += amount;
-  wallet.updatedAt = new Date().toISOString();
-  wallets[norm] = wallet;
-
   saveStoredLedger(ledger);
-  saveStoredWallets(wallets);
 
-  // Record in PHP MySQL API if backend is connected
-  try {
-    let withdrawBankPayload:
-      | {
-          accountHolder?: string;
-          accountNumber?: string;
-          ifscCode?: string;
-          upiId?: string;
-          bankName?: string;
-        }
-      | undefined = undefined;
+  const wallets = getStoredWallets();
+  const currentWallet = wallets[norm] || (await getUserWallet(norm));
 
-    if (bankDetails) {
-      const payload: {
-        accountHolder?: string;
-        accountNumber?: string;
-        ifscCode?: string;
-        upiId?: string;
-        bankName?: string;
-      } = {};
-      if (bankDetails.accountHolder !== undefined && bankDetails.accountHolder !== "") {
-        payload.accountHolder = bankDetails.accountHolder;
-      }
-      if (bankDetails.accountNumber !== undefined && bankDetails.accountNumber !== "") {
-        payload.accountNumber = bankDetails.accountNumber;
-      }
-      if (bankDetails.ifscCode !== undefined && bankDetails.ifscCode !== "") {
-        payload.ifscCode = bankDetails.ifscCode;
-      }
-      if (bankDetails.upiId !== undefined && bankDetails.upiId !== "") {
-        payload.upiId = bankDetails.upiId;
-      }
-      if (bankDetails.bankName !== undefined && bankDetails.bankName !== "") {
-        payload.bankName = bankDetails.bankName;
-      }
-      if (Object.keys(payload).length > 0) {
-        withdrawBankPayload = payload;
-      }
-    }
-
-    const res = await api.wallet.withdraw({
+  let updatedWallet: UserWallet;
+  if (res.updatedWallet) {
+    updatedWallet = {
       userId: norm,
-      amount,
-      ...(withdrawBankPayload !== undefined ? { bankDetails: withdrawBankPayload } : {}),
-    });
-    if (res && res.updatedWallet) {
-      wallet = {
-        userId: norm,
-        balance: Number(res.updatedWallet.balance) || 0,
-        totalEarned:
-          Number(res.updatedWallet.total_earned || res.updatedWallet.totalEarned) ||
-          wallet.totalEarned,
-        totalWithdrawn:
-          Number(res.updatedWallet.total_withdrawn || res.updatedWallet.totalWithdrawn) ||
-          wallet.totalWithdrawn,
-        referralIncome:
-          Number(res.updatedWallet.referral_income || res.updatedWallet.referralIncome) ||
-          wallet.referralIncome,
-        globalIncome:
-          Number(res.updatedWallet.global_income || res.updatedWallet.globalIncome) ||
-          wallet.globalIncome,
-        adsenseIncome:
-          Number(res.updatedWallet.adsense_income || res.updatedWallet.adsenseIncome) ||
-          wallet.adsenseIncome,
-        affiliateIncome:
-          Number(res.updatedWallet.affiliate_income || res.updatedWallet.affiliateIncome) ||
-          wallet.affiliateIncome,
-        updatedAt:
-          res.updatedWallet.updated_at || res.updatedWallet.updatedAt || new Date().toISOString(),
-      };
-      wallets[norm] = wallet;
-      saveStoredWallets(wallets);
-    }
-  } catch (e) {
-    console.warn("API withdraw note:", e);
+      balance: Number(res.updatedWallet.balance) || 0,
+      totalEarned:
+        Number(res.updatedWallet.total_earned || res.updatedWallet.totalEarned) ||
+        currentWallet.totalEarned,
+      totalWithdrawn:
+        Number(res.updatedWallet.total_withdrawn || res.updatedWallet.totalWithdrawn) ||
+        currentWallet.totalWithdrawn + amount,
+      referralIncome:
+        Number(res.updatedWallet.referral_income || res.updatedWallet.referralIncome) ||
+        currentWallet.referralIncome,
+      globalIncome:
+        Number(res.updatedWallet.global_income || res.updatedWallet.globalIncome) ||
+        currentWallet.globalIncome,
+      adsenseIncome:
+        Number(res.updatedWallet.adsense_income || res.updatedWallet.adsenseIncome) ||
+        currentWallet.adsenseIncome,
+      affiliateIncome:
+        Number(res.updatedWallet.affiliate_income || res.updatedWallet.affiliateIncome) ||
+        currentWallet.affiliateIncome,
+      updatedAt:
+        res.updatedWallet.updated_at || res.updatedWallet.updatedAt || new Date().toISOString(),
+      isStale: false,
+    };
+  } else {
+    updatedWallet = {
+      ...currentWallet,
+      balance: Math.max(0, currentWallet.balance - amount),
+      totalWithdrawn: currentWallet.totalWithdrawn + amount,
+      updatedAt: new Date().toISOString(),
+      isStale: false,
+    };
   }
 
-  return { success: true, transaction: tx, updatedWallet: wallet };
+  wallets[norm] = updatedWallet;
+  saveStoredWallets(wallets);
+
+  return { success: true, transaction: tx, updatedWallet };
 }

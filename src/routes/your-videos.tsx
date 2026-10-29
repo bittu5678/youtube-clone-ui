@@ -20,6 +20,7 @@ import {
   Calendar,
   CreditCard,
   Megaphone,
+  AlertCircle,
 } from "lucide-react";
 import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
 import { useAuth } from "@/lib/auth-context";
@@ -113,6 +114,16 @@ function YourVideosPage() {
             </Link>
           </div>
         </div>
+
+        {videos.some((v) => v.isStale) && (
+          <div className="flex items-center gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-400">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>
+              <strong>Offline Cache:</strong> Showing locally cached video records. Live video list
+              could not be synced from the server.
+            </span>
+          </div>
+        )}
 
         {/* ------------------------------------------------------------------ */}
         {/* REQUIREMENT 5 & 11: DEDICATED 4-TYPE VIDEO SUMMARY PILLS           */}

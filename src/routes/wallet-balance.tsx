@@ -232,9 +232,17 @@ function WalletBalancePage() {
         <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-card to-card p-6 sm:p-8 shadow-card">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             <div className="space-y-3">
-              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                Total Available Balance
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                  Total Available Balance
+                </span>
+                {wallet?.isStale && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-400">
+                    <AlertCircle className="h-3 w-3" />
+                    Cached / Offline Data
+                  </span>
+                )}
+              </div>
               <div className="text-4xl sm:text-5xl font-black text-foreground tracking-tight">
                 ₹
                 {balance.toLocaleString("en-IN", {

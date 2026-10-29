@@ -77,6 +77,7 @@ export interface UploadedVideo {
   visibility?: "public" | "unlisted" | "private";
   createdAt: string;
   updatedAt: string;
+  isStale?: boolean | undefined;
 }
 
 export interface VideoCategoryCounts {
@@ -399,6 +400,7 @@ export async function fetchUploadedVideos(
           promotionExpiresAt: d.promotion_expires_at || d.promotionExpiresAt,
           createdAt: d.created_at || d.createdAt || new Date().toISOString(),
           updatedAt: d.updated_at || d.updatedAt || d.created_at || new Date().toISOString(),
+          isStale: false,
         };
       });
 
@@ -419,8 +421,8 @@ export async function fetchUploadedVideos(
     console.warn("fetchUploadedVideos API warning, reading local cache:", err);
   }
 
-  // Fallback to local stored videos cache
-  let all = getStoredVideos();
+  // Fallback to local stored videos cache, explicitly tagged as stale/offline
+  let all = getStoredVideos().map((v) => ({ ...v, isStale: true }));
   if (opts.userId) {
     const norm = opts.userId.trim().toUpperCase();
     all = all.filter((v) => v.userId.trim().toUpperCase() === norm);

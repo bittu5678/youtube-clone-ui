@@ -177,9 +177,15 @@ function DashboardPage() {
                 <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
                   Dashboard
                 </h1>
-                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400">
-                  Real Database Live
-                </span>
+                {wallet?.isStale || referralData?.isStale ? (
+                  <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold text-amber-400">
+                    Offline Cache
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                    Real Database Live
+                  </span>
+                )}
               </div>
               <p className="text-sm text-muted-foreground">
                 All 16 performance metrics, dynamic video classifications, and income streams for{" "}

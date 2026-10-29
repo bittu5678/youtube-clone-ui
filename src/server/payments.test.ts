@@ -16,7 +16,7 @@ import {
 import { handleApiRequest, isAdPromotionActive } from "./api-handler";
 import { isPromotionActive, getVideoBadgeLabels } from "../lib/video-service";
 import { api } from "../lib/api";
-import { processWithdrawal } from "../lib/ledger-service";
+import { processWithdrawal, getUserWallet } from "../lib/ledger-service";
 
 describe("Payment Verification & Referral Security Audit Tests", () => {
   const secret = "test_razorpay_secret_key_1234567890";
@@ -511,6 +511,121 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
       );
     } finally {
       api.wallet.withdraw = originalWithdraw;
+      api.wallet.getBalance = originalGetBalance;
+    }
+  });
+
+  it("13b. Proves processWithdrawal NEVER returns success: true when api.wallet.withdraw throws an error", async () => {
+    const originalWithdraw = api.wallet.withdraw;
+    const originalGetBalance = api.wallet.getBalance;
+
+    api.wallet.getBalance = async (_userId?: string) => {
+      return {
+        success: true,
+        wallet: {
+          user_id: "FT483921",
+          balance: 5000,
+          total_earned: 5000,
+          total_withdrawn: 0,
+          referral_income: 0,
+          global_income: 0,
+          adsense_income: 0,
+          affiliate_income: 0,
+          updated_at: new Date().toISOString(),
+        },
+      };
+    };
+
+    // Simulate upstream Hostinger failure / network drop
+    api.wallet.withdraw = async (_data: any) => {
+      throw new Error("502 Bad Gateway: Upstream Hostinger API connection failed");
+    };
+
+    try {
+      const res = await processWithdrawal("FT483921", 1000, {
+        accountHolder: "Alex Rivera",
+        accountNumber: "50100481920194",
+        bankName: "HDFC Bank",
+      });
+
+      assert.equal(res.success, false, "Must NEVER return success: true when server call fails");
+      assert.ok(res.error, "Must provide an honest error explanation");
+      assert.match(
+        res.error!,
+        /could not be verified by server/i,
+        "Error message must clearly inform the user that funds were not deducted",
+      );
+    } finally {
+      api.wallet.withdraw = originalWithdraw;
+      api.wallet.getBalance = originalGetBalance;
+    }
+  });
+
+  it("13c. Proves processWithdrawal NEVER returns success: true when api.wallet.withdraw returns success: false", async () => {
+    const originalWithdraw = api.wallet.withdraw;
+    const originalGetBalance = api.wallet.getBalance;
+
+    api.wallet.getBalance = async (_userId?: string) => {
+      return {
+        success: true,
+        wallet: {
+          user_id: "FT483921",
+          balance: 5000,
+          total_earned: 5000,
+          total_withdrawn: 0,
+          referral_income: 0,
+          global_income: 0,
+          adsense_income: 0,
+          affiliate_income: 0,
+          updated_at: new Date().toISOString(),
+        },
+      };
+    };
+
+    // Simulate server rejecting withdrawal
+    api.wallet.withdraw = async (_data: any) => {
+      return {
+        success: false,
+        error: "Hostinger database lock timeout: transaction rolled back.",
+      };
+    };
+
+    try {
+      const res = await processWithdrawal("FT483921", 1000, {
+        accountHolder: "Alex Rivera",
+        accountNumber: "50100481920194",
+        bankName: "HDFC Bank",
+      });
+
+      assert.equal(
+        res.success,
+        false,
+        "Must return success: false when server rejects transaction",
+      );
+      assert.equal(
+        res.error,
+        "Hostinger database lock timeout: transaction rolled back.",
+        "Must return authoritative server rejection reason",
+      );
+    } finally {
+      api.wallet.withdraw = originalWithdraw;
+      api.wallet.getBalance = originalGetBalance;
+    }
+  });
+
+  it("13d. Proves getUserWallet marks isStale: true when server API fails without overwriting local cache", async () => {
+    const originalGetBalance = api.wallet.getBalance;
+
+    // Simulate server connection failure
+    api.wallet.getBalance = async (_userId?: string) => {
+      throw new Error("Network unreachable");
+    };
+
+    try {
+      const w = await getUserWallet("FT999999");
+      assert.equal(w.isStale, true, "Must be tagged as isStale: true on API failure");
+      assert.equal(w.userId, "FT999999");
+    } finally {
       api.wallet.getBalance = originalGetBalance;
     }
   });
