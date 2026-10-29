@@ -263,7 +263,15 @@ export function UploadOptionsModal({ isOpen, onClose }: UploadOptionsModalProps)
 
         {/* Direct Studio Link Footer */}
         <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Looking for full overview?</span>
+          <Link
+            to="/upload"
+            search={{ mode: "bulk" }}
+            onClick={onClose}
+            className="inline-flex items-center gap-1 text-xs font-bold text-sky-400 hover:text-sky-300 transition"
+          >
+            <span>Bulk Video Upload</span>
+            <ArrowRight className="h-3 w-3" />
+          </Link>
           <Link
             to="/upload"
             onClick={onClose}

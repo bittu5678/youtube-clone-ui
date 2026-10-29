@@ -342,19 +342,19 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
     assert.equal(refRes.data.dashboard.userId, "FT483921");
   });
 
-  it("10. Enforces withdrawal limit boundaries (min ₹1,000 and max ₹10,000)", async () => {
+  it("10. Enforces withdrawal limit boundaries (min ₹100 and max ₹10,000) with Point 7 charge breakdown", async () => {
     const login = await makeApiCall("/api/auth/login.php", "POST", {
       identifier: "admin@facetube.com",
       password: "password",
     });
     const token = login.data.token;
 
-    // Below minimum
-    const belowMin = await makeApiCall("/api/wallet/withdraw.php", "POST", { amount: 500 }, token);
+    // Below minimum (< ₹100)
+    const belowMin = await makeApiCall("/api/wallet/withdraw.php", "POST", { amount: 50 }, token);
     assert.equal(belowMin.status, 400);
-    assert.match(belowMin.data.error, /Minimum withdrawal amount is ₹1,000/i);
+    assert.match(belowMin.data.error, /Minimum withdrawal amount is ₹100/i);
 
-    // Above maximum
+    // Above maximum (> ₹10,000)
     const aboveMax = await makeApiCall(
       "/api/wallet/withdraw.php",
       "POST",
@@ -363,6 +363,26 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
     );
     assert.equal(aboveMax.status, 400);
     assert.match(aboveMax.data.error, /Maximum daily withdrawal limit is ₹10,000/i);
+
+    // Valid ₹100 minimum withdrawal with Point 7 charges breakdown (₹12 total charge -> ₹88 net)
+    const validWithdrawal = await makeApiCall(
+      "/api/wallet/withdraw.php",
+      "POST",
+      { amount: 100 },
+      token,
+    );
+    assert.equal(validWithdrawal.status, 200);
+    assert.equal(validWithdrawal.data.success, true);
+    assert.equal(validWithdrawal.data.transaction.amount, 100);
+    assert.equal(validWithdrawal.data.transaction.fee, 12);
+    assert.equal(validWithdrawal.data.transaction.netAmount, 88);
+    assert.ok(validWithdrawal.data.transaction.chargesBreakdown);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.baseProcessing, 5);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.gstAmount, 0.9);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.pgFeeAmount, 0.1);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.adminAllocation, 6);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.totalCharge, 12);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.netPayable, 88);
   });
 
   it("11. Rejects payment verification for mismatched amount or unsupported purpose", async () => {
@@ -493,6 +513,32 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
       api.wallet.withdraw = originalWithdraw;
       api.wallet.getBalance = originalGetBalance;
     }
+  });
+
+  it("14. Admin bulk payout executes batch disbursement and updates wallet deductions consistently", async () => {
+    const adminLogin = await makeApiCall("/api/auth/login.php", "POST", {
+      identifier: "admin@facetube.com",
+      password: "password",
+    });
+    const adminToken = adminLogin.data.token;
+
+    const bulkRes = await makeApiCall(
+      "/api/admin/bulk-payout.php",
+      "POST",
+      {
+        payouts: [
+          { userId: "FT483921", amount: 100 },
+          { userId: "FT102857", amount: 200 },
+        ],
+        notes: "Test batch payout disbursement",
+      },
+      adminToken,
+    );
+    assert.equal(bulkRes.status, 200);
+    assert.equal(bulkRes.data.success, true);
+    assert.equal(bulkRes.data.total_recipients, 2);
+    assert.equal(bulkRes.data.total_amount, 300);
+    assert.ok(bulkRes.data.batch_id);
   });
 });
 
@@ -2148,7 +2194,7 @@ describe("Phase 1 Security & Production Safety Tests", () => {
     assert.match(body.error, /Authentication required/i);
   });
 
-  it("5. Withdrawal enforces min withdrawal (₹1,000) and balance sufficiency for authenticated user", async () => {
+  it("5. Withdrawal enforces min withdrawal (₹100) and balance sufficiency for authenticated user", async () => {
     // Log in as Alex Rivera
     const loginReq = new Request("http://localhost:3000/api/auth/login", {
       method: "POST",
@@ -2159,20 +2205,64 @@ describe("Phase 1 Security & Production Safety Tests", () => {
     assert.ok(loginRes);
     const { token } = await loginRes.json();
 
-    // Less than minimum ₹1,000
+    // Less than minimum ₹100
     const reqBelowMin = new Request("http://localhost:3000/api/wallet/withdraw", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ amount: 500 }),
+      body: JSON.stringify({ amount: 50 }),
     });
     const resBelowMin = await handleApiRequest(reqBelowMin, env);
     assert.ok(resBelowMin);
     assert.equal(resBelowMin.status, 400);
     const bodyBelowMin = await resBelowMin.json();
     assert.match(bodyBelowMin.error, /Minimum withdrawal/i);
+
+    // Balance sufficiency check: when amount is within daily limit (<= ₹10,000) but exceeds balance
+    const reqInsufficient = new Request("http://localhost:3000/api/wallet/withdraw", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ amount: 2000 }),
+    });
+    const resInsufficient = await handleApiRequest(reqInsufficient, env);
+    assert.ok(resInsufficient);
+    assert.equal(resInsufficient.status, 400);
+    const bodyInsufficient = await resInsufficient.json();
+    assert.match(bodyInsufficient.error, /Insufficient balance/i);
+
+    // Successful withdrawal for admin user who has sufficient balance
+    const adminLoginReq = new Request("http://localhost:3000/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: "FT102857", password: "password" }),
+    });
+    const adminLoginRes = await handleApiRequest(adminLoginReq, env);
+    assert.ok(adminLoginRes);
+    const { token: adminToken } = await adminLoginRes.json();
+
+    const reqValid = new Request("http://localhost:3000/api/wallet/withdraw", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify({ amount: 100 }),
+    });
+    const resValid = await handleApiRequest(reqValid, env);
+    assert.ok(resValid);
+    assert.equal(resValid.status, 200);
+    const bodyValid = await resValid.json();
+    assert.equal(bodyValid.success, true);
+    assert.equal(bodyValid.transaction.amount, 100);
+    assert.equal(bodyValid.transaction.fee, 12);
+    assert.equal(bodyValid.transaction.netAmount, 88);
+    assert.equal(bodyValid.transaction.chargesBreakdown.totalCharge, 12);
+    assert.equal(bodyValid.transaction.chargesBreakdown.netPayable, 88);
   });
 
   it("6. Hardcoded password bypass ('admin123' / incorrect password) is strictly rejected", async () => {

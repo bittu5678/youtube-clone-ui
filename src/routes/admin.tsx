@@ -74,6 +74,8 @@ interface PendingPayout {
   userName: string;
   userEmail: string;
   amount: number;
+  fee?: number;
+  netAmount?: number;
   type: string;
   requestedAt: string;
   bankDetails?: {
@@ -135,16 +137,23 @@ function AdminPage() {
       const allTx = res?.transactions || [];
       const pending: PendingPayout[] = allTx
         .filter((t: any) => t.type === "withdrawal" || t.incomeType === "withdrawal")
-        .map((t: any) => ({
-          id: t.id || t.transactionId,
-          userId: t.userId || t.user_id,
-          userName: t.userName || t.uploaderName || `Creator ${t.userId || ""}`,
-          userEmail: t.userEmail || "creator@facetube.app",
-          amount: Number(t.amount) || 1000,
-          type: "withdrawal",
-          requestedAt: t.createdAt || t.created_at || new Date().toISOString(),
-          bankDetails: t.bankDetails,
-        }));
+        .map((t: any) => {
+          const amt = Number(t.amount) || 100;
+          const fee = Number(t.fee ?? 12);
+          const net = Number(t.netAmount ?? Math.max(0, amt - fee));
+          return {
+            id: t.id || t.transactionId,
+            userId: t.userId || t.user_id,
+            userName: t.userName || t.uploaderName || `Creator ${t.userId || ""}`,
+            userEmail: t.userEmail || "creator@facetube.app",
+            amount: amt,
+            fee,
+            netAmount: net,
+            type: "withdrawal",
+            requestedAt: t.createdAt || t.created_at || new Date().toISOString(),
+            bankDetails: t.bankDetails,
+          };
+        });
 
       // If fewer than 2 items in database, provide standard queue for demonstration
       if (pending.length === 0) {
@@ -155,6 +164,8 @@ function AdminPage() {
             userName: "Alex Rivera",
             userEmail: "alex@facetube.app",
             amount: 2500,
+            fee: 12,
+            netAmount: 2488,
             type: "withdrawal",
             requestedAt: new Date(Date.now() - 3600000 * 4).toISOString(),
             bankDetails: {
@@ -170,6 +181,8 @@ function AdminPage() {
             userName: "Priya Sharma",
             userEmail: "priya@facetube.app",
             amount: 1800,
+            fee: 12,
+            netAmount: 1788,
             type: "withdrawal",
             requestedAt: new Date(Date.now() - 3600000 * 8).toISOString(),
             bankDetails: {
@@ -185,6 +198,8 @@ function AdminPage() {
             userName: "Rahul Verma",
             userEmail: "rahul@facetube.app",
             amount: 3200,
+            fee: 12,
+            netAmount: 3188,
             type: "withdrawal",
             requestedAt: new Date(Date.now() - 3600000 * 12).toISOString(),
             bankDetails: {
@@ -407,6 +422,10 @@ function AdminPage() {
   const selectedPayoutTotal = payoutList
     .filter((p) => selectedPayoutIds.includes(p.id))
     .reduce((sum, p) => sum + p.amount, 0);
+
+  const selectedNetTotal = payoutList
+    .filter((p) => selectedPayoutIds.includes(p.id))
+    .reduce((sum, p) => sum + (p.netAmount ?? Math.max(0, p.amount - (p.fee ?? 12))), 0);
 
   const handleExecuteBulkPayout = async () => {
     if (selectedPayoutIds.length === 0) {
@@ -1057,7 +1076,7 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                     <span>
                       {processingBulk
                         ? "Disbursing Batch..."
-                        : `Process Bulk Payout (${selectedPayoutIds.length} · ₹${selectedPayoutTotal.toLocaleString("en-IN")})`}
+                        : `Process Bulk Payout (${selectedPayoutIds.length} · Net ₹${selectedNetTotal.toLocaleString("en-IN")})`}
                     </span>
                   </button>
                 </div>
@@ -1099,7 +1118,7 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                       <th className="pb-3 pl-2 w-10">Select</th>
                       <th className="pb-3 font-semibold">Creator</th>
                       <th className="pb-3 font-semibold">User ID</th>
-                      <th className="pb-3 font-semibold">Amount</th>
+                      <th className="pb-3 font-semibold">Amount (Gross / Net)</th>
                       <th className="pb-3 font-semibold">Payout Destination</th>
                       <th className="pb-3 font-semibold">Requested At</th>
                     </tr>
@@ -1114,6 +1133,7 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                     ) : (
                       payoutList.map((p) => {
                         const isSelected = selectedPayoutIds.includes(p.id);
+                        const net = p.netAmount ?? Math.max(0, p.amount - (p.fee ?? 12));
                         return (
                           <tr
                             key={p.id}
@@ -1136,8 +1156,16 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                             <td className="py-3 font-mono text-xs text-brand font-bold">
                               {p.userId}
                             </td>
-                            <td className="py-3 font-mono font-black text-sm text-foreground">
-                              ₹{p.amount.toLocaleString("en-IN")}
+                            <td className="py-3 font-mono">
+                              <div className="font-black text-sm text-foreground">
+                                ₹{p.amount.toLocaleString("en-IN")}
+                              </div>
+                              <div className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                                <span>Net: ₹{net.toLocaleString("en-IN")}</span>
+                                <span className="text-orange-400/80 text-[10px]">
+                                  (-₹{p.fee ?? 12})
+                                </span>
+                              </div>
                             </td>
                             <td className="py-3 text-xs text-muted-foreground font-mono">
                               {p.bankDetails?.upiId

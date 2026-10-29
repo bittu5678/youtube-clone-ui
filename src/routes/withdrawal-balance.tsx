@@ -30,7 +30,7 @@ export const Route = createFileRoute("/withdrawal-balance")({
       {
         name: "description",
         content:
-          "Track your FaceTube payout history, completed bank transfers, and withdrawal receipts with ₹1,000 min and ₹10,000 daily limit verification.",
+          "Track your FaceTube payout history, completed bank transfers, and withdrawal receipts with ₹100 min, ₹12 Admin/GST charges, and ₹10,000 daily limit verification.",
       },
     ],
   }),
@@ -119,12 +119,13 @@ export function WithdrawalBalancePage() {
             </div>
             <div className="space-y-0.5 text-xs">
               <div className="font-bold text-foreground text-sm">
-                Enforced Withdrawal Limits: ₹1,000 Minimum · ₹10,000 Daily Maximum
+                Enforced Withdrawal Limits: ₹100 Minimum · ₹10,000 Daily Maximum
               </div>
               <p className="text-muted-foreground">
-                Minimum per transaction: <strong>₹1,000</strong>. Daily cumulative withdrawal cap:{" "}
-                <strong>₹10,000 per day</strong>. If daily limit is reached, further payouts are
-                blocked until next day.
+                Minimum per transaction: <strong>₹100</strong>. Daily cumulative withdrawal cap:{" "}
+                <strong>₹10,000 per day</strong>. Fixed Admin &amp; processing charge of{" "}
+                <strong>₹12</strong> (₹5 Base + ₹0.90 GST [18%] + ₹0.10 PG fee [2%] ≈ ₹6, plus ₹6
+                Admin allocation) is deducted from the gross withdrawal amount.
               </p>
             </div>
           </div>
@@ -148,7 +149,7 @@ export function WithdrawalBalancePage() {
                 maximumFractionDigits: 2,
               })}
             </p>
-            <p className="text-[11px] text-muted-foreground">Lifetime settled payouts</p>
+            <p className="text-[11px] text-muted-foreground">Lifetime gross debited</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Withdrawn Today</span>
@@ -159,13 +160,13 @@ export function WithdrawalBalancePage() {
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Minimum Allowed</span>
-            <p className="text-2xl font-black text-foreground">₹1,000.00</p>
-            <p className="text-[11px] text-muted-foreground">Per request floor</p>
+            <p className="text-2xl font-black text-foreground">₹100.00</p>
+            <p className="text-[11px] text-emerald-400 font-semibold">Updated Point 7 floor</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Average Processing</span>
-            <p className="text-2xl font-black text-emerald-400">&lt; 2 Hours</p>
-            <p className="text-[11px] text-muted-foreground">Instant automated settlement</p>
+            <span className="text-xs text-muted-foreground font-medium">Fixed Charges</span>
+            <p className="text-2xl font-black text-orange-400">₹12.00</p>
+            <p className="text-[11px] text-muted-foreground">₹5.90 GST/PG + ₹6 Admin</p>
           </div>
         </div>
 
@@ -185,38 +186,46 @@ export function WithdrawalBalancePage() {
                   <th className="px-4 py-3">Description</th>
                   <th className="px-4 py-3">Settled Date</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Amount</th>
+                  <th className="px-4 py-3 text-right">Gross Amount</th>
+                  <th className="px-4 py-3 text-right">Net Payout</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {withdrawalTxs.length > 0 ? (
-                  withdrawalTxs.map((item) => (
-                    <tr key={item.id} className="transition hover:bg-secondary/20">
-                      <td className="px-4 py-3.5 font-mono font-bold text-foreground">
-                        {item.transactionId}
-                      </td>
-                      <td className="px-4 py-3.5 font-medium text-foreground max-w-sm truncate">
-                        {item.description}
-                      </td>
-                      <td className="px-4 py-3.5 text-muted-foreground">
-                        {new Date(item.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
-                          <CheckCircle2 className="h-3 w-3" /> Settled
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-black text-orange-400 text-sm">
-                        ₹
-                        {Math.abs(item.amount).toLocaleString("en-IN", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </td>
-                    </tr>
-                  ))
+                  withdrawalTxs.map((item) => {
+                    const gross = Math.abs(item.amount);
+                    const net = item.netAmount ?? (gross >= 12 ? gross - 12 : gross);
+                    return (
+                      <tr key={item.id} className="transition hover:bg-secondary/20">
+                        <td className="px-4 py-3.5 font-mono font-bold text-foreground">
+                          {item.transactionId}
+                        </td>
+                        <td className="px-4 py-3.5 font-medium text-foreground max-w-sm truncate">
+                          {item.description}
+                        </td>
+                        <td className="px-4 py-3.5 text-muted-foreground">
+                          {new Date(item.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+                            <CheckCircle2 className="h-3 w-3" /> Settled
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-right font-mono font-bold text-muted-foreground">
+                          ₹{gross.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-3.5 text-right font-mono font-black text-emerald-400 text-sm">
+                          ₹{net.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          <span className="block text-[10px] text-orange-400/80 font-normal">
+                            (-₹12 fee)
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                       No withdrawal records yet for User {userId}. Request a withdrawal above.
                     </td>
                   </tr>

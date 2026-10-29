@@ -39,10 +39,10 @@ if (!empty($requestedUserId) && strcasecmp($requestedUserId, $authUser['user_id'
     $userId = $requestedUserId;
 }
 
-if ($amount < 1000) {
+if ($amount < 100) {
     jsonResponse([
         'success' => false,
-        'error' => 'Minimum withdrawal amount is ₹1,000. You cannot withdraw less than ₹1,000.'
+        'error' => 'Minimum withdrawal amount is ₹100. You cannot withdraw less than ₹100.'
     ], 400);
 }
 
@@ -69,6 +69,22 @@ try {
             'error' => 'Insufficient balance. Your current withdrawable balance is ₹' . number_format($currentBal, 2) . ', but you requested ₹' . number_format($amount, 2) . '.'
         ], 400);
     }
+
+    // Requirement Point 7: Total ₹12 charge for Admin (₹5 base + ₹0.90 GST [18%] + ₹0.10 PG [2%] ≈ ₹6.00, plus ₹6.00 Admin allocation = ₹12.00)
+    // Deducted from the creator's withdrawal amount (e.g., ₹100 withdrawal -> ₹88 net payable)
+    $fee = 12.00;
+    $netAmount = max(0.00, $amount - $fee);
+    $chargesBreakdown = [
+        'grossAmount' => $amount,
+        'baseProcessing' => 5.00,
+        'gstRatePercent' => 18,
+        'gstAmount' => 0.90,
+        'pgFeePercent' => 2,
+        'pgFeeAmount' => 0.10,
+        'adminAllocation' => 6.00,
+        'totalCharge' => 12.00,
+        'netPayable' => $netAmount,
+    ];
 
     $newBal = $currentBal - $amount;
     $stmtUp = $pdo->prepare('
@@ -101,7 +117,7 @@ try {
                 $txId,
                 $userId,
                 $amount,
-                "Withdrawal request approved for ₹" . number_format($amount, 2)
+                "Withdrawal request approved for ₹" . number_format($amount, 2) . " (Net: ₹" . number_format($netAmount, 2) . " after ₹12 charges)"
             ]);
             $recorded = true;
         } catch (PDOException $eLedger) {
@@ -114,11 +130,15 @@ try {
 
     jsonResponse([
         'success' => true,
-        'message' => 'Withdrawal request for ₹' . number_format($amount, 2) . ' validated and approved.',
+        'message' => 'Withdrawal request for ₹' . number_format($amount, 2) . ' (Net Payable: ₹' . number_format($netAmount, 2) . ' after ₹12 charges) validated and approved.',
         'transaction' => [
             'id' => $txId,
             'userId' => $userId,
             'amount' => $amount,
+            'fee' => $fee,
+            'netAmount' => $netAmount,
+            'net_amount' => $netAmount,
+            'chargesBreakdown' => $chargesBreakdown,
             'type' => 'withdrawal',
             'status' => 'approved',
             'createdAt' => date('c'),

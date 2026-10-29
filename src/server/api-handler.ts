@@ -4378,11 +4378,11 @@ export async function handleApiRequest(
         effectiveUserId = requestedUserId.toUpperCase();
       }
 
-      if (isNaN(amount) || amount < 1000) {
+      if (isNaN(amount) || amount < 100) {
         return jsonResponse(
           {
             success: false,
-            error: "Minimum withdrawal amount is ₹1,000. You cannot withdraw less than ₹1,000.",
+            error: "Minimum withdrawal amount is ₹100. You cannot withdraw less than ₹100.",
           },
           400,
         );
@@ -4397,6 +4397,23 @@ export async function handleApiRequest(
           400,
         );
       }
+
+      // Requirement Point 7: Total ₹12 charge for Admin (₹5 base + ₹0.90 GST [18%] + ₹0.10 PG [2%] ≈ ₹6.00, plus ₹6.00 Admin allocation = ₹12.00)
+      // Deducted from creator's withdrawal amount (e.g. ₹100 requested -> ₹88 net payable)
+      const fee = 12;
+      const netAmount = Math.max(0, amount - fee);
+      const chargesBreakdown = {
+        grossAmount: amount,
+        fee: 12,
+        baseProcessing: 5,
+        gstRatePercent: 18,
+        gstAmount: 0.9,
+        pgFeePercent: 2,
+        pgFeeAmount: 0.1,
+        adminAllocation: 6,
+        totalCharge: 12,
+        netPayable: netAmount,
+      };
 
       if (pool) {
         const conn = await pool.getConnection();
@@ -4437,12 +4454,16 @@ export async function handleApiRequest(
 
           return jsonResponse({
             success: true,
-            message: `Withdrawal request for ₹${amount.toLocaleString("en-IN")} validated and approved.`,
+            message: `Withdrawal request for ₹${amount.toLocaleString("en-IN")} (Net Payable: ₹${netAmount.toLocaleString("en-IN")} after ₹12 charges) validated and approved.`,
             transaction: {
               id: txId,
               userId: effectiveUserId,
               user_id: effectiveUserId,
               amount,
+              fee,
+              netAmount,
+              net_amount: netAmount,
+              chargesBreakdown,
               type: "withdrawal",
               status: "approved",
               createdAt: new Date().toISOString(),
@@ -4507,6 +4528,10 @@ export async function handleApiRequest(
         userId: effectiveUserId,
         user_id: effectiveUserId,
         amount,
+        fee,
+        netAmount,
+        net_amount: netAmount,
+        chargesBreakdown,
         type: "withdrawal",
         status: "approved",
         createdAt: new Date().toISOString(),
@@ -4517,7 +4542,7 @@ export async function handleApiRequest(
 
       return jsonResponse({
         success: true,
-        message: `Withdrawal request for ₹${amount.toLocaleString("en-IN")} validated and approved.`,
+        message: `Withdrawal request for ₹${amount.toLocaleString("en-IN")} (Net Payable: ₹${netAmount.toLocaleString("en-IN")} after ₹12 charges) validated and approved.`,
         transaction: tx,
         updatedWallet: {
           userId: effectiveUserId,

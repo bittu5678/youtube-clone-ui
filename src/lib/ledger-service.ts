@@ -18,6 +18,8 @@ export interface LedgerTransaction {
   videoId?: string | undefined;
   incomeType: IncomeType;
   amount: number;
+  fee?: number | undefined;
+  netAmount?: number | undefined;
   status: "settled" | "pending" | "failed";
   specialTag?: "SPECIAL_GLOBAL_RULE" | "SPECIAL_TRANSACTION" | undefined;
   description: string;
@@ -473,14 +475,55 @@ export async function distributePremiumVideoIncome(
 
 /**
  * WITHDRAWAL LIMITS & RULES
- * - Minimum withdrawal amount: ₹1,000
+ * - Minimum withdrawal amount: ₹100
  * - Maximum withdrawal amount: ₹10,000 per day
+ * - Total Admin & Processing Charge: ₹12 (₹5 Base + ₹0.90 GST [18%] + ₹0.10 PG fee [2%] ≈ ₹6, plus ₹6 Admin allocation)
+ * - Charge is deducted from creator's requested payout amount (e.g. ₹100 withdrawal -> ₹88 net payable)
  * - If daily withdrawal total reaches ₹10,000, further withdrawals are blocked until next day
  */
 export const WITHDRAWAL_RULES = {
-  MIN_AMOUNT: 1000, // ₹1,000 minimum
+  MIN_AMOUNT: 100, // ₹100 minimum
   MAX_DAILY_LIMIT: 10000, // ₹10,000 per day maximum
 } as const;
+
+export const WITHDRAWAL_CHARGES = {
+  TOTAL_FEE: 12,
+  BASE_PROCESSING: 5,
+  GST_RATE: 0.18, // 18% GST (₹0.90)
+  GST_AMOUNT: 0.9,
+  PG_FEE_RATE: 0.02, // 2% PG fee (₹0.10)
+  PG_FEE_AMOUNT: 0.1,
+  ADMIN_ALLOCATION: 6,
+} as const;
+
+export interface WithdrawalChargesBreakdown {
+  grossAmount: number;
+  baseProcessing: number;
+  gstRatePercent: number;
+  gstAmount: number;
+  pgFeePercent: number;
+  pgFeeAmount: number;
+  adminAllocation: number;
+  totalCharge: number;
+  netPayable: number;
+}
+
+export function calculateWithdrawalBreakdown(amount: number): WithdrawalChargesBreakdown {
+  const grossAmount = Math.max(0, Number(amount) || 0);
+  const totalCharge = grossAmount >= WITHDRAWAL_RULES.MIN_AMOUNT ? WITHDRAWAL_CHARGES.TOTAL_FEE : 0;
+  const netPayable = Math.max(0, grossAmount - totalCharge);
+  return {
+    grossAmount,
+    baseProcessing: WITHDRAWAL_CHARGES.BASE_PROCESSING,
+    gstRatePercent: 18,
+    gstAmount: WITHDRAWAL_CHARGES.GST_AMOUNT,
+    pgFeePercent: 2,
+    pgFeeAmount: WITHDRAWAL_CHARGES.PG_FEE_AMOUNT,
+    adminAllocation: WITHDRAWAL_CHARGES.ADMIN_ALLOCATION,
+    totalCharge,
+    netPayable,
+  };
+}
 
 export async function getDailyWithdrawnAmount(userId: string, dateStr?: string): Promise<number> {
   const norm = userId.trim().toUpperCase();
@@ -500,6 +543,7 @@ export interface WithdrawalValidationResult {
   alreadyWithdrawnToday: number;
   remainingDailyLimit: number;
   currentBalance: number;
+  breakdown?: WithdrawalChargesBreakdown | undefined;
 }
 
 export async function validateWithdrawalRequest(
@@ -510,6 +554,7 @@ export async function validateWithdrawalRequest(
   const wallet = await getUserWallet(norm);
   const alreadyWithdrawnToday = await getDailyWithdrawnAmount(norm);
   const remainingDailyLimit = Math.max(0, WITHDRAWAL_RULES.MAX_DAILY_LIMIT - alreadyWithdrawnToday);
+  const breakdown = calculateWithdrawalBreakdown(amount);
 
   if (isNaN(amount) || amount <= 0) {
     return {
@@ -518,17 +563,19 @@ export async function validateWithdrawalRequest(
       alreadyWithdrawnToday,
       remainingDailyLimit,
       currentBalance: wallet.balance,
+      breakdown,
     };
   }
 
-  // Minimum withdrawal amount check: ₹1,000
+  // Minimum withdrawal amount check: ₹100
   if (amount < WITHDRAWAL_RULES.MIN_AMOUNT) {
     return {
       valid: false,
-      error: `Minimum withdrawal amount is ₹${WITHDRAWAL_RULES.MIN_AMOUNT.toLocaleString("en-IN")}. You cannot withdraw less than ₹1,000.`,
+      error: `Minimum withdrawal amount is ₹${WITHDRAWAL_RULES.MIN_AMOUNT.toLocaleString("en-IN")}. You cannot withdraw less than ₹100.`,
       alreadyWithdrawnToday,
       remainingDailyLimit,
       currentBalance: wallet.balance,
+      breakdown,
     };
   }
 
@@ -611,14 +658,18 @@ export async function processWithdrawal(
       ? `Bank: ${bankDetails.bankName || "Account"} (****${bankDetails.accountNumber.slice(-4)})`
       : "Direct Bank Settlement";
 
+  const breakdown = calculateWithdrawalBreakdown(amount);
+
   const tx: LedgerTransaction = {
     id: `wd-tx-${Date.now()}`,
     transactionId: txId,
     userId: norm,
     incomeType: "withdrawal",
     amount: -amount,
+    fee: breakdown.totalCharge,
+    netAmount: breakdown.netPayable,
     status: "settled",
-    description: `Withdrawal payout to ${destinationDesc} - ₹${amount.toLocaleString("en-IN")}`,
+    description: `Withdrawal payout to ${destinationDesc} - Requested: ₹${amount.toLocaleString("en-IN")}, Admin/GST Charges: ₹${breakdown.totalCharge}, Net Payable: ₹${breakdown.netPayable.toLocaleString("en-IN")}`,
     createdAt: new Date().toISOString(),
   };
 

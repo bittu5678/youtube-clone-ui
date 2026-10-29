@@ -25,9 +25,12 @@ import {
   getDailyWithdrawnAmount,
   validateWithdrawalRequest,
   processWithdrawal,
+  calculateWithdrawalBreakdown,
   WITHDRAWAL_RULES,
+  WITHDRAWAL_CHARGES,
   type UserWallet,
   type LedgerTransaction,
+  type WithdrawalChargesBreakdown,
 } from "@/lib/ledger-service";
 import { getPersonalKyc, getBankKyc } from "@/lib/kyc-service";
 
@@ -56,7 +59,7 @@ function WalletBalancePage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Form states
-  const [withdrawAmount, setWithdrawAmount] = useState<string>("1000");
+  const [withdrawAmount, setWithdrawAmount] = useState<string>("100");
   const [withdrawing, setWithdrawing] = useState(false);
   const [validationError, setValidationError] = useState<string>("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -94,6 +97,8 @@ function WalletBalancePage() {
 
   const balance = wallet ? wallet.balance : 0;
   const remainingDailyLimit = Math.max(0, WITHDRAWAL_RULES.MAX_DAILY_LIMIT - alreadyWithdrawnToday);
+  const currentNumAmount = Number(withdrawAmount) || 0;
+  const breakdown = calculateWithdrawalBreakdown(currentNumAmount);
 
   // Real-time validation on input change
   const handleAmountChange = (val: string) => {
@@ -103,7 +108,7 @@ function WalletBalancePage() {
     if (!isNaN(num) && num > 0) {
       if (num < WITHDRAWAL_RULES.MIN_AMOUNT) {
         setValidationError(
-          `Minimum withdrawal amount is ₹${WITHDRAWAL_RULES.MIN_AMOUNT.toLocaleString("en-IN")}. You cannot withdraw less than ₹1,000.`,
+          `Minimum withdrawal amount is ₹${WITHDRAWAL_RULES.MIN_AMOUNT.toLocaleString("en-IN")}. You cannot withdraw less than ₹100.`,
         );
       } else if (alreadyWithdrawnToday >= WITHDRAWAL_RULES.MAX_DAILY_LIMIT) {
         setValidationError(
@@ -157,12 +162,16 @@ function WalletBalancePage() {
 
       if (res.success && res.updatedWallet) {
         setWallet(res.updatedWallet);
+        const breakdown = calculateWithdrawalBreakdown(amount);
+        const netPayable = res.transaction?.netAmount ?? breakdown.netPayable;
         setSuccessMsg(
-          `🎉 Withdrawal request for ₹${amount.toLocaleString("en-IN")} submitted successfully! Reference: ${res.transaction?.transactionId}`,
+          `🎉 Withdrawal request for ₹${amount.toLocaleString("en-IN")} submitted successfully! Net payable: ₹${netPayable.toLocaleString("en-IN")} (after ₹${breakdown.totalCharge} Admin & GST charges). Reference: ${res.transaction?.transactionId}`,
         );
-        toast.success(`Withdrawal of ₹${amount.toLocaleString("en-IN")} processed!`);
+        toast.success(
+          `Withdrawal of ₹${amount.toLocaleString("en-IN")} processed (Net: ₹${netPayable.toLocaleString("en-IN")})!`,
+        );
         await loadWalletData();
-        setWithdrawAmount("1000");
+        setWithdrawAmount("100");
       } else {
         setValidationError(res.error || "Could not process withdrawal.");
         toast.error(res.error || "Withdrawal failed.");
@@ -252,14 +261,14 @@ function WalletBalancePage() {
               </div>
             </div>
 
-            {/* Withdrawal Form with strict ₹1,000 min and ₹10,000 daily max rules */}
+            {/* Withdrawal Form with strict ₹100 min, ₹10,000 daily max rules, and ₹12 Admin/GST breakdown */}
             <form
               onSubmit={handleWithdraw}
               className="rounded-xl border border-border bg-background/90 p-5 space-y-3 w-full lg:w-96 shadow-sm"
             >
               <div className="flex items-center justify-between text-xs font-semibold">
                 <span className="text-muted-foreground">Request Withdrawal:</span>
-                <span className="text-emerald-400 font-bold">₹1,000 min · ₹10,000 max/day</span>
+                <span className="text-emerald-400 font-bold">₹100 min · ₹10,000 max/day</span>
               </div>
 
               <div className="relative">
@@ -277,9 +286,77 @@ function WalletBalancePage() {
                   }`}
                   min={WITHDRAWAL_RULES.MIN_AMOUNT}
                   max={WITHDRAWAL_RULES.MAX_DAILY_LIMIT}
-                  step="100"
-                  placeholder="Enter amount (Min ₹1,000)"
+                  step="10"
+                  placeholder="Enter amount (Min ₹100)"
                 />
+              </div>
+
+              {/* Point 7: Payout Charges Breakdown Card */}
+              <div className="rounded-xl border border-border/80 bg-secondary/30 p-3 text-xs space-y-2">
+                <div className="flex items-center justify-between font-bold text-foreground pb-1.5 border-b border-border/60">
+                  <span className="flex items-center gap-1.5 text-foreground">
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                    Payout Calculation Breakdown:
+                  </span>
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold">
+                    Point 7 Rule
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 font-mono text-[11px]">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Gross Withdrawal Amount:</span>
+                    <span className="font-bold text-foreground">
+                      ₹{currentNumAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <span>Admin &amp; Processing Charges:</span>
+                      <span className="text-[10px] text-orange-400 font-sans font-medium">
+                        (Fixed)
+                      </span>
+                    </span>
+                    <span className="font-bold text-orange-400">
+                      -₹{breakdown.totalCharge.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Sub-item charges breakdown as specified in handwritten note */}
+                  <div className="pl-2 border-l-2 border-orange-500/40 space-y-0.5 text-[10px] text-muted-foreground font-sans">
+                    <div className="flex justify-between">
+                      <span>• Base Processing Fee:</span>
+                      <span className="font-mono">₹5.00</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>• GST (18% on ₹5):</span>
+                      <span className="font-mono">₹0.90</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>• PG Fee (2% on ₹5):</span>
+                      <span className="font-mono">₹0.10</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>• Admin Allocation:</span>
+                      <span className="font-mono">₹6.00</span>
+                    </div>
+                    <div className="flex justify-between font-semibold text-foreground pt-0.5 border-t border-border/40">
+                      <span>Total Retained for Admin:</span>
+                      <span className="font-mono text-orange-400">₹12.00</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-border/60 flex justify-between items-center text-xs font-sans">
+                    <span className="font-bold text-foreground flex items-center gap-1">
+                      <Zap className="h-3.5 w-3.5 text-emerald-400" />
+                      Net Payable to Bank / UPI:
+                    </span>
+                    <span className="font-mono text-sm font-black text-emerald-400">
+                      ₹{breakdown.netPayable.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* Validation Warning Alert */}
@@ -318,7 +395,12 @@ function WalletBalancePage() {
 
               <button
                 type="submit"
-                disabled={withdrawing || Boolean(validationError) || remainingDailyLimit === 0}
+                disabled={
+                  withdrawing ||
+                  Boolean(validationError) ||
+                  remainingDailyLimit === 0 ||
+                  currentNumAmount < WITHDRAWAL_RULES.MIN_AMOUNT
+                }
                 className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-500 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ArrowDownToLine className="h-4 w-4" />
@@ -326,7 +408,9 @@ function WalletBalancePage() {
                   ? "Processing Payout..."
                   : remainingDailyLimit === 0
                     ? "Daily Limit Reached (₹10,000)"
-                    : `Withdraw ₹${Number(withdrawAmount || 0).toLocaleString("en-IN")}`}
+                    : currentNumAmount < WITHDRAWAL_RULES.MIN_AMOUNT
+                      ? `Enter Min ₹${WITHDRAWAL_RULES.MIN_AMOUNT}`
+                      : `Withdraw ₹${currentNumAmount.toLocaleString("en-IN")} (Net ₹${breakdown.netPayable.toLocaleString("en-IN")})`}
               </button>
             </form>
           </div>

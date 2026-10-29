@@ -1,5 +1,9 @@
 import { api } from "./api";
-import { resolveVideoThumbnail, getCategoryFallbackThumbnail } from "./thumbnail-service";
+import {
+  resolveVideoThumbnail,
+  getCategoryFallbackThumbnail,
+  captureAndUploadThumbnail,
+} from "./thumbnail-service";
 import { resolveMediaUrl } from "./media-url";
 import type { Video } from "@/data/videos";
 import type { ShortItem } from "@/data/shorts";
@@ -596,6 +600,220 @@ export async function recordNewVideoUpload(params: {
   return newVideo;
 }
 
+/* -------------------------------------------------------------------------- */
+/* BULK VIDEO UPLOAD SERVICE LAYER (Shorts & Long Videos)                     */
+/* -------------------------------------------------------------------------- */
+
+export interface BulkVideoFileValidation {
+  valid: boolean;
+  error?: string;
+}
+
+/**
+ * Validates a video file against size (<= 150MB) and supported formats (MP4, WebM, OGG, MOV, M4V, MKV).
+ */
+export function validateVideoFileForUpload(file: File): BulkVideoFileValidation {
+  if (!file) {
+    return { valid: false, error: "No file selected." };
+  }
+  const maxSizeBytes = 150 * 1024 * 1024; // 150MB limit
+  if (file.size <= 0) {
+    return { valid: false, error: `File "${file.name}" is empty (0 bytes).` };
+  }
+  if (file.size > maxSizeBytes) {
+    return {
+      valid: false,
+      error: `File "${file.name}" exceeds 150MB limit (${(file.size / (1024 * 1024)).toFixed(1)} MB).`,
+    };
+  }
+  const validExts = [".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv"];
+  const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
+  const validMimes = [
+    "video/mp4",
+    "video/webm",
+    "video/ogg",
+    "video/quicktime",
+    "video/x-m4v",
+    "video/x-matroska",
+    "application/octet-stream",
+  ];
+  const isExtValid = validExts.includes(ext);
+  const isMimeValid =
+    !file.type || file.type.startsWith("video/") || validMimes.includes(file.type);
+  if (!isExtValid && !isMimeValid) {
+    return {
+      valid: false,
+      error: `File "${file.name}" has unsupported format (${ext || file.type || "unknown"}). Supported formats: MP4, WebM, OGG, MOV.`,
+    };
+  }
+  return { valid: true };
+}
+
+export interface BulkUploadItemPayload {
+  id: string; // unique item id in queue
+  file: File;
+  title: string;
+  description?: string;
+  category: string;
+  contentType: ContentType; // "short" | "long"
+  visibility?: "public" | "unlisted" | "private";
+  customThumbnailFile?: File | null;
+  thumbnailUrl?: string;
+  detectedDuration?: string;
+  videoType?: VideoType; // "free" | "premium"
+  paymentStatus?: VideoPaymentStatus;
+  paymentId?: string;
+  paymentAmount?: number;
+}
+
+export interface BulkUploadItemResult {
+  id: string;
+  title: string;
+  success: boolean;
+  video?: UploadedVideo;
+  error?: string;
+  fileSize: number;
+  duration?: string;
+}
+
+export interface BulkUploadProgressState {
+  itemId: string;
+  progress: number;
+  phase:
+    "validating" | "uploading_video" | "uploading_thumbnail" | "publishing" | "complete" | "error";
+  error?: string;
+}
+
+/**
+ * Processes an individual item from a bulk upload batch:
+ * 1. Validates the video file
+ * 2. Uploads the video file via api.uploads.uploadVideo
+ * 3. Handles custom thumbnail file upload (or captured thumbnail / category fallback)
+ * 4. Calls recordNewVideoUpload to persist the video record
+ * 5. Returns the published UploadedVideo
+ */
+export async function uploadSingleBulkVideoItem(
+  item: BulkUploadItemPayload,
+  creatorInfo: { userId: string; creatorName: string },
+  onProgress?: (state: BulkUploadProgressState) => void,
+): Promise<UploadedVideo> {
+  // 1. Validation
+  onProgress?.({ itemId: item.id, progress: 10, phase: "validating" });
+  const validation = validateVideoFileForUpload(item.file);
+  if (!validation.valid) {
+    throw new Error(validation.error || "Invalid video file.");
+  }
+
+  // 2. Upload video binary to storage via production API
+  onProgress?.({ itemId: item.id, progress: 25, phase: "uploading_video" });
+  const uploadRes = await api.uploads.uploadVideo(item.file);
+  if (!uploadRes || !uploadRes.url) {
+    const errMsg =
+      (uploadRes as any)?.error ||
+      (uploadRes as any)?.message ||
+      (uploadRes as any)?.msg ||
+      "Server storage upload failed without a valid video URL.";
+    throw new Error(errMsg);
+  }
+  onProgress?.({ itemId: item.id, progress: 65, phase: "uploading_thumbnail" });
+
+  // 3. Resolve / upload thumbnail
+  let finalThumbnailUrl = item.thumbnailUrl || "";
+  if (item.customThumbnailFile) {
+    try {
+      const imgRes = await api.uploads.uploadImage(item.customThumbnailFile);
+      if (imgRes && imgRes.url) {
+        finalThumbnailUrl = imgRes.url;
+      }
+    } catch (_imgErr) {
+      // Fallback
+    }
+  }
+  if (!finalThumbnailUrl) {
+    try {
+      finalThumbnailUrl = await captureAndUploadThumbnail(item.file, item.category);
+    } catch (_thumbErr) {
+      finalThumbnailUrl = getCategoryFallbackThumbnail(item.category);
+    }
+  }
+
+  // 4. Publish video record to production database
+  onProgress?.({ itemId: item.id, progress: 85, phase: "publishing" });
+  const published = await recordNewVideoUpload({
+    userId: creatorInfo.userId,
+    creatorName: creatorInfo.creatorName,
+    title: item.title.trim() || item.file.name.replace(/\.[^/.]+$/, ""),
+    description: (item.description || "").trim(),
+    videoUrl: uploadRes.url,
+    thumbnailUrl: finalThumbnailUrl,
+    videoType: item.videoType || "free",
+    contentType: item.contentType,
+    category: item.category || "Entertainment",
+    duration: item.detectedDuration || (item.contentType === "short" ? "0:45" : "12:30"),
+    paymentStatus: item.paymentStatus || (item.videoType === "premium" ? "paid" : "not_required"),
+    ...(item.paymentId ? { paymentId: item.paymentId } : {}),
+    paymentAmount: item.videoType === "premium" ? (item.paymentAmount ?? 6) : 0,
+    visibility: item.visibility || "public",
+  });
+
+  onProgress?.({ itemId: item.id, progress: 100, phase: "complete" });
+  return published;
+}
+
+/**
+ * Executes a batch upload queue sequentially:
+ * - Skips items that have already succeeded (prevents duplicate submissions)
+ * - Reports progress per item
+ * - Collects results for all items (failed items are reported without interrupting remaining items)
+ * - Allows subsequent retries for only failed items
+ */
+export async function executeBulkVideoUploadQueue(
+  items: BulkUploadItemPayload[],
+  creatorInfo: { userId: string; creatorName: string },
+  callbacks?: {
+    onItemStart?: (item: BulkUploadItemPayload) => void;
+    onItemProgress?: (state: BulkUploadProgressState) => void;
+    onItemSuccess?: (item: BulkUploadItemPayload, video: UploadedVideo) => void;
+    onItemError?: (item: BulkUploadItemPayload, error: Error) => void;
+  },
+): Promise<BulkUploadItemResult[]> {
+  const results: BulkUploadItemResult[] = [];
+
+  for (const item of items) {
+    callbacks?.onItemStart?.(item);
+    try {
+      const video = await uploadSingleBulkVideoItem(item, creatorInfo, callbacks?.onItemProgress);
+      callbacks?.onItemSuccess?.(item, video);
+      results.push({
+        id: item.id,
+        title: item.title,
+        success: true,
+        video,
+        fileSize: item.file.size,
+        duration: video.duration,
+      });
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      callbacks?.onItemError?.(item, err instanceof Error ? err : new Error(errorMsg));
+      callbacks?.onItemProgress?.({
+        itemId: item.id,
+        progress: 0,
+        phase: "error",
+        error: errorMsg,
+      });
+      results.push({
+        id: item.id,
+        title: item.title,
+        success: false,
+        error: errorMsg,
+        fileSize: item.file.size,
+      });
+    }
+  }
+
+  return results;
+}
+
 /**
  * Activates promotion on an existing or new video upon verified payment
  */
@@ -684,7 +902,7 @@ export function isShortVideo(video: { contentType?: string; duration?: string })
     const minutes = parts[0];
     const seconds = parts[1];
     if (minutes !== undefined && seconds !== undefined) {
-      return minutes === 0 && seconds <= 60;
+      return minutes * 60 + seconds <= 60;
     }
   }
   return false;

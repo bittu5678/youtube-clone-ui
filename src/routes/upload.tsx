@@ -38,6 +38,9 @@ import { api } from "@/lib/api";
 import {
   recordNewVideoUpload,
   fetchUploadedVideos,
+  validateVideoFileForUpload,
+  uploadSingleBulkVideoItem,
+  getAvailableCategories,
   type VideoType,
   type ContentType,
   type UploadedVideo,
@@ -527,7 +530,9 @@ function FourOptionsSelectionView({
                 Upload Multiple Videos in One Operation
               </h3>
               <p className="text-xs text-muted-foreground mt-1 max-w-2xl leading-relaxed">
-                Batch select multiple files, customize each video&apos;s title, format (Shorts 9:16 or Long 16:9), category, visibility, and thumbnail, with real-time progress indicators and individual retry for failed uploads.
+                Batch select multiple files, customize each video&apos;s title, format (Shorts 9:16
+                or Long 16:9), category, visibility, and thumbnail, with real-time progress
+                indicators and individual retry for failed uploads.
               </p>
             </div>
           </div>
@@ -556,13 +561,16 @@ export interface BulkVideoItem {
   category: string;
   contentType: ContentType; // "short" | "long"
   visibility: "public" | "unlisted" | "private";
+  videoType: VideoType; // "free" | "premium"
   previewUrl: string;
   detectedDuration: string;
   capturedThumbnail: string;
+  customThumbnailFile?: File | null | undefined;
+  customThumbnailPreview?: string | undefined;
   status: "queued" | "uploading" | "success" | "error";
   progress: number;
-  errorMessage?: string;
-  publishedVideo?: UploadedVideo;
+  errorMessage?: string | undefined;
+  publishedVideo?: UploadedVideo | undefined;
 }
 
 export function BulkVideoUploadView({
@@ -571,8 +579,8 @@ export function BulkVideoUploadView({
   initialFiles,
 }: {
   onBack: () => void;
-  onUploaded?: () => void;
-  initialFiles?: File[];
+  onUploaded?: (() => void) | undefined;
+  initialFiles?: File[] | undefined;
 }) {
   const { user, profile, dbUser } = useAuth();
   const userId = profile?.user_id || dbUser?.user_id || user?.email?.split("@")[0] || "FT483921";
@@ -581,23 +589,30 @@ export function BulkVideoUploadView({
 
   const [queue, setQueue] = useState<BulkVideoItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [categories, setCategories] = useState<string[]>([...VIDEO_CATEGORIES]);
   const [batchCategory, setBatchCategory] = useState<string>("Entertainment");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isProcessingRef = useRef(false);
 
+  // Load available categories asynchronously
+  useEffect(() => {
+    getAvailableCategories()
+      .then((cats) => {
+        if (cats && cats.length > 0) {
+          setCategories(cats);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const addFilesToQueue = useCallback((fileList: FileList | File[]) => {
     const files = Array.from(fileList);
-    const validExts = [".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv"];
     const newItems: BulkVideoItem[] = [];
 
     for (const file of files) {
-      const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
-      if (!file.type.startsWith("video/") && !validExts.includes(ext)) {
-        toast.error(`"${file.name}" skipped: unsupported format. Please select MP4, WebM, OGG, or MOV.`);
-        continue;
-      }
-      if (file.size > 150 * 1024 * 1024) {
-        toast.error(`"${file.name}" skipped: file size exceeds 150MB limit.`);
+      const val = validateVideoFileForUpload(file);
+      if (!val.valid) {
+        toast.error(val.error || `"${file.name}" skipped.`);
         continue;
       }
 
@@ -615,6 +630,7 @@ export function BulkVideoUploadView({
         category: "Entertainment",
         contentType: isShortHint ? "short" : "long",
         visibility: "public",
+        videoType: "free",
         previewUrl,
         detectedDuration: isShortHint ? "0:45" : "12:30",
         capturedThumbnail: "",
@@ -699,10 +715,12 @@ export function BulkVideoUploadView({
 
     if (!targetItem) return false;
     const item = targetItem as BulkVideoItem;
+    // Prevent duplicate upload if already successful
     if (item.status === "success") return true;
 
     try {
       // 1. Upload video file to server storage via existing production API
+      setQueue((prev) => prev.map((it) => (it.id === itemId ? { ...it, progress: 35 } : it)));
       const uploadRes = await api.uploads.uploadVideo(item.file);
       if (!uploadRes || !uploadRes.url) {
         const serverError =
@@ -713,38 +731,99 @@ export function BulkVideoUploadView({
         throw new Error(serverError);
       }
 
-      setQueue((prev) =>
-        prev.map((it) => (it.id === itemId ? { ...it, progress: 65 } : it)),
-      );
+      setQueue((prev) => prev.map((it) => (it.id === itemId ? { ...it, progress: 65 } : it)));
 
-      // 2. Persist thumbnail frame or category fallback
+      // 2. Persist custom thumbnail or video snapshot frame or category fallback
       let posterUrl = "";
-      try {
-        posterUrl = await captureAndUploadThumbnail(item.file, item.category);
-      } catch (_e) {
-        posterUrl = item.capturedThumbnail || getCategoryFallbackThumbnail(item.category);
+      if (item.customThumbnailFile) {
+        try {
+          const imgRes = await api.uploads.uploadImage(item.customThumbnailFile);
+          if (imgRes && imgRes.url) {
+            posterUrl = imgRes.url;
+          }
+        } catch (_imgErr) {
+          // fallback to snapshot
+        }
+      }
+      if (!posterUrl) {
+        try {
+          posterUrl = await captureAndUploadThumbnail(item.file, item.category);
+        } catch (_e) {
+          posterUrl = item.capturedThumbnail || getCategoryFallbackThumbnail(item.category);
+        }
       }
 
-      setQueue((prev) =>
-        prev.map((it) => (it.id === itemId ? { ...it, progress: 85 } : it)),
-      );
+      setQueue((prev) => prev.map((it) => (it.id === itemId ? { ...it, progress: 80 } : it)));
 
-      // 3. Persist video record to production database via existing video service
-      const published = await recordNewVideoUpload({
-        userId,
-        creatorName,
-        title: item.title.trim() || item.file.name.replace(/\.[^/.]+$/, ""),
-        description: item.description.trim(),
-        videoUrl: uploadRes.url,
-        thumbnailUrl: posterUrl,
-        videoType: "free",
-        contentType: item.contentType,
-        category: item.category,
-        duration: item.detectedDuration || (item.contentType === "short" ? "0:45" : "12:30"),
-        paymentStatus: "not_required",
-        paymentAmount: 0,
-        visibility: item.visibility,
-      });
+      let published: UploadedVideo;
+
+      // 3. If video is marked as premium (Sponsor), initiate verified payment
+      if (item.videoType === "premium") {
+        setQueue((prev) => prev.map((it) => (it.id === itemId ? { ...it, progress: 85 } : it)));
+        let paymentId: string | undefined;
+        await new Promise<void>((resolve, reject) => {
+          initiatePremiumVideoPayment({
+            userId,
+            userName: creatorName,
+            videoTitle: item.title.trim() || item.file.name.replace(/\.[^/.]+$/, ""),
+            description: item.description.trim(),
+            videoUrl: uploadRes.url,
+            thumbnailUrl: posterUrl,
+            contentType: item.contentType,
+            category: item.category,
+            duration: item.detectedDuration || (item.contentType === "short" ? "0:45" : "12:30"),
+            directReferrerId: profile?.referral_code || dbUser?.referral_code || null,
+            onSuccess: (res: unknown) => {
+              if (typeof res === "string") {
+                paymentId = res;
+              }
+              resolve();
+            },
+            onFailure: (errMsg: string) => reject(new Error(errMsg || "Payment failed")),
+            onCancel: () => reject(new Error("Payment was cancelled by user")),
+          });
+        });
+
+        published = {
+          id: `vid-${Date.now()}`,
+          userId,
+          creatorName,
+          title: item.title.trim() || item.file.name.replace(/\.[^/.]+$/, ""),
+          description: item.description.trim(),
+          videoUrl: uploadRes.url,
+          thumbnailUrl: posterUrl,
+          videoType: "premium",
+          contentType: item.contentType,
+          category: item.category,
+          duration: item.detectedDuration || (item.contentType === "short" ? "0:45" : "12:30"),
+          views: 0,
+          likes: 0,
+          paymentStatus: "paid",
+          ...(paymentId !== undefined ? { paymentId } : {}),
+          paymentAmount: 6,
+          isPromoted: false,
+          visibility: item.visibility,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      } else {
+        // Free video: persist video record to database
+        published = await recordNewVideoUpload({
+          userId,
+          creatorName,
+          title: item.title.trim() || item.file.name.replace(/\.[^/.]+$/, ""),
+          description: item.description.trim(),
+          videoUrl: uploadRes.url,
+          thumbnailUrl: posterUrl,
+          videoType: "free",
+          contentType: item.contentType,
+          category: item.category,
+          duration: item.detectedDuration || (item.contentType === "short" ? "0:45" : "12:30"),
+          paymentStatus: "not_required",
+          paymentAmount: 0,
+          visibility: item.visibility,
+        });
+      }
 
       setQueue((prev) =>
         prev.map((it) =>
@@ -763,9 +842,7 @@ export function BulkVideoUploadView({
       const msg = err?.message || "Failed to upload video.";
       setQueue((prev) =>
         prev.map((it) =>
-          it.id === itemId
-            ? { ...it, status: "error", progress: 0, errorMessage: msg }
-            : it,
+          it.id === itemId ? { ...it, status: "error", progress: 0, errorMessage: msg } : it,
         ),
       );
       return false;
@@ -851,14 +928,14 @@ export function BulkVideoUploadView({
     setQueue((prev) =>
       prev.map((it) => (it.status === "queued" ? { ...it, contentType: ct } : it)),
     );
-    toast.info(`Updated all pending items to ${ct === "short" ? "Shorts (9:16)" : "Long Videos (16:9)"}.`);
+    toast.info(
+      `Updated all pending items to ${ct === "short" ? "Shorts (9:16)" : "Long Videos (16:9)"}.`,
+    );
   };
 
   const setAllCategoryToAll = (cat: string) => {
     setBatchCategory(cat);
-    setQueue((prev) =>
-      prev.map((it) => (it.status === "queued" ? { ...it, category: cat } : it)),
-    );
+    setQueue((prev) => prev.map((it) => (it.status === "queued" ? { ...it, category: cat } : it)));
     toast.info(`Set category to "${cat}" for all pending videos.`);
   };
 
@@ -1000,6 +1077,29 @@ export function BulkVideoUploadView({
             </div>
           </div>
 
+          {/* Overall Batch Progress Indicator */}
+          {totalCount > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <div className="flex justify-between text-xs font-mono text-muted-foreground">
+                <span>
+                  Batch Progress: {completedCount} / {totalCount} Completed
+                  {errorCount > 0 ? ` (${errorCount} Failed)` : ""}
+                </span>
+                <span className="font-bold text-foreground">
+                  {totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0}%
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full bg-gradient-to-r from-sky-500 via-indigo-500 to-emerald-400 transition-all duration-300"
+                  style={{
+                    width: `${totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Batch Configuration Strip */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border/60">
             <div className="flex flex-wrap items-center gap-2">
@@ -1026,7 +1126,7 @@ export function BulkVideoUploadView({
                   onChange={(e) => setAllCategoryToAll(e.target.value)}
                   className="rounded-lg border border-border bg-secondary/60 px-2 py-1 text-xs text-foreground focus:outline-none"
                 >
-                  {VIDEO_CATEGORIES.map((cat) => (
+                  {categories.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>
@@ -1073,33 +1173,83 @@ export function BulkVideoUploadView({
             }`}
           >
             <div className="flex flex-col lg:flex-row gap-4">
-              {/* Left Column: Video Preview / Frame */}
-              <div className="relative shrink-0 w-full sm:w-48 aspect-video rounded-xl overflow-hidden bg-black/60 border border-border">
-                {item.capturedThumbnail ? (
-                  <img
-                    src={item.capturedThumbnail}
-                    alt={item.title}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <video
-                    src={item.previewUrl}
-                    className="h-full w-full object-contain"
-                    preload="metadata"
-                  />
-                )}
-                <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/80 px-1.5 py-0.5 text-[10px] font-mono font-bold text-white">
-                  {item.detectedDuration}
-                </span>
-                <span
-                  className={`absolute top-1.5 left-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                    item.contentType === "short"
-                      ? "bg-purple-600 text-white"
-                      : "bg-sky-600 text-white"
-                  }`}
-                >
-                  {item.contentType === "short" ? "Short (9:16)" : "Long (16:9)"}
-                </span>
+              {/* Left Column: Video Preview / Frame + Custom Thumbnail Picker */}
+              <div className="shrink-0 w-full sm:w-48 space-y-2">
+                <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black/60 border border-border">
+                  {item.customThumbnailPreview || item.capturedThumbnail ? (
+                    <img
+                      src={item.customThumbnailPreview || item.capturedThumbnail}
+                      alt={item.title}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <video
+                      src={item.previewUrl}
+                      className="h-full w-full object-contain"
+                      preload="metadata"
+                    />
+                  )}
+                  <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/80 px-1.5 py-0.5 text-[10px] font-mono font-bold text-white">
+                    {item.detectedDuration}
+                  </span>
+                  <span
+                    className={`absolute top-1.5 left-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                      item.contentType === "short"
+                        ? "bg-purple-600 text-white"
+                        : "bg-sky-600 text-white"
+                    }`}
+                  >
+                    {item.contentType === "short" ? "Short (9:16)" : "Long (16:9)"}
+                  </span>
+                  {item.customThumbnailPreview && (
+                    <span className="absolute top-1.5 right-1.5 rounded-md bg-teal-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      Custom Cover
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-1">
+                  <label
+                    className={`cursor-pointer inline-flex items-center gap-1 rounded-lg border border-border bg-secondary/50 px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground transition ${
+                      item.status === "uploading" || item.status === "success"
+                        ? "pointer-events-none opacity-50"
+                        : ""
+                    }`}
+                  >
+                    <ImageIcon className="h-3 w-3 text-teal-400" />
+                    <span>{item.customThumbnailFile ? "Change Cover" : "Custom Thumbnail"}</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={item.status === "uploading" || item.status === "success"}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          updateItem(item.id, {
+                            customThumbnailFile: f,
+                            customThumbnailPreview: URL.createObjectURL(f),
+                          });
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                  {item.customThumbnailFile && (
+                    <button
+                      type="button"
+                      disabled={item.status === "uploading" || item.status === "success"}
+                      onClick={() =>
+                        updateItem(item.id, {
+                          customThumbnailFile: null,
+                          customThumbnailPreview: undefined,
+                        })
+                      }
+                      className="text-[10px] text-muted-foreground hover:text-rose-400 disabled:opacity-50"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Middle Column: Metadata Controls */}
@@ -1164,8 +1314,8 @@ export function BulkVideoUploadView({
                   />
                 </div>
 
-                {/* Format, Category, Visibility row */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                {/* Format, Monetization, Category, Visibility row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
                   {/* Format Selector */}
                   <div className="flex items-center rounded-xl border border-border bg-secondary/30 p-1">
                     <button
@@ -1194,6 +1344,35 @@ export function BulkVideoUploadView({
                     </button>
                   </div>
 
+                  {/* Monetization Option: Free vs Sponsor */}
+                  <div className="flex items-center rounded-xl border border-border bg-secondary/30 p-1">
+                    <button
+                      type="button"
+                      disabled={item.status === "uploading" || item.status === "success"}
+                      onClick={() => updateItem(item.id, { videoType: "free" })}
+                      className={`flex-1 rounded-lg py-1.5 font-bold transition text-xs ${
+                        item.videoType === "free" || !item.videoType
+                          ? "bg-sky-500/20 text-sky-400 border border-sky-500/30 shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Free (₹0)
+                    </button>
+                    <button
+                      type="button"
+                      disabled={item.status === "uploading" || item.status === "success"}
+                      onClick={() => updateItem(item.id, { videoType: "premium" })}
+                      className={`flex-1 rounded-lg py-1.5 font-bold transition text-xs flex items-center justify-center gap-1 ${
+                        item.videoType === "premium"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Zap className="h-3 w-3 fill-amber-400 text-amber-400" />
+                      Sponsor (₹6)
+                    </button>
+                  </div>
+
                   {/* Category Selector */}
                   <div>
                     <select
@@ -1202,7 +1381,7 @@ export function BulkVideoUploadView({
                       onChange={(e) => updateItem(item.id, { category: e.target.value })}
                       className="w-full rounded-xl border border-border bg-secondary/30 px-3 py-2 text-xs text-foreground focus:border-sky-500 focus:outline-none disabled:opacity-60"
                     >
-                      {VIDEO_CATEGORIES.map((cat) => (
+                      {categories.map((cat) => (
                         <option key={cat} value={cat}>
                           {cat}
                         </option>
@@ -1466,7 +1645,7 @@ function FreeVideoUploadView({
     return (
       <BulkVideoUploadView
         onBack={() => setUploadTab("single")}
-        onUploaded={onUploaded}
+        {...(onUploaded ? { onUploaded } : {})}
         initialFiles={queuedFilesForBulk}
       />
     );
@@ -1637,6 +1816,25 @@ function FreeVideoUploadView({
         </span>
       </div>
 
+      {/* Mode Switcher: Single Video vs Bulk Upload */}
+      <div className="flex items-center gap-2 p-1 rounded-2xl bg-secondary/60 border border-border">
+        <button
+          type="button"
+          onClick={() => setUploadTab("single")}
+          className="flex-1 py-2 text-xs font-bold rounded-xl transition bg-card text-foreground shadow-sm border border-border"
+        >
+          Single Video Upload
+        </button>
+        <button
+          type="button"
+          onClick={() => setUploadTab("bulk")}
+          className="flex-1 py-2 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground"
+        >
+          <Layers className="h-3.5 w-3.5" />
+          Bulk Video Upload (Multiple Videos)
+        </button>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Format Selector: Short or Long */}
         <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
@@ -1685,6 +1883,7 @@ function FreeVideoUploadView({
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             accept="video/mp4,video/webm,video/ogg,video/quicktime,.mp4,.webm,.ogg,.mov,.m4v"
             onChange={handleFileChange}
             className="hidden"
