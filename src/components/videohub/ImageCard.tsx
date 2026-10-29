@@ -16,12 +16,12 @@ export function ImageCard({ image }: { image: UploadedImage }) {
   return (
     <article className="group cursor-pointer transition-transform duration-300 hover:-translate-y-0.5">
       <Link to="/images-uploaded" className="block">
-        <div className="relative overflow-hidden rounded-2xl bg-muted shadow-card transition-shadow duration-300 group-hover:shadow-lg">
+        <div className="relative aspect-[9/16] w-full overflow-hidden rounded-2xl bg-muted shadow-card transition-shadow duration-300 group-hover:shadow-lg">
           <img
             src={image.imageUrl}
             alt={image.title}
-            width={1280}
-            height={720}
+            width={720}
+            height={1280}
             loading="lazy"
             onError={(e) => {
               const target = e.currentTarget;
@@ -29,14 +29,14 @@ export function ImageCard({ image }: { image: UploadedImage }) {
                 target.src = SVG_FALLBACK_THUMBNAIL;
               }
             }}
-            className="aspect-video w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-          {/* Image Tag Badge */}
+          {/* 9:16 Image Tag Badge */}
           <span className="absolute bottom-2 right-2 rounded-md bg-teal-600/90 backdrop-blur-xs px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase text-white flex items-center gap-1 shadow-sm">
             <ImageIcon className="h-3 w-3" />
-            <span>Image</span>
+            <span>9:16 Image</span>
           </span>
 
           {/* Top Category Badge */}

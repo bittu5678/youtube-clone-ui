@@ -1,7 +1,18 @@
-import { Video, Sparkles, Megaphone, Image as ImageIcon, X, ArrowRight, Zap } from "lucide-react";
+import {
+  Video,
+  Sparkles,
+  Megaphone,
+  Image as ImageIcon,
+  X,
+  ArrowRight,
+  Zap,
+  DollarSign,
+} from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { MainUploadMode } from "@/routes/upload";
+import { useAuth } from "@/lib/auth-context";
+import { getUserWallet, type UserWallet } from "@/lib/ledger-service";
 
 export interface UploadOptionItem {
   id: "free" | "premium" | "ad_promotion" | "image";
@@ -69,6 +80,36 @@ interface UploadOptionsModalProps {
 }
 
 export function UploadOptionsModal({ isOpen, onClose }: UploadOptionsModalProps) {
+  const { user, profile, dbUser } = useAuth();
+  const userId =
+    profile?.user_id || dbUser?.user_id || (user?.email ? user.email.split("@")[0] : null);
+
+  const [wallet, setWallet] = useState<UserWallet | null>(null);
+  const [isLoadingWallet, setIsLoadingWallet] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!userId) {
+      setWallet(null);
+      return;
+    }
+    let isMounted = true;
+    setIsLoadingWallet(true);
+    getUserWallet(userId)
+      .then((w) => {
+        if (isMounted) setWallet(w);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch wallet in UploadOptionsModal:", err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingWallet(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, userId]);
+
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -134,6 +175,35 @@ export function UploadOptionsModal({ isOpen, onClose }: UploadOptionsModalProps)
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+
+        {/* Requirement 1: Total Ads Earning Display Card */}
+        <div className="mb-4 flex items-center justify-between rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 via-card to-card p-3.5 shadow-sm">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <DollarSign className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block truncate">
+                Total Ads Earning
+              </span>
+              <p className="text-xs text-muted-foreground truncate">
+                {user ? "Your verified AdSense & promo revenue" : "Sign in to view real earnings"}
+              </p>
+            </div>
+          </div>
+          <div className="text-right shrink-0 pl-2">
+            <div className="text-lg font-black text-emerald-400 sm:text-xl font-mono">
+              {isLoadingWallet ? (
+                <span className="text-xs text-muted-foreground animate-pulse">Loading...</span>
+              ) : (
+                `₹${(wallet?.adsenseIncome ?? 0).toFixed(2)}`
+              )}
+            </div>
+            <span className="text-[10px] text-muted-foreground block">
+              {user && userId ? `UID: ${userId}` : "₹0.00 base"}
+            </span>
+          </div>
         </div>
 
         {/* 4 Upload Options List */}

@@ -202,7 +202,10 @@ function getInitialCategories() {
   return baseline.map((name, idx) => ({
     id: idx + 1,
     name,
-    slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+    slug: name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, ""),
     created_by: "SYSTEM",
     created_at: "2026-10-01 00:00:00",
   }));
@@ -5273,9 +5276,32 @@ export async function handleApiRequest(
               categories: rows,
             });
           }
-        } catch (_e) {
-          // Fall back gracefully to store baseline
+        } catch (dbErr: any) {
+          const isTableMissing =
+            dbErr?.code === "ER_NO_SUCH_TABLE" ||
+            String(dbErr?.message || "").includes("doesn't exist");
+          if (!isTableMissing && process.env["NODE_ENV"] === "production") {
+            return jsonResponse(
+              {
+                success: false,
+                error:
+                  "Database error while fetching categories: " + (dbErr?.message || "Query failed"),
+              },
+              500,
+            );
+          }
+          // If table is missing, fall back to authoritative baseline catalog below
         }
+      }
+
+      // In production, when database is unavailable or migration is pending,
+      // return clean baseline categories without using local JSON mock data.
+      if (process.env["NODE_ENV"] === "production") {
+        return jsonResponse({
+          success: true,
+          source: "baseline_fallback",
+          categories: getInitialCategories(),
+        });
       }
 
       if (!store.categories || store.categories.length === 0) {
@@ -5341,6 +5367,20 @@ export async function handleApiRequest(
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/^-|-$/g, "") || `cat-${Date.now()}`;
 
+      // In production, persistent MySQL database connection is strictly required.
+      // Return HTTP 503 if the required MySQL pool is unavailable before any category
+      // can be saved to local JSON or in-memory storage.
+      if (process.env["NODE_ENV"] === "production" && !pool) {
+        return jsonResponse(
+          {
+            success: false,
+            error:
+              "Database connection unavailable. In production, category creation requires a persistent database connection.",
+          },
+          503,
+        );
+      }
+
       if (pool) {
         try {
           const [existing]: any = await pool.query(
@@ -5399,6 +5439,17 @@ export async function handleApiRequest(
             return jsonResponse({ success: false, error: "Database error: " + dbErr.message }, 500);
           }
         }
+      }
+
+      if (process.env["NODE_ENV"] === "production") {
+        return jsonResponse(
+          {
+            success: false,
+            error:
+              "Database connection unavailable. In production, category creation requires a persistent database connection.",
+          },
+          503,
+        );
       }
 
       if (!store.categories || store.categories.length === 0) {

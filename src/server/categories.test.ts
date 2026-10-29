@@ -25,7 +25,7 @@ describe("Priority 3: Admin Category Management & Verification Tests", () => {
     const userLoginReq = new Request("http://localhost:3000/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier: "alex@facetube.com", password: "password" }),
+      body: JSON.stringify({ identifier: "alex@facetube.com", password: "password123" }),
     });
     const userLoginRes = await handleApiRequest(userLoginReq);
     assert.ok(userLoginRes, "User login request must return a response");
@@ -256,6 +256,62 @@ describe("Priority 3: Admin Category Management & Verification Tests", () => {
       assert.match(php, /'admin'/);
       assert.match(php, /LOWER\(TRIM\(name\)\) = LOWER\(\?\)/);
       assert.match(php, /INSERT INTO categories/);
+    });
+  });
+
+  // Test Suite 6: Production Safety & Database Fallback Protection Tests
+  describe("6. Production Safety & Database Fallback Protection", () => {
+    it("fails closed with HTTP 503 on category creation when NODE_ENV=production and MySQL pool is unavailable", async () => {
+      const prevEnv = process.env["NODE_ENV"];
+      try {
+        process.env["NODE_ENV"] = "production";
+
+        const req = new Request("http://localhost:3000/api/admin/categories", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${adminToken}`,
+          },
+          body: JSON.stringify({ name: "Cloud Architecture" }),
+        });
+
+        const res = await handleApiRequest(req);
+        assert.ok(res);
+        assert.equal(res.status, 503);
+
+        const data = await res.json();
+        assert.equal(data.success, false);
+        assert.match(data.error, /database connection unavailable/i);
+      } finally {
+        process.env["NODE_ENV"] = prevEnv;
+      }
+    });
+
+    it("returns clean baseline categories in production without silently relying on local JSON storage", async () => {
+      const prevEnv = process.env["NODE_ENV"];
+      try {
+        process.env["NODE_ENV"] = "production";
+
+        const req = new Request("http://localhost:3000/api/categories/list", {
+          method: "GET",
+        });
+
+        const res = await handleApiRequest(req);
+        assert.ok(res);
+        assert.equal(res.status, 200);
+
+        const data = await res.json();
+        assert.equal(data.success, true);
+        assert.equal(data.source, "baseline_fallback");
+        assert.ok(Array.isArray(data.categories));
+        assert.equal(data.categories.length, 13);
+
+        const names = data.categories.map((c: any) => c.name);
+        assert.ok(names.includes("Cartoon"));
+        assert.ok(names.includes("Coding"));
+      } finally {
+        process.env["NODE_ENV"] = prevEnv;
+      }
     });
   });
 });

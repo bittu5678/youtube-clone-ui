@@ -24,6 +24,8 @@ import {
   LayoutGrid,
   Sprout,
   Smile,
+  Radio,
+  Share2,
 } from "lucide-react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
@@ -67,6 +69,10 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const isCategoriesActive = isCartoonActive || isAgricultureActive;
 
   const isHomeActive = currentPath === "/" && !currentCategory;
+  const isLiveActive = currentPath === "/live" || currentPath === "/live-videos";
+  const rawTab = searchParams?.["tab"];
+  const currentTab = typeof rawTab === "string" ? rawTab : "";
+  const isReferAndEarnActive = currentPath === "/profile" && currentTab === "referral-link";
 
   const handleLogout = async () => {
     onNavigate?.();
@@ -105,6 +111,49 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           className={`h-[18px] w-[18px] shrink-0 ${isHomeActive ? "text-white stroke-[2.4]" : ""}`}
         />
         <span className="truncate">Home</span>
+      </Link>
+
+      {/* 2. Live (Exposed Top-Level Sidebar Item) */}
+      <Link
+        to="/live"
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          isLiveActive
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <Radio
+          className={`h-[18px] w-[18px] shrink-0 ${
+            isLiveActive ? "text-white stroke-[2.4]" : "text-red-500 animate-pulse"
+          }`}
+        />
+        <span className="truncate flex-1">Live</span>
+        <span className="rounded-full bg-red-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase text-red-500 tracking-wider">
+          LIVE
+        </span>
+      </Link>
+
+      {/* 3. Refer & Earn (Consolidated link-sharing & referral dashboard) */}
+      <Link
+        to="/profile"
+        search={{ tab: "referral-link" }}
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          isReferAndEarnActive
+            ? "bg-brand text-white shadow-sm font-bold"
+            : "text-foreground/80 hover:translate-x-0.5 hover:bg-secondary hover:text-foreground font-medium"
+        }`}
+      >
+        <Share2
+          className={`h-[18px] w-[18px] shrink-0 ${
+            isReferAndEarnActive ? "text-white stroke-[2.4]" : "text-amber-500"
+          }`}
+        />
+        <span className="truncate flex-1">Refer & Earn</span>
+        <span className="rounded-full border border-amber-400/40 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-500 uppercase tracking-wider">
+          Earn ₹
+        </span>
       </Link>
 
       {/* 2. Referral Members */}

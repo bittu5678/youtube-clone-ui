@@ -22,6 +22,11 @@ import {
   Image as ImageIcon,
   FileImage,
   RefreshCw,
+  X,
+  Trash2,
+  Plus,
+  RotateCcw,
+  SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/videohub/Logo";
@@ -48,7 +53,7 @@ import { recordNewImageUpload, type UploadedImage } from "@/lib/image-service";
 import { initiatePremiumVideoPayment, initiateAdsPromotionPayment } from "@/lib/razorpay-service";
 import { getUserWallet, type UserWallet } from "@/lib/ledger-service";
 
-export type MainUploadMode = "free" | "premium" | "ad_promotion" | "image" | null;
+export type MainUploadMode = "free" | "premium" | "ad_promotion" | "image" | "bulk" | null;
 export type VideoFormatChoice = "short" | "long";
 
 interface UploadSearch {
@@ -60,7 +65,7 @@ export const Route = createFileRoute("/upload")({
   validateSearch: (search: Record<string, unknown>): UploadSearch => {
     const rawMode = search["mode"];
     const rawFormat = search["format"];
-    const validModes: MainUploadMode[] = ["free", "premium", "ad_promotion", "image"];
+    const validModes: MainUploadMode[] = ["free", "premium", "ad_promotion", "image", "bulk"];
     const validFormats: VideoFormatChoice[] = ["short", "long"];
 
     const isModeValid =
@@ -175,6 +180,8 @@ function UploadStudioPage() {
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10 pb-28 lg:pb-16">
         {!activeMode ? (
           <FourOptionsSelectionView onSelect={setMode} wallet={wallet} />
+        ) : activeMode === "bulk" ? (
+          <BulkVideoUploadView onBack={() => setMode(null)} onUploaded={refreshWallet} />
         ) : activeMode === "free" ? (
           <FreeVideoUploadView
             initialFormat={initialFormat}
@@ -250,7 +257,7 @@ function FourOptionsSelectionView({
               Total Ads Earning
             </span>
             <div className="text-2xl sm:text-3xl font-black text-emerald-400 mt-1">
-              ₹{(wallet?.adsenseIncome ?? 4280.5).toFixed(2)}
+              ₹{(wallet?.adsenseIncome ?? 0).toFixed(2)}
             </div>
             <p className="text-[10px] text-muted-foreground mt-0.5">
               Cumulative AdSense & promotion income
@@ -504,6 +511,830 @@ function FourOptionsSelectionView({
           </div>
         </div>
       </div>
+
+      {/* REQUIREMENT 10: BULK VIDEO UPLOAD (Shorts & Long Videos) */}
+      <div className="relative overflow-hidden rounded-3xl border border-sky-500/30 bg-gradient-to-r from-sky-500/15 via-card to-card p-6 sm:p-8 shadow-card hover:border-sky-500/50 transition">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+          <div className="flex items-start gap-4">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-500/30 shadow-inner">
+              <Layers className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-400">
+                Bulk Video Upload · Shorts & Long Videos
+              </div>
+              <h3 className="text-base sm:text-xl font-black text-foreground mt-1">
+                Upload Multiple Videos in One Operation
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1 max-w-2xl leading-relaxed">
+                Batch select multiple files, customize each video&apos;s title, format (Shorts 9:16 or Long 16:9), category, visibility, and thumbnail, with real-time progress indicators and individual retry for failed uploads.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onSelect("bulk")}
+            className="shrink-0 inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-600 px-5 py-3 text-xs font-bold text-white shadow-sm hover:bg-sky-500 transition active:scale-95"
+          >
+            <span>Launch Bulk Studio (₹0)</span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* REQUIREMENT 10: BULK VIDEO UPLOAD VIEW (Shorts & Long Videos · Fee: ₹0)    */
+/* -------------------------------------------------------------------------- */
+export interface BulkVideoItem {
+  id: string;
+  file: File;
+  title: string;
+  description: string;
+  category: string;
+  contentType: ContentType; // "short" | "long"
+  visibility: "public" | "unlisted" | "private";
+  previewUrl: string;
+  detectedDuration: string;
+  capturedThumbnail: string;
+  status: "queued" | "uploading" | "success" | "error";
+  progress: number;
+  errorMessage?: string;
+  publishedVideo?: UploadedVideo;
+}
+
+export function BulkVideoUploadView({
+  onBack,
+  onUploaded,
+  initialFiles,
+}: {
+  onBack: () => void;
+  onUploaded?: () => void;
+  initialFiles?: File[];
+}) {
+  const { user, profile, dbUser } = useAuth();
+  const userId = profile?.user_id || dbUser?.user_id || user?.email?.split("@")[0] || "FT483921";
+  const creatorName =
+    profile?.name || dbUser?.name || user?.user_metadata?.full_name || "Alex Rivera";
+
+  const [queue, setQueue] = useState<BulkVideoItem[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [batchCategory, setBatchCategory] = useState<string>("Entertainment");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const isProcessingRef = useRef(false);
+
+  const addFilesToQueue = useCallback((fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    const validExts = [".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv"];
+    const newItems: BulkVideoItem[] = [];
+
+    for (const file of files) {
+      const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
+      if (!file.type.startsWith("video/") && !validExts.includes(ext)) {
+        toast.error(`"${file.name}" skipped: unsupported format. Please select MP4, WebM, OGG, or MOV.`);
+        continue;
+      }
+      if (file.size > 150 * 1024 * 1024) {
+        toast.error(`"${file.name}" skipped: file size exceeds 150MB limit.`);
+        continue;
+      }
+
+      const itemId = `bulk-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      const cleanTitle = file.name.replace(/\.[^/.]+$/, "");
+      const isShortHint =
+        cleanTitle.toLowerCase().includes("short") || cleanTitle.toLowerCase().includes("reel");
+
+      const previewUrl = URL.createObjectURL(file);
+      const item: BulkVideoItem = {
+        id: itemId,
+        file,
+        title: cleanTitle,
+        description: "",
+        category: "Entertainment",
+        contentType: isShortHint ? "short" : "long",
+        visibility: "public",
+        previewUrl,
+        detectedDuration: isShortHint ? "0:45" : "12:30",
+        capturedThumbnail: "",
+        status: "queued",
+        progress: 0,
+      };
+
+      // Asynchronously extract snapshot thumbnail frame from video
+      captureVideoThumbnail(file)
+        .then((thumb) => {
+          if (thumb) {
+            setQueue((prev) =>
+              prev.map((it) => (it.id === itemId ? { ...it, capturedThumbnail: thumb } : it)),
+            );
+          }
+        })
+        .catch(() => {});
+
+      // Asynchronously detect duration and adjust content type
+      const tempVideo = document.createElement("video");
+      tempVideo.preload = "metadata";
+      tempVideo.src = previewUrl;
+      tempVideo.onloadedmetadata = () => {
+        const sec = Math.round(tempVideo.duration);
+        if (!isNaN(sec) && sec > 0) {
+          const m = Math.floor(sec / 60);
+          const s = sec % 60;
+          const durStr = `${m}:${s.toString().padStart(2, "0")}`;
+          const detectedType: ContentType = sec <= 60 ? "short" : "long";
+          setQueue((prev) =>
+            prev.map((it) =>
+              it.id === itemId
+                ? { ...it, detectedDuration: durStr, contentType: detectedType }
+                : it,
+            ),
+          );
+        }
+      };
+
+      newItems.push(item);
+    }
+
+    if (newItems.length > 0) {
+      setQueue((prev) => [...prev, ...newItems]);
+      toast.success(
+        `Added ${newItems.length} video${newItems.length > 1 ? "s" : ""} to upload queue.`,
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    if (initialFiles && initialFiles.length > 0) {
+      addFilesToQueue(initialFiles);
+    }
+  }, [initialFiles, addFilesToQueue]);
+
+  const handleFilePickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      addFilesToQueue(e.target.files);
+      e.target.value = "";
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      addFilesToQueue(e.dataTransfer.files);
+    }
+  };
+
+  // Upload an individual video item from queue
+  const uploadVideoItem = async (itemId: string): Promise<boolean> => {
+    let targetItem: BulkVideoItem | undefined;
+    setQueue((prev) => {
+      targetItem = prev.find((it) => it.id === itemId);
+      return prev.map((it) =>
+        it.id === itemId
+          ? { ...it, status: "uploading", progress: 15, errorMessage: undefined }
+          : it,
+      );
+    });
+
+    if (!targetItem) return false;
+    const item = targetItem as BulkVideoItem;
+    if (item.status === "success") return true;
+
+    try {
+      // 1. Upload video file to server storage via existing production API
+      const uploadRes = await api.uploads.uploadVideo(item.file);
+      if (!uploadRes || !uploadRes.url) {
+        const serverError =
+          (uploadRes as any)?.error ||
+          (uploadRes as any)?.message ||
+          (uploadRes as any)?.msg ||
+          "Server storage upload failed without a valid video URL.";
+        throw new Error(serverError);
+      }
+
+      setQueue((prev) =>
+        prev.map((it) => (it.id === itemId ? { ...it, progress: 65 } : it)),
+      );
+
+      // 2. Persist thumbnail frame or category fallback
+      let posterUrl = "";
+      try {
+        posterUrl = await captureAndUploadThumbnail(item.file, item.category);
+      } catch (_e) {
+        posterUrl = item.capturedThumbnail || getCategoryFallbackThumbnail(item.category);
+      }
+
+      setQueue((prev) =>
+        prev.map((it) => (it.id === itemId ? { ...it, progress: 85 } : it)),
+      );
+
+      // 3. Persist video record to production database via existing video service
+      const published = await recordNewVideoUpload({
+        userId,
+        creatorName,
+        title: item.title.trim() || item.file.name.replace(/\.[^/.]+$/, ""),
+        description: item.description.trim(),
+        videoUrl: uploadRes.url,
+        thumbnailUrl: posterUrl,
+        videoType: "free",
+        contentType: item.contentType,
+        category: item.category,
+        duration: item.detectedDuration || (item.contentType === "short" ? "0:45" : "12:30"),
+        paymentStatus: "not_required",
+        paymentAmount: 0,
+        visibility: item.visibility,
+      });
+
+      setQueue((prev) =>
+        prev.map((it) =>
+          it.id === itemId
+            ? { ...it, status: "success", progress: 100, publishedVideo: published }
+            : it,
+        ),
+      );
+      toast.success(
+        `Published: "${item.title}" (${item.contentType === "short" ? "Short" : "Long"})`,
+      );
+      onUploaded?.();
+      return true;
+    } catch (err: any) {
+      console.error("Bulk upload item error:", err);
+      const msg = err?.message || "Failed to upload video.";
+      setQueue((prev) =>
+        prev.map((it) =>
+          it.id === itemId
+            ? { ...it, status: "error", progress: 0, errorMessage: msg }
+            : it,
+        ),
+      );
+      return false;
+    }
+  };
+
+  // Process all queued items sequentially (skips already successful items to prevent duplicates)
+  const handleProcessQueue = async () => {
+    if (isProcessingRef.current) return;
+    const queuedItems = queue.filter((it) => it.status === "queued");
+    if (queuedItems.length === 0) {
+      toast.info("No pending videos in queue to upload.");
+      return;
+    }
+
+    isProcessingRef.current = true;
+    setIsProcessing(true);
+
+    try {
+      for (const item of queuedItems) {
+        await uploadVideoItem(item.id);
+      }
+    } finally {
+      isProcessingRef.current = false;
+      setIsProcessing(false);
+    }
+  };
+
+  // Retry an individual failed item without touching completed items
+  const handleRetryItem = async (itemId: string) => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+    setIsProcessing(true);
+
+    try {
+      await uploadVideoItem(itemId);
+    } finally {
+      isProcessingRef.current = false;
+      setIsProcessing(false);
+    }
+  };
+
+  // Retry all failed items
+  const handleRetryAllFailed = async () => {
+    if (isProcessingRef.current) return;
+    const failedItems = queue.filter((it) => it.status === "error");
+    if (failedItems.length === 0) return;
+
+    isProcessingRef.current = true;
+    setIsProcessing(true);
+
+    try {
+      for (const item of failedItems) {
+        await uploadVideoItem(item.id);
+      }
+    } finally {
+      isProcessingRef.current = false;
+      setIsProcessing(false);
+    }
+  };
+
+  const updateItem = (id: string, updates: Partial<BulkVideoItem>) => {
+    setQueue((prev) => prev.map((it) => (it.id === id ? { ...it, ...updates } : it)));
+  };
+
+  const removeItem = (id: string) => {
+    setQueue((prev) => prev.filter((it) => it.id !== id));
+  };
+
+  const clearCompleted = () => {
+    setQueue((prev) => prev.filter((it) => it.status !== "success"));
+  };
+
+  const clearAll = () => {
+    if (queue.some((it) => it.status === "uploading")) {
+      toast.error("Cannot clear queue while uploads are in progress.");
+      return;
+    }
+    setQueue([]);
+  };
+
+  const setAllContentType = (ct: ContentType) => {
+    setQueue((prev) =>
+      prev.map((it) => (it.status === "queued" ? { ...it, contentType: ct } : it)),
+    );
+    toast.info(`Updated all pending items to ${ct === "short" ? "Shorts (9:16)" : "Long Videos (16:9)"}.`);
+  };
+
+  const setAllCategoryToAll = (cat: string) => {
+    setBatchCategory(cat);
+    setQueue((prev) =>
+      prev.map((it) => (it.status === "queued" ? { ...it, category: cat } : it)),
+    );
+    toast.info(`Set category to "${cat}" for all pending videos.`);
+  };
+
+  const queuedCount = queue.filter((it) => it.status === "queued").length;
+  const uploadingCount = queue.filter((it) => it.status === "uploading").length;
+  const completedCount = queue.filter((it) => it.status === "success").length;
+  const errorCount = queue.filter((it) => it.status === "error").length;
+  const totalCount = queue.length;
+
+  return (
+    <div className="space-y-6">
+      {/* Header Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="grid h-9 w-9 place-items-center rounded-full border border-border bg-secondary/60 text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-sky-400">
+              Creator Studio · Batch Mode
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-foreground">Bulk Video Upload</h1>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-bold text-sky-400">
+            Fee: ₹0 · Free Publishing
+          </span>
+          <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-xs font-bold text-purple-400">
+            Shorts & Long Videos
+          </span>
+        </div>
+      </div>
+
+      {/* Multiple Files Picker Dropzone */}
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
+        className="group relative cursor-pointer rounded-3xl border-2 border-dashed border-border bg-card p-8 text-center transition hover:border-sky-500/60 hover:bg-sky-500/5 shadow-card"
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="video/mp4,video/webm,video/ogg,video/quicktime,.mp4,.webm,.ogg,.mov,.m4v"
+          onChange={handleFilePickerChange}
+          className="hidden"
+        />
+
+        <div className="space-y-3">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-sky-500/10 text-sky-400 border border-sky-500/20 group-hover:scale-105 transition-transform">
+            <Layers className="h-7 w-7" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground">
+              Click to select multiple video files or drag and drop here
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Select multiple Shorts and Long videos (MP4, WebM, OGG, MOV up to 150 MB each)
+            </p>
+          </div>
+          <div className="pt-1">
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3.5 py-1.5 text-xs font-bold text-sky-400 shadow-sm">
+              <Plus className="h-3.5 w-3.5" />
+              Add Video Files
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Queue Toolbar & Status Summary */}
+      {totalCount > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 space-y-4 shadow-card">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+              <span className="rounded-lg bg-secondary px-2.5 py-1 text-foreground">
+                Total: {totalCount}
+              </span>
+              {queuedCount > 0 && (
+                <span className="rounded-lg bg-sky-500/15 text-sky-400 px-2.5 py-1">
+                  Ready: {queuedCount}
+                </span>
+              )}
+              {uploadingCount > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-500/15 text-amber-400 px-2.5 py-1">
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  Uploading: {uploadingCount}
+                </span>
+              )}
+              {completedCount > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 text-emerald-400 px-2.5 py-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Completed: {completedCount}
+                </span>
+              )}
+              {errorCount > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-rose-500/15 text-rose-400 px-2.5 py-1">
+                  <AlertCircle className="h-3 w-3" />
+                  Failed: {errorCount}
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {completedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={clearCompleted}
+                  className="rounded-xl border border-border bg-secondary/40 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground"
+                >
+                  Clear Completed
+                </button>
+              )}
+              {errorCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleRetryAllFailed}
+                  disabled={isProcessing}
+                  className="inline-flex items-center gap-1 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-400 hover:bg-rose-500/20 disabled:opacity-50"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Retry Failed ({errorCount})
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={clearAll}
+                disabled={isProcessing}
+                className="rounded-xl border border-border bg-secondary/40 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50"
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+
+          {/* Batch Configuration Strip */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border/60">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-muted-foreground">Quick Batch:</span>
+              <button
+                type="button"
+                onClick={() => setAllContentType("short")}
+                className="rounded-lg border border-border bg-secondary/40 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-secondary"
+              >
+                All Shorts (9:16)
+              </button>
+              <button
+                type="button"
+                onClick={() => setAllContentType("long")}
+                className="rounded-lg border border-border bg-secondary/40 px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-secondary"
+              >
+                All Long Videos (16:9)
+              </button>
+
+              <div className="flex items-center gap-1.5 pl-1">
+                <span className="text-xs text-muted-foreground">Category:</span>
+                <select
+                  value={batchCategory}
+                  onChange={(e) => setAllCategoryToAll(e.target.value)}
+                  className="rounded-lg border border-border bg-secondary/60 px-2 py-1 text-xs text-foreground focus:outline-none"
+                >
+                  {VIDEO_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleProcessQueue}
+              disabled={isProcessing || queuedCount === 0}
+              className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-sky-500 transition shadow-sm disabled:opacity-50"
+            >
+              {isProcessing ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  Uploading Queue...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-3.5 w-3.5" />
+                  Upload Queue ({queuedCount} Pending)
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Queue Items List */}
+      <div className="space-y-4">
+        {queue.map((item, idx) => (
+          <div
+            key={item.id}
+            className={`rounded-2xl border p-4 sm:p-5 transition shadow-sm bg-card ${
+              item.status === "uploading"
+                ? "border-amber-500/60 ring-1 ring-amber-500/30"
+                : item.status === "success"
+                  ? "border-emerald-500/40 bg-emerald-500/5"
+                  : item.status === "error"
+                    ? "border-rose-500/50 bg-rose-500/5"
+                    : "border-border hover:border-border/80"
+            }`}
+          >
+            <div className="flex flex-col lg:flex-row gap-4">
+              {/* Left Column: Video Preview / Frame */}
+              <div className="relative shrink-0 w-full sm:w-48 aspect-video rounded-xl overflow-hidden bg-black/60 border border-border">
+                {item.capturedThumbnail ? (
+                  <img
+                    src={item.capturedThumbnail}
+                    alt={item.title}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <video
+                    src={item.previewUrl}
+                    className="h-full w-full object-contain"
+                    preload="metadata"
+                  />
+                )}
+                <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/80 px-1.5 py-0.5 text-[10px] font-mono font-bold text-white">
+                  {item.detectedDuration}
+                </span>
+                <span
+                  className={`absolute top-1.5 left-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                    item.contentType === "short"
+                      ? "bg-purple-600 text-white"
+                      : "bg-sky-600 text-white"
+                  }`}
+                >
+                  {item.contentType === "short" ? "Short (9:16)" : "Long (16:9)"}
+                </span>
+              </div>
+
+              {/* Middle Column: Metadata Controls */}
+              <div className="flex-1 space-y-3 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-bold text-muted-foreground">#{idx + 1}</span>
+                    <span className="text-xs text-muted-foreground truncate font-mono">
+                      {item.file.name} ({(item.file.size / (1024 * 1024)).toFixed(2)} MB)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Status Badge */}
+                    {item.status === "queued" && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        Queued
+                      </span>
+                    )}
+                    {item.status === "uploading" && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/20 text-amber-400 px-2 py-0.5 text-[11px] font-bold">
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        Uploading {item.progress}%
+                      </span>
+                    )}
+                    {item.status === "success" && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 text-emerald-400 px-2 py-0.5 text-[11px] font-bold">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Published
+                      </span>
+                    )}
+                    {item.status === "error" && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/20 text-rose-400 px-2 py-0.5 text-[11px] font-bold">
+                        <AlertCircle className="h-3 w-3" />
+                        Failed
+                      </span>
+                    )}
+
+                    {item.status !== "uploading" && (
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.id)}
+                        className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        title="Remove from queue"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Title Input */}
+                <div>
+                  <input
+                    type="text"
+                    value={item.title}
+                    disabled={item.status === "uploading" || item.status === "success"}
+                    onChange={(e) => updateItem(item.id, { title: e.target.value })}
+                    placeholder="Video title"
+                    className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-2 text-sm font-semibold text-foreground focus:border-sky-500 focus:outline-none disabled:opacity-60"
+                  />
+                </div>
+
+                {/* Format, Category, Visibility row */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  {/* Format Selector */}
+                  <div className="flex items-center rounded-xl border border-border bg-secondary/30 p-1">
+                    <button
+                      type="button"
+                      disabled={item.status === "uploading" || item.status === "success"}
+                      onClick={() => updateItem(item.id, { contentType: "short" })}
+                      className={`flex-1 rounded-lg py-1.5 font-bold transition ${
+                        item.contentType === "short"
+                          ? "bg-purple-600 text-white shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Short (9:16)
+                    </button>
+                    <button
+                      type="button"
+                      disabled={item.status === "uploading" || item.status === "success"}
+                      onClick={() => updateItem(item.id, { contentType: "long" })}
+                      className={`flex-1 rounded-lg py-1.5 font-bold transition ${
+                        item.contentType === "long"
+                          ? "bg-sky-600 text-white shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Long (16:9)
+                    </button>
+                  </div>
+
+                  {/* Category Selector */}
+                  <div>
+                    <select
+                      value={item.category}
+                      disabled={item.status === "uploading" || item.status === "success"}
+                      onChange={(e) => updateItem(item.id, { category: e.target.value })}
+                      className="w-full rounded-xl border border-border bg-secondary/30 px-3 py-2 text-xs text-foreground focus:border-sky-500 focus:outline-none disabled:opacity-60"
+                    >
+                      {VIDEO_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Visibility Selector */}
+                  <div>
+                    <select
+                      value={item.visibility}
+                      disabled={item.status === "uploading" || item.status === "success"}
+                      onChange={(e) =>
+                        updateItem(item.id, {
+                          visibility: e.target.value as "public" | "unlisted" | "private",
+                        })
+                      }
+                      className="w-full rounded-xl border border-border bg-secondary/30 px-3 py-2 text-xs text-foreground focus:border-sky-500 focus:outline-none disabled:opacity-60"
+                    >
+                      <option value="public">Public</option>
+                      <option value="unlisted">Unlisted</option>
+                      <option value="private">Private</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Description Input */}
+                <div>
+                  <textarea
+                    rows={2}
+                    value={item.description}
+                    disabled={item.status === "uploading" || item.status === "success"}
+                    onChange={(e) => updateItem(item.id, { description: e.target.value })}
+                    placeholder="Description (optional)..."
+                    className="w-full rounded-xl border border-border bg-secondary/30 px-3.5 py-1.5 text-xs text-foreground focus:border-sky-500 focus:outline-none disabled:opacity-60"
+                  />
+                </div>
+
+                {/* Progress Bar (if Uploading) */}
+                {item.status === "uploading" && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] font-mono text-muted-foreground">
+                      <span>Uploading & Processing to Production Storage...</span>
+                      <span>{item.progress}%</span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                      <div
+                        className="h-full bg-gradient-to-r from-sky-500 to-emerald-400 transition-all duration-300"
+                        style={{ width: `${item.progress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Banner with Individual Retry Button */}
+                {item.status === "error" && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-300">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+                      <span className="truncate">{item.errorMessage || "Upload failed."}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRetryItem(item.id)}
+                      disabled={isProcessing}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1 text-xs font-bold text-white hover:bg-rose-500 transition shadow-sm disabled:opacity-50"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Retry Video
+                    </button>
+                  </div>
+                )}
+
+                {/* Success Banner with Watch Video Link */}
+                {item.status === "success" && item.publishedVideo && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                      <span>
+                        Successfully published! Video ID:{" "}
+                        <strong className="font-mono text-foreground">
+                          {item.publishedVideo.id}
+                        </strong>
+                      </span>
+                    </div>
+                    <Link
+                      to="/watch/$videoId"
+                      params={{ videoId: item.publishedVideo.id }}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white hover:bg-emerald-500 transition shadow-sm"
+                    >
+                      <Play className="h-3 w-3 fill-current" />
+                      Watch Video
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Empty State */}
+      {totalCount === 0 && (
+        <div className="rounded-2xl border border-dashed border-border p-10 text-center space-y-2">
+          <FileVideo className="h-10 w-10 mx-auto text-muted-foreground/60" />
+          <h4 className="text-sm font-bold text-foreground">No videos in queue</h4>
+          <p className="text-xs text-muted-foreground">
+            Drop or select multiple video files to start building your bulk upload batch.
+          </p>
+        </div>
+      )}
+
+      {/* Action Footer */}
+      <div className="flex items-center justify-between pt-4 border-t border-border">
+        <button
+          type="button"
+          onClick={onBack}
+          className="rounded-xl border border-border bg-secondary/40 px-6 py-2.5 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground"
+        >
+          Back
+        </button>
+        {totalCount > 0 && (
+          <button
+            type="button"
+            onClick={handleProcessQueue}
+            disabled={isProcessing || queuedCount === 0}
+            className="rounded-xl bg-sky-600 px-8 py-3 text-xs font-bold text-white hover:bg-sky-500 transition shadow-sm disabled:opacity-50"
+          >
+            {isProcessing ? "Uploading Queue..." : `Publish ${queuedCount} Pending Video(s)`}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -525,6 +1356,9 @@ function FreeVideoUploadView({
   const creatorName =
     profile?.name || dbUser?.name || user?.user_metadata?.full_name || "Alex Rivera";
 
+  const [uploadTab, setUploadTab] = useState<"single" | "bulk">("single");
+  const [queuedFilesForBulk, setQueuedFilesForBulk] = useState<File[]>([]);
+
   const [format, setFormat] = useState<VideoFormatChoice>(initialFormat);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -540,7 +1374,16 @@ function FreeVideoUploadView({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    if (files.length > 1) {
+      setQueuedFilesForBulk(Array.from(files));
+      setUploadTab("bulk");
+      return;
+    }
+
+    const file = files[0];
     if (!file) return;
 
     const validExts = [".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv"];
@@ -583,7 +1426,16 @@ function FreeVideoUploadView({
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    if (files.length > 1) {
+      setQueuedFilesForBulk(Array.from(files));
+      setUploadTab("bulk");
+      return;
+    }
+
+    const file = files[0];
     if (!file) return;
 
     const validExts = [".mp4", ".webm", ".ogg", ".mov", ".m4v", ".mkv"];
@@ -609,6 +1461,16 @@ function FreeVideoUploadView({
       if (thumb) setCapturedThumbnail(thumb);
     });
   };
+
+  if (uploadTab === "bulk") {
+    return (
+      <BulkVideoUploadView
+        onBack={() => setUploadTab("single")}
+        onUploaded={onUploaded}
+        initialFiles={queuedFilesForBulk}
+      />
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

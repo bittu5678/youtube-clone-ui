@@ -254,9 +254,7 @@ function AdminPage() {
       return;
     }
 
-    const isDup = categoriesList.some(
-      (c) => c.name.toLowerCase() === trimmed.toLowerCase(),
-    );
+    const isDup = categoriesList.some((c) => c.name.toLowerCase() === trimmed.toLowerCase());
     if (isDup) {
       const msg = `Category "${trimmed}" already exists.`;
       setCategoryError(msg);
@@ -589,7 +587,9 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
               </div>
               <p className="mt-3 text-2xl font-black">{categoriesList.length}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {categoriesSource === "database" ? "Database synchronized" : "Baseline active (migration pending)"}
+                {categoriesSource === "database"
+                  ? "Database synchronized"
+                  : "Baseline active (migration pending)"}
               </p>
             </div>
 
@@ -1194,8 +1194,8 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                 <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 font-medium">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                   <span>
-                    Synchronized with Hostinger MySQL{" "}
-                    <code className="font-mono">categories</code> table.
+                    Synchronized with Hostinger MySQL <code className="font-mono">categories</code>{" "}
+                    table.
                   </span>
                 </div>
               )}

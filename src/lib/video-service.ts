@@ -70,6 +70,7 @@ export interface UploadedVideo {
   isPromoted: boolean;
   promotionPlan?: string | undefined;
   promotionExpiresAt?: string | undefined;
+  visibility?: "public" | "unlisted" | "private";
   createdAt: string;
   updatedAt: string;
 }
@@ -519,6 +520,7 @@ export async function recordNewVideoUpload(params: {
   paymentStatus?: VideoPaymentStatus;
   paymentId?: string;
   paymentAmount?: number;
+  visibility?: "public" | "unlisted" | "private";
 }): Promise<UploadedVideo> {
   const isPremium = params.videoType === "premium";
 
@@ -550,6 +552,7 @@ export async function recordNewVideoUpload(params: {
     ...(params.paymentId ? { paymentId: params.paymentId } : {}),
     paymentAmount: isPremium ? (params.paymentAmount ?? 6) : 0,
     isPromoted: false,
+    visibility: params.visibility || "public",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -570,6 +573,7 @@ export async function recordNewVideoUpload(params: {
     payment_status: newVideo.paymentStatus,
     payment_id: newVideo.paymentId,
     payment_amount: newVideo.paymentAmount,
+    visibility: newVideo.visibility,
     is_promoted: false,
   });
 
