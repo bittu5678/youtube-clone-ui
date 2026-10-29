@@ -107,8 +107,15 @@ function facetubeApiDevPlugin(): Plugin {
 
             const webReq = new Request(fullUrl.toString(), reqInit);
 
-            const { handleApiRequest } = await import("./src/server/api-handler.ts");
-            const response = await handleApiRequest(webReq);
+            const { isRemotePhpApiEnabled, proxyHostingerApiRequest } =
+              await import("./src/server/hostinger-proxy.ts");
+            let response: Response | null = null;
+            if (isRemotePhpApiEnabled()) {
+              response = await proxyHostingerApiRequest(webReq);
+            } else {
+              const { handleApiRequest } = await import("./src/server/api-handler.ts");
+              response = await handleApiRequest(webReq);
+            }
             if (response) {
               res.statusCode = response.status;
               response.headers.forEach((val, key) => {

@@ -117,7 +117,7 @@ try {
 
     // 7. Dispatch Password Reset Link via configured SMTP
     $appBaseUrl = getenv('APP_URL') ?: 'https://facetube.online';
-    $resetLink = rtrim($appBaseUrl, '/') . '/auth?mode=reset&token=' . urlencode($rawToken) . '&email=' . urlencode($email);
+    $resetLink = rtrim($appBaseUrl, '/') . '/reset-password?token=' . urlencode($rawToken) . '&email=' . urlencode($email);
 
     try {
         sendPasswordResetEmailPhp($user['name'], $email, $user['user_id'], $resetLink);

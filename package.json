@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "tsx --test src/server/payments.test.ts"
+    "test": "tsx --test src/server/payments.test.ts src/server/auth-session.test.ts"
   },
   "engines": {
     "node": ">=22.12.0"

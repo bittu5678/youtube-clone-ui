@@ -10,7 +10,42 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AdsPromotionsRouteImport } from './routes/ads-promotions'
+import { Route as AdsenseIncomeRouteImport } from './routes/adsense-income'
+import { Route as AdvertisementVideosRouteImport } from './routes/advertisement-videos'
+import { Route as AffiliateIncomeRouteImport } from './routes/affiliate-income'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as DirectReferralIncomeRouteImport } from './routes/direct-referral-income'
+import { Route as ExploreRouteImport } from './routes/explore'
+import { Route as FreeVideosRouteImport } from './routes/free-videos'
+import { Route as GlobalIncomeRouteImport } from './routes/global-income'
+import { Route as HelpRouteImport } from './routes/help'
+import { Route as HistoryRouteImport } from './routes/history'
+import { Route as ImagesUploadedRouteImport } from './routes/images-uploaded'
+import { Route as IncomeRouteImport } from './routes/income'
+import { Route as LikedVideosRouteImport } from './routes/liked-videos'
+import { Route as LiveRouteImport } from './routes/live'
+import { Route as LiveVideosRouteImport } from './routes/live-videos'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as MyCertificateRouteImport } from './routes/my-certificate'
+import { Route as PremiumVideosRouteImport } from './routes/premium-videos'
+import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as ReferralIncomeRouteImport } from './routes/referral-income'
+import { Route as ReferralMembersRouteImport } from './routes/referral-members'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ShortVideosRouteImport } from './routes/short-videos'
+import { Route as ShortsRouteImport } from './routes/shorts'
+import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
+import { Route as TeamIncomeRouteImport } from './routes/team-income'
+import { Route as TeamMembersRouteImport } from './routes/team-members'
+import { Route as UploadRouteImport } from './routes/upload'
+import { Route as WalletBalanceRouteImport } from './routes/wallet-balance'
+import { Route as WatchLaterRouteImport } from './routes/watch-later'
+import { Route as WithdrawalBalanceRouteImport } from './routes/withdrawal-balance'
+import { Route as YourVideosRouteImport } from './routes/your-videos'
 import { Route as WatchVideoIdRouteImport } from './routes/watch.$videoId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -18,9 +53,184 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdsPromotionsRoute = AdsPromotionsRouteImport.update({
+  id: '/ads-promotions',
+  path: '/ads-promotions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdsenseIncomeRoute = AdsenseIncomeRouteImport.update({
+  id: '/adsense-income',
+  path: '/adsense-income',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdvertisementVideosRoute = AdvertisementVideosRouteImport.update({
+  id: '/advertisement-videos',
+  path: '/advertisement-videos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AffiliateIncomeRoute = AffiliateIncomeRouteImport.update({
+  id: '/affiliate-income',
+  path: '/affiliate-income',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DirectReferralIncomeRoute = DirectReferralIncomeRouteImport.update({
+  id: '/direct-referral-income',
+  path: '/direct-referral-income',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExploreRoute = ExploreRouteImport.update({
+  id: '/explore',
+  path: '/explore',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FreeVideosRoute = FreeVideosRouteImport.update({
+  id: '/free-videos',
+  path: '/free-videos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GlobalIncomeRoute = GlobalIncomeRouteImport.update({
+  id: '/global-income',
+  path: '/global-income',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImagesUploadedRoute = ImagesUploadedRouteImport.update({
+  id: '/images-uploaded',
+  path: '/images-uploaded',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IncomeRoute = IncomeRouteImport.update({
+  id: '/income',
+  path: '/income',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LikedVideosRoute = LikedVideosRouteImport.update({
+  id: '/liked-videos',
+  path: '/liked-videos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LiveRoute = LiveRouteImport.update({
+  id: '/live',
+  path: '/live',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LiveVideosRoute = LiveVideosRouteImport.update({
+  id: '/live-videos',
+  path: '/live-videos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MyCertificateRoute = MyCertificateRouteImport.update({
+  id: '/my-certificate',
+  path: '/my-certificate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PremiumVideosRoute = PremiumVideosRouteImport.update({
+  id: '/premium-videos',
+  path: '/premium-videos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReferralIncomeRoute = ReferralIncomeRouteImport.update({
+  id: '/referral-income',
+  path: '/referral-income',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReferralMembersRoute = ReferralMembersRouteImport.update({
+  id: '/referral-members',
+  path: '/referral-members',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShortVideosRoute = ShortVideosRouteImport.update({
+  id: '/short-videos',
+  path: '/short-videos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShortsRoute = ShortsRouteImport.update({
+  id: '/shorts',
+  path: '/shorts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SubscriptionsRoute = SubscriptionsRouteImport.update({
+  id: '/subscriptions',
+  path: '/subscriptions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeamIncomeRoute = TeamIncomeRouteImport.update({
+  id: '/team-income',
+  path: '/team-income',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeamMembersRoute = TeamMembersRouteImport.update({
+  id: '/team-members',
+  path: '/team-members',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UploadRoute = UploadRouteImport.update({
+  id: '/upload',
+  path: '/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WalletBalanceRoute = WalletBalanceRouteImport.update({
+  id: '/wallet-balance',
+  path: '/wallet-balance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WatchLaterRoute = WatchLaterRouteImport.update({
+  id: '/watch-later',
+  path: '/watch-later',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WithdrawalBalanceRoute = WithdrawalBalanceRouteImport.update({
+  id: '/withdrawal-balance',
+  path: '/withdrawal-balance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const YourVideosRoute = YourVideosRouteImport.update({
+  id: '/your-videos',
+  path: '/your-videos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WatchVideoIdRoute = WatchVideoIdRouteImport.update({
@@ -31,31 +241,286 @@ const WatchVideoIdRoute = WatchVideoIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/ads-promotions': typeof AdsPromotionsRoute
+  '/adsense-income': typeof AdsenseIncomeRoute
+  '/advertisement-videos': typeof AdvertisementVideosRoute
+  '/affiliate-income': typeof AffiliateIncomeRoute
   '/auth': typeof AuthRoute
+  '/dashboard': typeof DashboardRoute
+  '/direct-referral-income': typeof DirectReferralIncomeRoute
+  '/explore': typeof ExploreRoute
+  '/free-videos': typeof FreeVideosRoute
+  '/global-income': typeof GlobalIncomeRoute
+  '/help': typeof HelpRoute
+  '/history': typeof HistoryRoute
+  '/images-uploaded': typeof ImagesUploadedRoute
+  '/income': typeof IncomeRoute
+  '/liked-videos': typeof LikedVideosRoute
+  '/live': typeof LiveRoute
+  '/live-videos': typeof LiveVideosRoute
+  '/login': typeof LoginRoute
+  '/my-certificate': typeof MyCertificateRoute
+  '/premium-videos': typeof PremiumVideosRoute
+  '/profile': typeof ProfileRoute
+  '/referral-income': typeof ReferralIncomeRoute
+  '/referral-members': typeof ReferralMembersRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/settings': typeof SettingsRoute
+  '/short-videos': typeof ShortVideosRoute
+  '/shorts': typeof ShortsRoute
+  '/subscriptions': typeof SubscriptionsRoute
+  '/team-income': typeof TeamIncomeRoute
+  '/team-members': typeof TeamMembersRoute
+  '/upload': typeof UploadRoute
+  '/wallet-balance': typeof WalletBalanceRoute
+  '/watch-later': typeof WatchLaterRoute
+  '/withdrawal-balance': typeof WithdrawalBalanceRoute
+  '/your-videos': typeof YourVideosRoute
   '/watch/$videoId': typeof WatchVideoIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/ads-promotions': typeof AdsPromotionsRoute
+  '/adsense-income': typeof AdsenseIncomeRoute
+  '/advertisement-videos': typeof AdvertisementVideosRoute
+  '/affiliate-income': typeof AffiliateIncomeRoute
   '/auth': typeof AuthRoute
+  '/dashboard': typeof DashboardRoute
+  '/direct-referral-income': typeof DirectReferralIncomeRoute
+  '/explore': typeof ExploreRoute
+  '/free-videos': typeof FreeVideosRoute
+  '/global-income': typeof GlobalIncomeRoute
+  '/help': typeof HelpRoute
+  '/history': typeof HistoryRoute
+  '/images-uploaded': typeof ImagesUploadedRoute
+  '/income': typeof IncomeRoute
+  '/liked-videos': typeof LikedVideosRoute
+  '/live': typeof LiveRoute
+  '/live-videos': typeof LiveVideosRoute
+  '/login': typeof LoginRoute
+  '/my-certificate': typeof MyCertificateRoute
+  '/premium-videos': typeof PremiumVideosRoute
+  '/profile': typeof ProfileRoute
+  '/referral-income': typeof ReferralIncomeRoute
+  '/referral-members': typeof ReferralMembersRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/settings': typeof SettingsRoute
+  '/short-videos': typeof ShortVideosRoute
+  '/shorts': typeof ShortsRoute
+  '/subscriptions': typeof SubscriptionsRoute
+  '/team-income': typeof TeamIncomeRoute
+  '/team-members': typeof TeamMembersRoute
+  '/upload': typeof UploadRoute
+  '/wallet-balance': typeof WalletBalanceRoute
+  '/watch-later': typeof WatchLaterRoute
+  '/withdrawal-balance': typeof WithdrawalBalanceRoute
+  '/your-videos': typeof YourVideosRoute
   '/watch/$videoId': typeof WatchVideoIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/ads-promotions': typeof AdsPromotionsRoute
+  '/adsense-income': typeof AdsenseIncomeRoute
+  '/advertisement-videos': typeof AdvertisementVideosRoute
+  '/affiliate-income': typeof AffiliateIncomeRoute
   '/auth': typeof AuthRoute
+  '/dashboard': typeof DashboardRoute
+  '/direct-referral-income': typeof DirectReferralIncomeRoute
+  '/explore': typeof ExploreRoute
+  '/free-videos': typeof FreeVideosRoute
+  '/global-income': typeof GlobalIncomeRoute
+  '/help': typeof HelpRoute
+  '/history': typeof HistoryRoute
+  '/images-uploaded': typeof ImagesUploadedRoute
+  '/income': typeof IncomeRoute
+  '/liked-videos': typeof LikedVideosRoute
+  '/live': typeof LiveRoute
+  '/live-videos': typeof LiveVideosRoute
+  '/login': typeof LoginRoute
+  '/my-certificate': typeof MyCertificateRoute
+  '/premium-videos': typeof PremiumVideosRoute
+  '/profile': typeof ProfileRoute
+  '/referral-income': typeof ReferralIncomeRoute
+  '/referral-members': typeof ReferralMembersRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/settings': typeof SettingsRoute
+  '/short-videos': typeof ShortVideosRoute
+  '/shorts': typeof ShortsRoute
+  '/subscriptions': typeof SubscriptionsRoute
+  '/team-income': typeof TeamIncomeRoute
+  '/team-members': typeof TeamMembersRoute
+  '/upload': typeof UploadRoute
+  '/wallet-balance': typeof WalletBalanceRoute
+  '/watch-later': typeof WatchLaterRoute
+  '/withdrawal-balance': typeof WithdrawalBalanceRoute
+  '/your-videos': typeof YourVideosRoute
   '/watch/$videoId': typeof WatchVideoIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/watch/$videoId'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/ads-promotions'
+    | '/adsense-income'
+    | '/advertisement-videos'
+    | '/affiliate-income'
+    | '/auth'
+    | '/dashboard'
+    | '/direct-referral-income'
+    | '/explore'
+    | '/free-videos'
+    | '/global-income'
+    | '/help'
+    | '/history'
+    | '/images-uploaded'
+    | '/income'
+    | '/liked-videos'
+    | '/live'
+    | '/live-videos'
+    | '/login'
+    | '/my-certificate'
+    | '/premium-videos'
+    | '/profile'
+    | '/referral-income'
+    | '/referral-members'
+    | '/reset-password'
+    | '/settings'
+    | '/short-videos'
+    | '/shorts'
+    | '/subscriptions'
+    | '/team-income'
+    | '/team-members'
+    | '/upload'
+    | '/wallet-balance'
+    | '/watch-later'
+    | '/withdrawal-balance'
+    | '/your-videos'
+    | '/watch/$videoId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/watch/$videoId'
-  id: '__root__' | '/' | '/auth' | '/watch/$videoId'
+  to:
+    | '/'
+    | '/admin'
+    | '/ads-promotions'
+    | '/adsense-income'
+    | '/advertisement-videos'
+    | '/affiliate-income'
+    | '/auth'
+    | '/dashboard'
+    | '/direct-referral-income'
+    | '/explore'
+    | '/free-videos'
+    | '/global-income'
+    | '/help'
+    | '/history'
+    | '/images-uploaded'
+    | '/income'
+    | '/liked-videos'
+    | '/live'
+    | '/live-videos'
+    | '/login'
+    | '/my-certificate'
+    | '/premium-videos'
+    | '/profile'
+    | '/referral-income'
+    | '/referral-members'
+    | '/reset-password'
+    | '/settings'
+    | '/short-videos'
+    | '/shorts'
+    | '/subscriptions'
+    | '/team-income'
+    | '/team-members'
+    | '/upload'
+    | '/wallet-balance'
+    | '/watch-later'
+    | '/withdrawal-balance'
+    | '/your-videos'
+    | '/watch/$videoId'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/ads-promotions'
+    | '/adsense-income'
+    | '/advertisement-videos'
+    | '/affiliate-income'
+    | '/auth'
+    | '/dashboard'
+    | '/direct-referral-income'
+    | '/explore'
+    | '/free-videos'
+    | '/global-income'
+    | '/help'
+    | '/history'
+    | '/images-uploaded'
+    | '/income'
+    | '/liked-videos'
+    | '/live'
+    | '/live-videos'
+    | '/login'
+    | '/my-certificate'
+    | '/premium-videos'
+    | '/profile'
+    | '/referral-income'
+    | '/referral-members'
+    | '/reset-password'
+    | '/settings'
+    | '/short-videos'
+    | '/shorts'
+    | '/subscriptions'
+    | '/team-income'
+    | '/team-members'
+    | '/upload'
+    | '/wallet-balance'
+    | '/watch-later'
+    | '/withdrawal-balance'
+    | '/your-videos'
+    | '/watch/$videoId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
+  AdsPromotionsRoute: typeof AdsPromotionsRoute
+  AdsenseIncomeRoute: typeof AdsenseIncomeRoute
+  AdvertisementVideosRoute: typeof AdvertisementVideosRoute
+  AffiliateIncomeRoute: typeof AffiliateIncomeRoute
   AuthRoute: typeof AuthRoute
+  DashboardRoute: typeof DashboardRoute
+  DirectReferralIncomeRoute: typeof DirectReferralIncomeRoute
+  ExploreRoute: typeof ExploreRoute
+  FreeVideosRoute: typeof FreeVideosRoute
+  GlobalIncomeRoute: typeof GlobalIncomeRoute
+  HelpRoute: typeof HelpRoute
+  HistoryRoute: typeof HistoryRoute
+  ImagesUploadedRoute: typeof ImagesUploadedRoute
+  IncomeRoute: typeof IncomeRoute
+  LikedVideosRoute: typeof LikedVideosRoute
+  LiveRoute: typeof LiveRoute
+  LiveVideosRoute: typeof LiveVideosRoute
+  LoginRoute: typeof LoginRoute
+  MyCertificateRoute: typeof MyCertificateRoute
+  PremiumVideosRoute: typeof PremiumVideosRoute
+  ProfileRoute: typeof ProfileRoute
+  ReferralIncomeRoute: typeof ReferralIncomeRoute
+  ReferralMembersRoute: typeof ReferralMembersRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
+  SettingsRoute: typeof SettingsRoute
+  ShortVideosRoute: typeof ShortVideosRoute
+  ShortsRoute: typeof ShortsRoute
+  SubscriptionsRoute: typeof SubscriptionsRoute
+  TeamIncomeRoute: typeof TeamIncomeRoute
+  TeamMembersRoute: typeof TeamMembersRoute
+  UploadRoute: typeof UploadRoute
+  WalletBalanceRoute: typeof WalletBalanceRoute
+  WatchLaterRoute: typeof WatchLaterRoute
+  WithdrawalBalanceRoute: typeof WithdrawalBalanceRoute
+  YourVideosRoute: typeof YourVideosRoute
   WatchVideoIdRoute: typeof WatchVideoIdRoute
 }
 
@@ -68,11 +533,256 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ads-promotions': {
+      id: '/ads-promotions'
+      path: '/ads-promotions'
+      fullPath: '/ads-promotions'
+      preLoaderRoute: typeof AdsPromotionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/adsense-income': {
+      id: '/adsense-income'
+      path: '/adsense-income'
+      fullPath: '/adsense-income'
+      preLoaderRoute: typeof AdsenseIncomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/advertisement-videos': {
+      id: '/advertisement-videos'
+      path: '/advertisement-videos'
+      fullPath: '/advertisement-videos'
+      preLoaderRoute: typeof AdvertisementVideosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/affiliate-income': {
+      id: '/affiliate-income'
+      path: '/affiliate-income'
+      fullPath: '/affiliate-income'
+      preLoaderRoute: typeof AffiliateIncomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/direct-referral-income': {
+      id: '/direct-referral-income'
+      path: '/direct-referral-income'
+      fullPath: '/direct-referral-income'
+      preLoaderRoute: typeof DirectReferralIncomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/explore': {
+      id: '/explore'
+      path: '/explore'
+      fullPath: '/explore'
+      preLoaderRoute: typeof ExploreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/free-videos': {
+      id: '/free-videos'
+      path: '/free-videos'
+      fullPath: '/free-videos'
+      preLoaderRoute: typeof FreeVideosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/global-income': {
+      id: '/global-income'
+      path: '/global-income'
+      fullPath: '/global-income'
+      preLoaderRoute: typeof GlobalIncomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/images-uploaded': {
+      id: '/images-uploaded'
+      path: '/images-uploaded'
+      fullPath: '/images-uploaded'
+      preLoaderRoute: typeof ImagesUploadedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/income': {
+      id: '/income'
+      path: '/income'
+      fullPath: '/income'
+      preLoaderRoute: typeof IncomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/liked-videos': {
+      id: '/liked-videos'
+      path: '/liked-videos'
+      fullPath: '/liked-videos'
+      preLoaderRoute: typeof LikedVideosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/live': {
+      id: '/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof LiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/live-videos': {
+      id: '/live-videos'
+      path: '/live-videos'
+      fullPath: '/live-videos'
+      preLoaderRoute: typeof LiveVideosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/my-certificate': {
+      id: '/my-certificate'
+      path: '/my-certificate'
+      fullPath: '/my-certificate'
+      preLoaderRoute: typeof MyCertificateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/premium-videos': {
+      id: '/premium-videos'
+      path: '/premium-videos'
+      fullPath: '/premium-videos'
+      preLoaderRoute: typeof PremiumVideosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/referral-income': {
+      id: '/referral-income'
+      path: '/referral-income'
+      fullPath: '/referral-income'
+      preLoaderRoute: typeof ReferralIncomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/referral-members': {
+      id: '/referral-members'
+      path: '/referral-members'
+      fullPath: '/referral-members'
+      preLoaderRoute: typeof ReferralMembersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/short-videos': {
+      id: '/short-videos'
+      path: '/short-videos'
+      fullPath: '/short-videos'
+      preLoaderRoute: typeof ShortVideosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shorts': {
+      id: '/shorts'
+      path: '/shorts'
+      fullPath: '/shorts'
+      preLoaderRoute: typeof ShortsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/subscriptions': {
+      id: '/subscriptions'
+      path: '/subscriptions'
+      fullPath: '/subscriptions'
+      preLoaderRoute: typeof SubscriptionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/team-income': {
+      id: '/team-income'
+      path: '/team-income'
+      fullPath: '/team-income'
+      preLoaderRoute: typeof TeamIncomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/team-members': {
+      id: '/team-members'
+      path: '/team-members'
+      fullPath: '/team-members'
+      preLoaderRoute: typeof TeamMembersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/upload': {
+      id: '/upload'
+      path: '/upload'
+      fullPath: '/upload'
+      preLoaderRoute: typeof UploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/wallet-balance': {
+      id: '/wallet-balance'
+      path: '/wallet-balance'
+      fullPath: '/wallet-balance'
+      preLoaderRoute: typeof WalletBalanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/watch-later': {
+      id: '/watch-later'
+      path: '/watch-later'
+      fullPath: '/watch-later'
+      preLoaderRoute: typeof WatchLaterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/withdrawal-balance': {
+      id: '/withdrawal-balance'
+      path: '/withdrawal-balance'
+      fullPath: '/withdrawal-balance'
+      preLoaderRoute: typeof WithdrawalBalanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/your-videos': {
+      id: '/your-videos'
+      path: '/your-videos'
+      fullPath: '/your-videos'
+      preLoaderRoute: typeof YourVideosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/watch/$videoId': {
@@ -87,7 +797,42 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
+  AdsPromotionsRoute: AdsPromotionsRoute,
+  AdsenseIncomeRoute: AdsenseIncomeRoute,
+  AdvertisementVideosRoute: AdvertisementVideosRoute,
+  AffiliateIncomeRoute: AffiliateIncomeRoute,
   AuthRoute: AuthRoute,
+  DashboardRoute: DashboardRoute,
+  DirectReferralIncomeRoute: DirectReferralIncomeRoute,
+  ExploreRoute: ExploreRoute,
+  FreeVideosRoute: FreeVideosRoute,
+  GlobalIncomeRoute: GlobalIncomeRoute,
+  HelpRoute: HelpRoute,
+  HistoryRoute: HistoryRoute,
+  ImagesUploadedRoute: ImagesUploadedRoute,
+  IncomeRoute: IncomeRoute,
+  LikedVideosRoute: LikedVideosRoute,
+  LiveRoute: LiveRoute,
+  LiveVideosRoute: LiveVideosRoute,
+  LoginRoute: LoginRoute,
+  MyCertificateRoute: MyCertificateRoute,
+  PremiumVideosRoute: PremiumVideosRoute,
+  ProfileRoute: ProfileRoute,
+  ReferralIncomeRoute: ReferralIncomeRoute,
+  ReferralMembersRoute: ReferralMembersRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
+  SettingsRoute: SettingsRoute,
+  ShortVideosRoute: ShortVideosRoute,
+  ShortsRoute: ShortsRoute,
+  SubscriptionsRoute: SubscriptionsRoute,
+  TeamIncomeRoute: TeamIncomeRoute,
+  TeamMembersRoute: TeamMembersRoute,
+  UploadRoute: UploadRoute,
+  WalletBalanceRoute: WalletBalanceRoute,
+  WatchLaterRoute: WatchLaterRoute,
+  WithdrawalBalanceRoute: WithdrawalBalanceRoute,
+  YourVideosRoute: YourVideosRoute,
   WatchVideoIdRoute: WatchVideoIdRoute,
 }
 export const routeTree = rootRouteImport

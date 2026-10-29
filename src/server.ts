@@ -55,15 +55,13 @@ export default {
       }
 
       if (url.pathname.startsWith("/api")) {
-        const useRemote =
-          (env &&
-            typeof env === "object" &&
-            (env as Record<string, string | undefined>)["USE_REMOTE_PHP_API"] === "true") ||
-          process.env["USE_REMOTE_PHP_API"] === "true";
+        const { isRemotePhpApiEnabled, proxyHostingerApiRequest } =
+          await import("./server/hostinger-proxy.ts");
+        const useRemote = isRemotePhpApiEnabled(
+          env && typeof env === "object" ? (env as Record<string, string | undefined>) : undefined,
+        );
         if (useRemote) {
-          const targetUrl = new URL(url.pathname + url.search, "https://api.facetube.online");
-          const proxyReq = new Request(targetUrl.toString(), request);
-          return await fetch(proxyReq);
+          return await proxyHostingerApiRequest(request);
         }
         const { handleApiRequest } = await import("./server/api-handler.ts");
         const apiResponse = await handleApiRequest(

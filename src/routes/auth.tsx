@@ -28,7 +28,18 @@ import { generateWelcomeEmailContent, sendWelcomeEmail } from "@/lib/email-servi
 import { api } from "@/lib/api";
 import type { DbUser, SignUpParams } from "@/types/auth";
 
+export interface AuthSearch {
+  mode?: string | undefined;
+  token?: string | undefined;
+  email?: string | undefined;
+}
+
 export const Route = createFileRoute("/auth")({
+  validateSearch: (search: Record<string, unknown>): AuthSearch => ({
+    mode: typeof search["mode"] === "string" ? search["mode"] : undefined,
+    token: typeof search["token"] === "string" ? search["token"] : undefined,
+    email: typeof search["email"] === "string" ? search["email"] : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Sign in or Create Account — FaceTube" },
@@ -73,7 +84,22 @@ function Field({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const searchParams = Route.useSearch();
   const { user, profile, role, isAdmin, signIn, signUp, signOut } = useAuth();
+
+  // Backward compatibility: If redirected with mode=reset and token, navigate to /reset-password
+  useEffect(() => {
+    if (searchParams.mode === "reset" && searchParams.token) {
+      navigate({
+        to: "/reset-password",
+        search: {
+          token: searchParams.token,
+          email: searchParams.email,
+        },
+        replace: true,
+      });
+    }
+  }, [searchParams.mode, searchParams.token, searchParams.email, navigate]);
 
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [showPassword, setShowPassword] = useState(false);
@@ -714,7 +740,9 @@ function AuthPage() {
                     key={p}
                     type="button"
                     onClick={() => {
-                      toast.info(`${p} sign-in is not configured. Please enter your User ID or Email and password.`);
+                      toast.info(
+                        `${p} sign-in is not configured. Please enter your User ID or Email and password.`,
+                      );
                     }}
                     className="h-11 rounded-xl border border-border text-sm font-semibold text-foreground transition hover:border-brand/40 hover:bg-secondary"
                   >

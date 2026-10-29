@@ -155,7 +155,10 @@ export async function apiFetch<T = unknown>(
       (typeof data === "object" && (data?.error || data?.message || data?.msg)) ||
       (typeof data === "string" && data) ||
       `HTTP error ${res.status}: ${res.statusText}`;
-    throw new Error(errorMsg);
+    const err = new Error(errorMsg) as Error & { status?: number; data?: unknown };
+    err.status = res.status;
+    err.data = data;
+    throw err;
   }
 
   return data as T;

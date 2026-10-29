@@ -24,11 +24,30 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_SESSION_KEY = "facetube_session_v2";
 
+function getCachedSession(): {
+  user: User | null;
+  profile: Profile | null;
+  dbUser: DbUser | null;
+  role: RoleType;
+} | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const savedSession = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
+    if (savedSession) {
+      return JSON.parse(savedSession);
+    }
+  } catch {
+    // Storage unavailable
+  }
+  return null;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [dbUser, setDbUser] = useState<DbUser | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [role, setRole] = useState<RoleType>("user");
+  const cached = getCachedSession();
+  const [user, setUser] = useState<User | null>(cached?.user || null);
+  const [dbUser, setDbUser] = useState<DbUser | null>(cached?.dbUser || null);
+  const [profile, setProfile] = useState<Profile | null>(cached?.profile || null);
+  const [role, setRole] = useState<RoleType>(cached?.role || "user");
   const [isLoading, setIsLoading] = useState(true);
   const [usersList, setUsersList] = useState<
     (UserWithRole & { password?: string; user_id?: string })[]
@@ -84,24 +103,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     syncUsersList();
   }, [syncUsersList]);
 
-  const restoreLocalSession = () => {
+  const restoreLocalSession = useCallback(() => {
     try {
       const savedSession = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
       if (savedSession) {
         const parsed = JSON.parse(savedSession);
-        setUser(parsed.user);
-        setProfile(parsed.profile);
+        setUser(parsed.user || null);
+        setProfile(parsed.profile || null);
         setDbUser(parsed.dbUser || null);
         setRole(parsed.role || "user");
+        return parsed;
       }
     } catch (_e) {
       // Storage unavailable
     }
-  };
+    return null;
+  }, []);
 
   // Initialization & Auth Verification from PHP backend
   useEffect(() => {
     syncUsersList();
+    const restored = restoreLocalSession();
 
     // Check current active session with PHP backend
     api.auth
@@ -153,12 +175,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setProfile(newProfile);
           setDbUser(newDbUser);
           setRole(resolvedRole);
+
+          try {
+            localStorage.setItem(
+              LOCAL_STORAGE_SESSION_KEY,
+              JSON.stringify({
+                user: authUser,
+                profile: newProfile,
+                dbUser: newDbUser,
+                role: resolvedRole,
+              }),
+            );
+          } catch (_e) {
+            // Storage unavailable
+          }
         } else {
-          // Clear any unverified cached session
+          // Server explicitly responded that session is not authenticated (HTTP 200 with authenticated: false)
           setUser(null);
           setProfile(null);
           setDbUser(null);
           setRole("user");
+          setStoredAuthToken(null);
           try {
             localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
           } catch (_e) {
@@ -166,21 +203,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       })
-      .catch(() => {
-        setUser(null);
-        setProfile(null);
-        setDbUser(null);
-        setRole("user");
-        try {
-          localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
-        } catch (_e) {
-          // Ignore storage removal errors
+      .catch((err: unknown) => {
+        const status = (err as { status?: number })?.status;
+        if (status === 401 || status === 403) {
+          // Explicit unauthenticated or unauthorized status from server
+          setUser(null);
+          setProfile(null);
+          setDbUser(null);
+          setRole("user");
+          setStoredAuthToken(null);
+          try {
+            localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
+          } catch (_e) {
+            // Ignore storage removal errors
+          }
+        } else {
+          // Transient network failure, timeout, HTTP 5xx, or temporary server unavailability:
+          // Do NOT erase stored token or cached user session. If a restored session is present, keep it.
+          if (restored) {
+            setUser(restored.user || null);
+            setProfile(restored.profile || null);
+            setDbUser(restored.dbUser || null);
+            setRole(restored.role || "user");
+          }
         }
       })
       .finally(() => {
         setIsLoading(false);
       });
-  }, [syncUsersList]);
+  }, [syncUsersList, restoreLocalSession]);
 
   /**
    * Database-backed User Registration via PHP MySQL Backend
