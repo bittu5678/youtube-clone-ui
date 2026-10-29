@@ -431,17 +431,20 @@ export const api = {
       );
     },
 
-    withdraw: async (data: {
-      userId: string;
-      amount: number;
-      bankDetails?: {
-        accountHolder?: string;
-        accountNumber?: string;
-        ifscCode?: string;
-        upiId?: string;
-        bankName?: string;
-      };
-    }) => {
+    withdraw: async (
+      data: {
+        userId: string;
+        amount: number;
+        bankDetails?: {
+          accountHolder?: string;
+          accountNumber?: string;
+          ifscCode?: string;
+          upiId?: string;
+          bankName?: string;
+        };
+      },
+      options?: RequestInit,
+    ) => {
       return apiFetch<{
         success: boolean;
         message?: string;
@@ -451,6 +454,7 @@ export const api = {
       }>("/wallet/withdraw.php", {
         method: "POST",
         body: JSON.stringify(data),
+        ...options,
       });
     },
 

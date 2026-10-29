@@ -653,6 +653,7 @@ export async function processWithdrawal(
     upiId?: string;
     bankName?: string;
   },
+  options?: { signal?: AbortSignal },
 ): Promise<ProcessWithdrawalResult> {
   const norm = userId.trim().toUpperCase();
   const validation = await validateWithdrawalRequest(norm, amount);
@@ -712,18 +713,48 @@ export async function processWithdrawal(
   };
 
   try {
-    res = await api.wallet.withdraw({
-      userId: norm,
-      amount,
-      ...(withdrawBankPayload !== undefined ? { bankDetails: withdrawBankPayload } : {}),
-    });
+    res = await api.wallet.withdraw(
+      {
+        userId: norm,
+        amount,
+        ...(withdrawBankPayload !== undefined ? { bankDetails: withdrawBankPayload } : {}),
+      },
+      options?.signal ? { signal: options.signal } : undefined,
+    );
   } catch (err: unknown) {
     const errorMsg =
       err instanceof Error ? err.message : "Server connection failed or response was invalid.";
+    const isAbortOrTimeout =
+      err instanceof Error &&
+      (err.name === "AbortError" ||
+        err.name === "TimeoutError" ||
+        err.message.toLowerCase().includes("aborted") ||
+        err.message.toLowerCase().includes("timeout") ||
+        err.message.toLowerCase().includes("timed out"));
+
+    const isNetworkError =
+      err instanceof Error &&
+      (err.name === "TypeError" ||
+        err.message.toLowerCase().includes("fetch") ||
+        err.message.toLowerCase().includes("network") ||
+        err.message.toLowerCase().includes("econnrefused") ||
+        err.message.toLowerCase().includes("enotfound"));
+
     console.error("[Withdrawal Service Error] API withdrawal failed:", err);
+
+    let specificError: string;
+    if (isAbortOrTimeout) {
+      specificError =
+        "Withdrawal request timed out or was aborted before confirmation. The server might have processed the withdrawal. Please check your transaction history before trying again to avoid duplicate withdrawals.";
+    } else if (isNetworkError) {
+      specificError = `Withdrawal status could not be confirmed due to a network connection failure (${errorMsg}). The server might have processed the withdrawal. Please check your transaction history before trying again.`;
+    } else {
+      specificError = `Withdrawal status could not be verified by server: ${errorMsg}. The server might have processed the withdrawal. Please check your transaction history before trying again.`;
+    }
+
     return {
       success: false,
-      error: `Withdrawal could not be verified by server: ${errorMsg}. No funds were deducted. Please verify your connection before trying again.`,
+      error: specificError,
     };
   }
 
