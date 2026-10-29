@@ -124,7 +124,7 @@ export function ImagesUploadedPage() {
               key={img.id}
               className="group overflow-hidden rounded-2xl border border-border bg-card shadow-card transition duration-200 hover:-translate-y-1 hover:shadow-lift flex flex-col justify-between"
             >
-              <div className="relative aspect-video w-full overflow-hidden bg-secondary">
+              <div className="relative aspect-[9/16] w-full overflow-hidden bg-secondary">
                 <img
                   src={img.imageUrl}
                   alt={img.title}

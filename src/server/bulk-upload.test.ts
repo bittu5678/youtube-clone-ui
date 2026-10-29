@@ -292,4 +292,24 @@ describe("Task 10: Bulk Video Upload Verification & Integration Tests", () => {
       assert.ok(VIDEO_CATEGORIES.length >= 13);
     });
   });
+
+  // Test Suite 6: Requirement 11 - 9:16 Aspect Ratio Integrity
+  describe("6. Requirement 11: 9:16 Vertical Aspect Ratio Consistency", () => {
+    it("ensures images-uploaded gallery preview container uses aspect-[9/16]", async () => {
+      const fs = await import("node:fs/promises");
+      const path = await import("node:path");
+      const content = await fs.readFile(
+        path.resolve(process.cwd(), "src/routes/images-uploaded.tsx"),
+        "utf8",
+      );
+      assert.ok(
+        content.includes("aspect-[9/16]"),
+        "images-uploaded.tsx must use aspect-[9/16] for 9:16 vertical images",
+      );
+      assert.ok(
+        !content.includes("aspect-video"),
+        "images-uploaded.tsx must not use aspect-video for the vertical image gallery",
+      );
+    });
+  });
 });

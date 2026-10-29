@@ -2227,7 +2227,7 @@ describe("Phase 1 Security & Production Safety Tests", () => {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ amount: 2000 }),
+      body: JSON.stringify({ amount: 9999 }),
     });
     const resInsufficient = await handleApiRequest(reqInsufficient, env);
     assert.ok(resInsufficient);
@@ -2365,5 +2365,360 @@ describe("Phase 1 Security & Production Safety Tests", () => {
     } finally {
       process.env["NODE_ENV"] = prevEnv;
     }
+  });
+});
+
+describe("Bulk Payout Double-Deduction Regression & Integrity Tests", () => {
+  const env = {
+    RAZORPAY_KEY_ID: "rzp_test_1234567890",
+    RAZORPAY_KEY_SECRET: "test_razorpay_secret_key_1234567890",
+  };
+
+  it("1. Processing an existing withdrawal request through bulk payout does NOT deduct wallet a second time and does NOT duplicate transaction", async () => {
+    // 1. Admin login to obtain admin token
+    const adminLoginRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "FT102857", password: "password" }),
+      }),
+      env,
+    );
+    assert.ok(adminLoginRes);
+    const { token: adminToken } = await adminLoginRes.json();
+
+    // 2. Fetch initial balance for FT102857
+    const initBalRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/balance?userId=FT102857", {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }),
+      env,
+    );
+    assert.ok(initBalRes);
+    const initBalBody = await initBalRes.json();
+    const balanceBeforeWithdrawal = Number(initBalBody.wallet.balance);
+
+    // 3. Initiate a withdrawal request for ₹100
+    const withdrawRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ amount: 100 }),
+      }),
+      env,
+    );
+    assert.ok(withdrawRes);
+    assert.equal(withdrawRes.status, 200);
+    const withdrawBody = await withdrawRes.json();
+    assert.equal(withdrawBody.success, true);
+    const txId = withdrawBody.transaction.id;
+    const balanceAfterWithdrawal = Number(withdrawBody.updatedWallet.balance);
+
+    // Verify exactly ₹100 was deducted on initial withdrawal
+    assert.equal(balanceAfterWithdrawal, balanceBeforeWithdrawal - 100);
+
+    // 4. Fetch transactions to check initial count
+    const txsBeforeBulk = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/transactions?userId=FT102857", {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }),
+      env,
+    );
+    assert.ok(txsBeforeBulk);
+    const txList1 = (await txsBeforeBulk.json()).transactions || [];
+    const countWithTxIdBefore = txList1.filter(
+      (t: any) => t.id === txId || t.transactionId === txId,
+    ).length;
+    assert.equal(countWithTxIdBefore, 1);
+
+    // 5. Execute Admin Bulk Payout specifying this existing transaction ID
+    const bulkRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          payouts: [{ userId: "FT102857", amount: 100, transactionId: txId }],
+          notes: "Settling test withdrawal",
+        }),
+      }),
+      env,
+    );
+    assert.ok(bulkRes);
+    assert.equal(bulkRes.status, 200);
+    const bulkBody = await bulkRes.json();
+    assert.equal(bulkBody.success, true);
+    assert.equal(bulkBody.total_recipients, 1);
+    assert.equal(bulkBody.processed[0].deduction_type, "settled_existing_request");
+
+    // 6. CRITICAL REGRESSION CHECK: Wallet balance must NOT be debited a second time!
+    const balAfterBulkRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/balance?userId=FT102857", {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }),
+      env,
+    );
+    assert.ok(balAfterBulkRes);
+    const balAfterBulkBody = await balAfterBulkRes.json();
+    const balanceAfterBulk = Number(balAfterBulkBody.wallet.balance);
+
+    // Assert balance remained EXACTLY the same as after withdrawal (zero double deduction!)
+    assert.equal(
+      balanceAfterBulk,
+      balanceAfterWithdrawal,
+      `Balance must remain ${balanceAfterWithdrawal} but was ${balanceAfterBulk} (double deduction detected!)`,
+    );
+
+    // 7. CRITICAL REGRESSION CHECK: No duplicate transaction created!
+    const txsAfterBulk = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/transactions?userId=FT102857", {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }),
+      env,
+    );
+    assert.ok(txsAfterBulk);
+    const txList2 = (await txsAfterBulk.json()).transactions || [];
+    const matchingTxs = txList2.filter((t: any) => t.id === txId || t.transactionId === txId);
+    assert.equal(
+      matchingTxs.length,
+      1,
+      `Expected exactly 1 transaction with id ${txId}, found ${matchingTxs.length}`,
+    );
+    assert.equal(matchingTxs[0].status, "completed");
+  });
+
+  it("2. Legitimate new direct bulk payout (without transactionId) deducts wallet exactly once", async () => {
+    const adminLoginRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "FT102857", password: "password" }),
+      }),
+      env,
+    );
+    assert.ok(adminLoginRes);
+    const { token: adminToken } = await adminLoginRes.json();
+
+    const initBalRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/balance?userId=FT102857", {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }),
+      env,
+    );
+    assert.ok(initBalRes);
+    const balanceBeforeDirect = Number((await initBalRes.json()).wallet.balance);
+
+    // Execute direct payout for ₹50 with NO transaction ID
+    const directRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          payouts: [{ userId: "FT102857", amount: 50 }],
+          notes: "Direct bonus payout",
+        }),
+      }),
+      env,
+    );
+    assert.ok(directRes);
+    assert.equal(directRes.status, 200);
+    const directBody = await directRes.json();
+    assert.equal(directBody.success, true);
+    assert.equal(directBody.processed[0].deduction_type, "new_direct_disbursement");
+
+    // Check balance deducted exactly ₹50 once
+    const balAfterDirectRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/balance?userId=FT102857", {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }),
+      env,
+    );
+    assert.ok(balAfterDirectRes);
+    const balanceAfterDirect = Number((await balAfterDirectRes.json()).wallet.balance);
+    assert.equal(balanceAfterDirect, balanceBeforeDirect - 50);
+  });
+
+  it("3. Direct payout rejects with 400 when recipient has insufficient balance", async () => {
+    const adminLoginRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "FT102857", password: "password" }),
+      }),
+      env,
+    );
+    assert.ok(adminLoginRes);
+    const { token: adminToken } = await adminLoginRes.json();
+
+    const res = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          payouts: [{ userId: "FT102857", amount: 99999999 }],
+        }),
+      }),
+      env,
+    );
+    assert.ok(res);
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.success, false);
+    assert.match(body.error, /Insufficient balance/i);
+  });
+
+  it("4. Bulk payout rejects with 404 when transactionId is invalid or not found", async () => {
+    const adminLoginRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "FT102857", password: "password" }),
+      }),
+      env,
+    );
+    assert.ok(adminLoginRes);
+    const { token: adminToken } = await adminLoginRes.json();
+
+    const res = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          payouts: [{ userId: "FT102857", amount: 100, transactionId: "tx_nonexistent_xyz999" }],
+        }),
+      }),
+      env,
+    );
+    assert.ok(res);
+    assert.equal(res.status, 404);
+    const body = await res.json();
+    assert.equal(body.success, false);
+    assert.match(body.error, /Invalid transaction ID|not found/i);
+  });
+
+  it("5. Bulk payout rejects with 403 on authorization mismatch (transaction user does not match item user)", async () => {
+    const adminLoginRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "FT102857", password: "password" }),
+      }),
+      env,
+    );
+    assert.ok(adminLoginRes);
+    const { token: adminToken } = await adminLoginRes.json();
+
+    // Create a withdrawal for FT102857
+    const withdrawRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ amount: 100 }),
+      }),
+      env,
+    );
+    assert.ok(withdrawRes);
+    const { transaction } = await withdrawRes.json();
+
+    // Try to settle transaction belonging to FT102857 as FT483921
+    const res = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          payouts: [{ userId: "FT483921", amount: 100, transactionId: transaction.id }],
+        }),
+      }),
+      env,
+    );
+    assert.ok(res);
+    assert.equal(res.status, 403);
+    const body = await res.json();
+    assert.equal(body.success, false);
+    assert.match(body.error, /Authorization mismatch/i);
+  });
+
+  it("6. Replay prevention: rejects bulk payout if transaction is already completed", async () => {
+    const adminLoginRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "FT102857", password: "password" }),
+      }),
+      env,
+    );
+    assert.ok(adminLoginRes);
+    const { token: adminToken } = await adminLoginRes.json();
+
+    // Create a withdrawal
+    const withdrawRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ amount: 100 }),
+      }),
+      env,
+    );
+    assert.ok(withdrawRes);
+    const { transaction } = await withdrawRes.json();
+
+    // First bulk payout: succeeds
+    const firstPayout = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          payouts: [{ userId: "FT102857", amount: 100, transactionId: transaction.id }],
+        }),
+      }),
+      env,
+    );
+    assert.ok(firstPayout);
+    assert.equal(firstPayout.status, 200);
+
+    // Second bulk payout on same transaction: must reject with 400
+    const secondPayout = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          payouts: [{ userId: "FT102857", amount: 100, transactionId: transaction.id }],
+        }),
+      }),
+      env,
+    );
+    assert.ok(secondPayout);
+    assert.equal(secondPayout.status, 400);
+    const body = await secondPayout.json();
+    assert.equal(body.success, false);
+    assert.match(body.error, /already been marked as completed/i);
+  });
+
+  it("7. Bulk payout rejects unauthorized non-admin users with 403", async () => {
+    const userLoginRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "FT483921", password: "password123" }),
+      }),
+      env,
+    );
+    assert.ok(userLoginRes);
+    const { token: userToken } = await userLoginRes.json();
+
+    const res = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${userToken}` },
+        body: JSON.stringify({
+          payouts: [{ userId: "FT483921", amount: 100 }],
+        }),
+      }),
+      env,
+    );
+    assert.ok(res);
+    assert.equal(res.status, 403);
+    const body = await res.json();
+    assert.equal(body.success, false);
+    assert.match(body.error, /Admin authorization required/i);
   });
 });

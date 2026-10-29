@@ -5040,49 +5040,402 @@ export async function handleApiRequest(
       const body = await request.json();
       const payouts = Array.isArray(body.payouts) ? body.payouts : [];
       const notes = body.notes || "Admin bulk payout disbursement";
+
+      if (payouts.length === 0) {
+        return jsonResponse(
+          { success: false, error: "No payouts specified for bulk execution" },
+          400,
+        );
+      }
+
       const batchId = `batch_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
       let totalProcessed = 0;
       let totalAmount = 0;
       const processed: any[] = [];
 
+      if (pool) {
+        const conn = await pool.getConnection();
+        try {
+          await conn.beginTransaction();
+
+          for (const p of payouts) {
+            const uId = String(p.userId || p.user_id || "")
+              .trim()
+              .toUpperCase();
+            const amt = Number(p.amount) || 0;
+            const inputTxId = String(p.transactionId || p.transaction_id || p.id || "").trim();
+
+            if (!uId || amt <= 0) {
+              await conn.rollback();
+              return jsonResponse(
+                {
+                  success: false,
+                  error:
+                    "Each payout item must specify a valid user_id and an amount greater than zero.",
+                },
+                400,
+              );
+            }
+
+            if (inputTxId) {
+              // Case 1: Settling an existing withdrawal request that was already debited at request time
+              let existingTx: any = null;
+              let isWalletTxTable = true;
+              try {
+                const [rows]: any = await conn.query(
+                  `SELECT id, user_id, amount, status FROM wallet_transactions WHERE id = ? FOR UPDATE`,
+                  [inputTxId],
+                );
+                if (rows && rows.length > 0) {
+                  existingTx = rows[0];
+                }
+              } catch (_e) {
+                // Table might not exist or error, attempt income_ledger
+              }
+
+              if (!existingTx) {
+                try {
+                  const [rows]: any = await conn.query(
+                    `SELECT id, transaction_id, user_id, amount, status FROM income_ledger WHERE transaction_id = ? OR id = ? FOR UPDATE`,
+                    [inputTxId, inputTxId],
+                  );
+                  if (rows && rows.length > 0) {
+                    existingTx = rows[0];
+                    isWalletTxTable = false;
+                  }
+                } catch (_e) {
+                  // Ignore
+                }
+              }
+
+              if (!existingTx) {
+                await conn.rollback();
+                return jsonResponse(
+                  {
+                    success: false,
+                    error: `Invalid transaction ID '${inputTxId}': Transaction not found.`,
+                  },
+                  404,
+                );
+              }
+
+              const txUserId = String(existingTx.user_id || "")
+                .trim()
+                .toUpperCase();
+              if (txUserId !== uId) {
+                await conn.rollback();
+                return jsonResponse(
+                  {
+                    success: false,
+                    error: `Authorization mismatch: Transaction '${inputTxId}' belongs to user '${existingTx.user_id}', not requested user '${uId}'.`,
+                  },
+                  403,
+                );
+              }
+
+              if (String(existingTx.status || "").toLowerCase() === "completed") {
+                await conn.rollback();
+                return jsonResponse(
+                  {
+                    success: false,
+                    error: `Transaction '${inputTxId}' has already been marked as completed.`,
+                  },
+                  400,
+                );
+              }
+
+              if (isWalletTxTable) {
+                await conn.query(
+                  `UPDATE wallet_transactions SET status = 'completed', batch_id = ?, updated_at = NOW() WHERE id = ?`,
+                  [batchId, inputTxId],
+                );
+              } else {
+                await conn.query(
+                  `UPDATE income_ledger SET status = 'settled' WHERE transaction_id = ? OR id = ?`,
+                  [inputTxId, inputTxId],
+                );
+              }
+
+              // Do NOT deduct from wallet_balances again!
+              const payoutAmt = Number(existingTx.amount) || amt;
+              totalProcessed++;
+              totalAmount += payoutAmt;
+              processed.push({
+                transaction_id: inputTxId,
+                user_id: uId,
+                amount: payoutAmt,
+                status: "completed",
+                deduction_type: "settled_existing_request",
+              });
+            } else {
+              // Case 2: Direct bulk payout created by admin without prior withdrawal request
+              const [bRows]: any = await conn.query(
+                `SELECT balance FROM wallet_balances WHERE UPPER(user_id) = UPPER(?) FOR UPDATE`,
+                [uId],
+              );
+              const currentBal = Number(bRows?.[0]?.balance || 0);
+
+              if (currentBal < amt) {
+                await conn.rollback();
+                return jsonResponse(
+                  {
+                    success: false,
+                    error: `Insufficient balance for direct payout to user '${uId}'. Available: ₹${currentBal.toLocaleString("en-IN")}, requested: ₹${amt.toLocaleString("en-IN")}.`,
+                  },
+                  400,
+                );
+              }
+
+              const newTxId = `tx_wdr_bulk_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+              try {
+                await conn.query(
+                  `INSERT INTO wallet_transactions (id, user_id, batch_id, type, amount, status, payout_method, created_at)
+                   VALUES (?, ?, ?, 'withdrawal', ?, 'completed', 'bulk_bank_transfer', NOW())`,
+                  [newTxId, uId, batchId, amt],
+                );
+              } catch (_e) {
+                await conn.query(
+                  `INSERT INTO income_ledger (id, transaction_id, user_id, income_type, amount, status, description, created_at)
+                   VALUES (?, ?, ?, 'withdrawal', ?, 'settled', ?, NOW())`,
+                  [
+                    newTxId,
+                    newTxId,
+                    uId,
+                    amt,
+                    `Direct bulk payout disbursement (Batch ${batchId})`,
+                  ],
+                );
+              }
+
+              await conn.query(
+                `UPDATE wallet_balances
+                 SET balance = balance - ?, total_withdrawn = total_withdrawn + ?, updated_at = NOW()
+                 WHERE UPPER(user_id) = UPPER(?)`,
+                [amt, amt, uId],
+              );
+
+              totalProcessed++;
+              totalAmount += amt;
+              processed.push({
+                transaction_id: newTxId,
+                user_id: uId,
+                amount: amt,
+                status: "completed",
+                deduction_type: "new_direct_disbursement",
+              });
+            }
+          }
+
+          try {
+            await conn.query(
+              `INSERT INTO payout_batches (id, admin_user_id, total_recipients, total_amount, status, notes, created_at)
+               VALUES (?, ?, ?, ?, 'completed', ?, NOW())`,
+              [batchId, authUser.user_id, totalProcessed, totalAmount, notes],
+            );
+          } catch (_e) {
+            // payout_batches optional if migration pending
+          }
+
+          await conn.commit();
+
+          return jsonResponse({
+            success: true,
+            message: `Bulk payout completed for ${totalProcessed} recipients totaling ₹${totalAmount.toFixed(2)}`,
+            batch_id: batchId,
+            total_recipients: totalProcessed,
+            total_amount: totalAmount,
+            processed,
+          });
+        } catch (dbErr: any) {
+          await conn.rollback();
+          return jsonResponse(
+            { success: false, error: "Bulk payout database error: " + dbErr.message },
+            500,
+          );
+        } finally {
+          conn.release();
+        }
+      }
+
+      // In-memory/JSON store bulk payout implementation (for dev & test environments)
+      if (!store.walletTransactions) store.walletTransactions = [];
+      if (!store.wallets) store.wallets = {};
+
+      const getOrInitStoreWallet = (userIdKey: string) => {
+        const norm = userIdKey.trim().toUpperCase();
+        if (!store.wallets[norm]) {
+          const defaultBalances: Record<string, number> = {
+            FT102857: 15400,
+            FT483921: 4280.5,
+            FT900431: 850,
+          };
+          const defaultEarned: Record<string, number> = {
+            FT102857: 22000,
+            FT483921: 7430.5,
+            FT900431: 850,
+          };
+          const defaultWithdrawn: Record<string, number> = {
+            FT102857: 6600,
+            FT483921: 3150,
+            FT900431: 0,
+          };
+          store.wallets[norm] = {
+            balance: defaultBalances[norm] ?? 0,
+            total_earned: defaultEarned[norm] ?? 0,
+            total_withdrawn: defaultWithdrawn[norm] ?? 0,
+            referral_income: 0,
+            global_income: 0,
+            adsense_income: 0,
+            affiliate_income: 0,
+            updated_at: new Date().toISOString(),
+          };
+        }
+        return store.wallets[norm]!;
+      };
+
+      // Phase 1: Pre-validation of all payout items (ensures atomic rollback semantics)
       for (const p of payouts) {
         const uId = String(p.userId || p.user_id || "")
           .trim()
           .toUpperCase();
         const amt = Number(p.amount) || 0;
-        if (!uId || amt <= 0) continue;
+        const inputTxId = String(p.transactionId || p.transaction_id || p.id || "").trim();
 
-        const txId =
-          p.transactionId ||
-          p.id ||
-          `tx_bulk_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
-        totalProcessed++;
-        totalAmount += amt;
-
-        if (store.wallets && store.wallets[uId]) {
-          const w = store.wallets[uId]!;
-          w.balance = Math.max(0, w.balance - amt);
-          w.total_withdrawn = (w.total_withdrawn || 0) + amt;
+        if (!uId || amt <= 0) {
+          return jsonResponse(
+            {
+              success: false,
+              error:
+                "Each payout item must specify a valid user_id and an amount greater than zero.",
+            },
+            400,
+          );
         }
 
-        if (!store.walletTransactions) store.walletTransactions = [];
-        store.walletTransactions.push({
-          id: txId,
-          user_id: uId,
-          batch_id: batchId,
-          type: "withdrawal",
-          amount: amt,
-          status: "completed",
-          payout_method: "bulk_bank_transfer",
-          created_at: new Date().toISOString(),
-        });
+        if (inputTxId) {
+          const existingTx = store.walletTransactions.find(
+            (t: Record<string, unknown>) =>
+              t["id"] === inputTxId ||
+              t["transaction_id"] === inputTxId ||
+              t["transactionId"] === inputTxId,
+          );
+          if (!existingTx) {
+            return jsonResponse(
+              {
+                success: false,
+                error: `Invalid transaction ID '${inputTxId}': Transaction not found.`,
+              },
+              404,
+            );
+          }
+          const txUserId = String(existingTx["user_id"] ?? existingTx["userId"] ?? "")
+            .trim()
+            .toUpperCase();
+          if (txUserId !== uId) {
+            return jsonResponse(
+              {
+                success: false,
+                error: `Authorization mismatch: Transaction '${inputTxId}' belongs to user '${String(existingTx["user_id"] ?? existingTx["userId"] ?? "")}', not requested user '${uId}'.`,
+              },
+              403,
+            );
+          }
+          if (String(existingTx["status"] ?? "").toLowerCase() === "completed") {
+            return jsonResponse(
+              {
+                success: false,
+                error: `Transaction '${inputTxId}' has already been marked as completed.`,
+              },
+              400,
+            );
+          }
+        } else {
+          const currentWallet = getOrInitStoreWallet(uId);
+          if (currentWallet.balance < amt) {
+            return jsonResponse(
+              {
+                success: false,
+                error: `Insufficient balance for direct payout to user '${uId}'. Available: ₹${currentWallet.balance.toLocaleString("en-IN")}, requested: ₹${amt.toLocaleString("en-IN")}.`,
+              },
+              400,
+            );
+          }
+        }
+      }
 
-        processed.push({
-          transaction_id: txId,
-          user_id: uId,
-          amount: amt,
-          status: "completed",
-        });
+      // Phase 2: Execute updates (no double deduction for existing requests)
+      for (const p of payouts) {
+        const uId = String(p.userId || p.user_id || "")
+          .trim()
+          .toUpperCase();
+        const amt = Number(p.amount) || 0;
+        const inputTxId = String(p.transactionId || p.transaction_id || p.id || "").trim();
+
+        if (inputTxId) {
+          // Existing request: update status and batch_id ONLY; do NOT debit wallet balance again
+          const existingTx = store.walletTransactions.find(
+            (t: Record<string, unknown>) =>
+              t["id"] === inputTxId ||
+              t["transaction_id"] === inputTxId ||
+              t["transactionId"] === inputTxId,
+          );
+          if (existingTx) {
+            existingTx["status"] = "completed";
+            existingTx["batch_id"] = batchId;
+            existingTx["batchId"] = batchId;
+            existingTx["updated_at"] = new Date().toISOString();
+            existingTx["updatedAt"] = new Date().toISOString();
+
+            const payoutAmt = Number(existingTx["amount"]) || amt;
+            totalProcessed++;
+            totalAmount += payoutAmt;
+            processed.push({
+              transaction_id: String(existingTx["id"] ?? inputTxId),
+              user_id: uId,
+              amount: payoutAmt,
+              status: "completed",
+              deduction_type: "settled_existing_request",
+            });
+          }
+        } else {
+          // Direct new payout: debit wallet once and create single transaction record
+          const w = getOrInitStoreWallet(uId);
+          w.balance = Math.max(0, w.balance - amt);
+          w.total_withdrawn = (w.total_withdrawn || 0) + amt;
+          w.updated_at = new Date().toISOString();
+          store.wallets[uId] = w;
+
+          const newTxId = `tx_wdr_bulk_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+          store.walletTransactions.push({
+            id: newTxId,
+            transaction_id: newTxId,
+            transactionId: newTxId,
+            user_id: uId,
+            userId: uId,
+            batch_id: batchId,
+            batchId: batchId,
+            type: "withdrawal",
+            income_type: "withdrawal",
+            incomeType: "withdrawal",
+            amount: amt,
+            status: "completed",
+            payout_method: "bulk_bank_transfer",
+            payoutMethod: "bulk_bank_transfer",
+            description: `Direct bulk payout disbursement (Batch ${batchId})`,
+            created_at: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+          });
+
+          totalProcessed++;
+          totalAmount += amt;
+          processed.push({
+            transaction_id: newTxId,
+            user_id: uId,
+            amount: amt,
+            status: "completed",
+            deduction_type: "new_direct_disbursement",
+          });
+        }
       }
 
       if (!store.payoutBatches) store.payoutBatches = [];
