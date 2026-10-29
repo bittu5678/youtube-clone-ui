@@ -681,6 +681,222 @@ export async function resolveUplineSponsorsMysql(
   return uplines;
 }
 
+export interface DownlineMemberItem {
+  id: string;
+  userId: string;
+  name: string;
+  email?: string;
+  mobile?: string;
+  joinedAt: string;
+  role: string;
+  rank: string;
+  level: number;
+  sponsor: string;
+  sponsorUserId: string;
+  teamSize?: number;
+  status: "Active" | "Inactive";
+  access: "Granted" | "Restricted";
+}
+
+export const KNOWN_PROMOTIONAL_ALIASES: Record<string, string[]> = {
+  FT102857: ["FTVIP"],
+  FT483921: ["CREATOR50"],
+};
+
+export function calculateDownlineLevelsTs(
+  rootUserId: string,
+  arg2: any,
+  arg3?: any,
+  arg4?: any,
+): {
+  directCount: number;
+  totalTeamCount: number;
+  levelCounts: Record<number, number>;
+  membersByLevel: Record<number, DownlineMemberItem[]>;
+  allMembers: DownlineMemberItem[];
+  sanitizedMembers: DownlineMemberItem[];
+} {
+  let allUsers: Array<{
+    id?: string;
+    user_id: string;
+    name: string;
+    email?: string;
+    mobile?: string;
+    role?: string;
+    referral_code?: string | null;
+    created_at?: string;
+  }> = [];
+  let maxLevels = 10;
+
+  if (Array.isArray(arg2)) {
+    allUsers = arg2;
+    maxLevels = typeof arg3 === "number" ? arg3 : 10;
+  } else {
+    allUsers = Array.isArray(arg3) ? arg3 : [];
+    maxLevels = typeof arg4 === "number" ? arg4 : 10;
+  }
+
+  const rootNorm = (rootUserId || "").trim().toUpperCase();
+
+  const emptyLevelCounts: Record<number, number> = {};
+  const emptyMembersByLevel: Record<number, DownlineMemberItem[]> = {};
+  for (let i = 1; i <= maxLevels; i++) {
+    emptyLevelCounts[i] = 0;
+    emptyMembersByLevel[i] = [];
+  }
+
+  if (!rootNorm) {
+    return {
+      directCount: 0,
+      totalTeamCount: 0,
+      levelCounts: emptyLevelCounts,
+      membersByLevel: emptyMembersByLevel,
+      allMembers: [],
+      sanitizedMembers: [],
+    };
+  }
+
+  // Determine root user's valid sponsor codes:
+  // Strictly user_id + verified promotional aliases for established accounts.
+  // Never uses upline referral_code.
+  const rootAliases = (KNOWN_PROMOTIONAL_ALIASES[rootNorm] || []).map((a) => a.toUpperCase());
+  const rootSponsorCodes = new Set<string>([rootNorm, ...rootAliases]);
+
+  const visited = new Set<string>([rootNorm]);
+  const membersByLevel: Record<number, DownlineMemberItem[]> = { ...emptyMembersByLevel };
+  for (let i = 1; i <= maxLevels; i++) {
+    membersByLevel[i] = [];
+  }
+  const levelCounts: Record<number, number> = { ...emptyLevelCounts };
+  const allMembers: DownlineMemberItem[] = [];
+
+  // Level 1: direct referrals
+  const l1Users = allUsers.filter((u) => {
+    const uId = (u.user_id || "").trim().toUpperCase();
+    if (!uId || uId === rootNorm) return false;
+    const ref = (u.referral_code || "").trim().toUpperCase();
+    return Boolean(ref && rootSponsorCodes.has(ref));
+  });
+
+  for (const u of l1Users) {
+    const uId = u.user_id.trim().toUpperCase();
+    if (visited.has(uId)) continue;
+    visited.add(uId);
+
+    const item: DownlineMemberItem = {
+      id: u.id || `mem_${u.user_id}`,
+      userId: u.user_id,
+      name: u.name,
+      email: u.email || "",
+      mobile: u.mobile || "",
+      joinedAt: u.created_at || new Date().toISOString(),
+      role: u.role || "user",
+      rank: u.role === "admin" ? "Admin" : "Creator",
+      level: 1,
+      sponsor: "You",
+      sponsorUserId: rootUserId,
+      status: "Active",
+      access: "Granted",
+    };
+    membersByLevel[1]!.push(item);
+    allMembers.push(item);
+  }
+  levelCounts[1] = membersByLevel[1]!.length;
+  const directCount = levelCounts[1]!;
+
+  // Levels 2 to maxLevels
+  for (let lvl = 2; lvl <= maxLevels; lvl++) {
+    const prevMembers = membersByLevel[lvl - 1] || [];
+    if (prevMembers.length === 0) break;
+
+    const parentMap = new Map<string, { userId: string; name: string }>();
+    for (const pm of prevMembers) {
+      const pmNorm = pm.userId.trim().toUpperCase();
+      parentMap.set(pmNorm, { userId: pm.userId, name: pm.name });
+      // Support verified promotional aliases ONLY if parent is a verified promotional account
+      const pmAliases = KNOWN_PROMOTIONAL_ALIASES[pmNorm] || [];
+      for (const alias of pmAliases) {
+        parentMap.set(alias.toUpperCase(), { userId: pm.userId, name: pm.name });
+      }
+    }
+
+    const currentLevelUsers = allUsers.filter((u) => {
+      const uId = (u.user_id || "").trim().toUpperCase();
+      if (!uId || visited.has(uId)) return false;
+      const ref = (u.referral_code || "").trim().toUpperCase();
+      return Boolean(ref && parentMap.has(ref));
+    });
+
+    for (const u of currentLevelUsers) {
+      const uId = u.user_id.trim().toUpperCase();
+      if (visited.has(uId)) continue;
+      visited.add(uId);
+
+      const ref = (u.referral_code || "").trim().toUpperCase();
+      const sponsorInfo = parentMap.get(ref);
+      const sponsorName = sponsorInfo
+        ? `${sponsorInfo.name} (${sponsorInfo.userId})`
+        : "Downline Sponsor";
+      const sponsorUserId = sponsorInfo ? sponsorInfo.userId : "";
+
+      const item: DownlineMemberItem = {
+        id: u.id || `mem_${u.user_id}`,
+        userId: u.user_id,
+        name: u.name,
+        email: u.email || "",
+        mobile: u.mobile || "",
+        joinedAt: u.created_at || new Date().toISOString(),
+        role: u.role || "user",
+        rank: u.role === "admin" ? "Admin" : "Creator",
+        level: lvl,
+        sponsor: sponsorName,
+        sponsorUserId,
+        status: "Active",
+        access: "Granted",
+      };
+      membersByLevel[lvl]!.push(item);
+      allMembers.push(item);
+    }
+    levelCounts[lvl] = membersByLevel[lvl]!.length;
+  }
+
+  // Calculate teamSize for each member (direct referrals they personally sponsored)
+  const sponsorDirectCounts = new Map<string, number>();
+  for (const m of allMembers) {
+    const sId = (m.sponsorUserId || "").trim().toUpperCase();
+    if (sId) {
+      sponsorDirectCounts.set(sId, (sponsorDirectCounts.get(sId) || 0) + 1);
+    }
+  }
+
+  const sanitizedMembers: DownlineMemberItem[] = allMembers.map((m) => {
+    const mNorm = m.userId.trim().toUpperCase();
+    return {
+      id: m.id,
+      userId: m.userId,
+      name: m.name,
+      level: m.level,
+      sponsor: m.sponsor,
+      sponsorUserId: m.sponsorUserId,
+      joinedAt: m.joinedAt,
+      role: m.role,
+      rank: m.rank,
+      teamSize: sponsorDirectCounts.get(mNorm) || 0,
+      status: m.status,
+      access: m.access,
+    };
+  });
+
+  return {
+    directCount,
+    totalTeamCount: allMembers.length,
+    levelCounts,
+    membersByLevel,
+    allMembers,
+    sanitizedMembers,
+  };
+}
+
 export async function handleApiRequest(
   request: Request,
   env?: Record<string, string | undefined>,
@@ -4355,16 +4571,14 @@ export async function handleApiRequest(
           );
           if (uRows && uRows.length > 0) {
             const u = uRows[0];
-            const myRefCode = u.referral_code || u.user_id;
+            const known = KNOWN_PROMOTIONAL_ALIASES[userId.toUpperCase()] || [];
+            const shareCode = known.length > 0 ? known[0]! : u.user_id;
 
-            const [refRows] = await pool.query<any[]>(
-              `SELECT id, user_id, name, email, mobile, created_at, role 
-               FROM users 
-               WHERE (UPPER(referral_code) = UPPER(?) OR UPPER(referral_code) = UPPER(?)) 
-                 AND UPPER(user_id) != UPPER(?) 
-               ORDER BY created_at DESC`,
-              [myRefCode, u.user_id, u.user_id],
+            // Fetch all users to compute cycle-safe 10-level downline
+            const [allDbUsers] = await pool.query<any[]>(
+              `SELECT id, user_id, name, email, mobile, created_at, role, referral_code FROM users`,
             );
+            const downline = calculateDownlineLevelsTs(userId, allDbUsers || [], 10);
 
             const [wRows] = await pool.query<any[]>(
               `SELECT referral_income FROM wallet_balances WHERE UPPER(user_id) = UPPER(?) LIMIT 1`,
@@ -4372,14 +4586,16 @@ export async function handleApiRequest(
             );
             const refIncome = Number(wRows?.[0]?.referral_income || 0);
 
+            // Compute video earnings for Level 1 (direct) referrals
+            const directMembers = downline.membersByLevel[1] || [];
             const members = await Promise.all(
-              (refRows || []).map(async (r: any) => {
+              directMembers.map(async (r) => {
                 const [vRows] = await pool.query<any[]>(
                   `SELECT video_type, payment_status, COUNT(*) as cnt 
                    FROM uploaded_videos 
                    WHERE UPPER(user_id) = UPPER(?) 
                    GROUP BY video_type, payment_status`,
-                  [r.user_id],
+                  [r.userId],
                 );
                 let freeCount = 0;
                 let premCount = 0;
@@ -4394,12 +4610,12 @@ export async function handleApiRequest(
                 }
                 const comm = premCount * 1.0;
                 return {
-                  id: r.id || `mem_${r.user_id}`,
-                  userId: r.user_id,
+                  id: r.id,
+                  userId: r.userId,
                   name: r.name,
-                  email: r.email,
-                  mobile: r.mobile,
-                  joinedAt: r.created_at,
+                  email: r.email || "",
+                  mobile: r.mobile || "",
+                  joinedAt: r.joinedAt,
                   status: "Active",
                   tier: r.role === "admin" ? "Admin" : "Creator",
                   freeVideosCount: freeCount,
@@ -4416,14 +4632,15 @@ export async function handleApiRequest(
               success: true,
               dashboard: {
                 userId,
-                referralCode: myRefCode,
+                referralCode: shareCode,
                 referralNumber: u.mobile || "",
-                referralLink: `https://facetube.online/register?ref=${encodeURIComponent(myRefCode)}`,
-                directReferralsCount: members.length,
-                teamMembersCount: members.length,
+                referralLink: `https://facetube.online/register?ref=${encodeURIComponent(shareCode)}`,
+                directReferralsCount: downline.directCount,
+                teamMembersCount: downline.totalTeamCount,
                 referralIncome: refIncome,
                 directReferralIncome: refIncome,
                 totalReferralIncome: refIncome,
+                levelCounts: downline.levelCounts,
                 members,
                 referralMembers: members,
               },
@@ -4436,19 +4653,16 @@ export async function handleApiRequest(
 
       // Store fallback:
       const user = store.users.find((u) => u.user_id.toUpperCase() === userId);
-      const myRefCode = user?.referral_code || userId;
-      const directUsers = store.users.filter(
-        (u) =>
-          u.user_id.toUpperCase() !== userId &&
-          (u.referral_code?.toUpperCase() === myRefCode.toUpperCase() ||
-            u.referral_code?.toUpperCase() === userId),
-      );
+      const known = KNOWN_PROMOTIONAL_ALIASES[userId.toUpperCase()] || [];
+      const shareCode = known.length > 0 ? known[0]! : user?.user_id || userId;
+      const downline = calculateDownlineLevelsTs(userId, store.users, 10);
 
       const refIncome = Number(store.wallets?.[userId]?.referral_income || 0);
 
-      const members = directUsers.map((r) => {
+      const directMembers = downline.membersByLevel[1] || [];
+      const members = directMembers.map((r) => {
         const uVideos = store.videos.filter(
-          (v) => v.user_id.toUpperCase() === r.user_id.toUpperCase(),
+          (v) => v.user_id.toUpperCase() === r.userId.toUpperCase(),
         );
         const freeCount = uVideos.filter((v) => v.video_type === "free").length;
         const premCount = uVideos.filter(
@@ -4458,12 +4672,12 @@ export async function handleApiRequest(
         ).length;
         const comm = premCount * 1.0;
         return {
-          id: r.id || `mem_${r.user_id}`,
-          userId: r.user_id,
+          id: r.id,
+          userId: r.userId,
           name: r.name,
-          email: r.email,
-          mobile: r.mobile,
-          joinedAt: r.created_at,
+          email: r.email || "",
+          mobile: r.mobile || "",
+          joinedAt: r.joinedAt,
           status: "Active",
           tier: r.role === "admin" ? "Admin" : "Creator",
           freeVideosCount: freeCount,
@@ -4479,17 +4693,72 @@ export async function handleApiRequest(
         success: true,
         dashboard: {
           userId,
-          referralCode: myRefCode,
+          referralCode: shareCode,
           referralNumber: user?.mobile || "",
-          referralLink: `https://facetube.online/register?ref=${encodeURIComponent(myRefCode)}`,
-          directReferralsCount: members.length,
-          teamMembersCount: members.length,
+          referralLink: `https://facetube.online/register?ref=${encodeURIComponent(shareCode)}`,
+          directReferralsCount: downline.directCount,
+          teamMembersCount: downline.totalTeamCount,
           referralIncome: refIncome,
           directReferralIncome: refIncome,
           totalReferralIncome: refIncome,
+          levelCounts: downline.levelCounts,
           members,
           referralMembers: members,
         },
+      });
+    }
+  }
+
+  if (route === "referrals/team") {
+    if (method === "GET") {
+      const qUserId = url.searchParams.get("userId") || url.searchParams.get("user_id");
+      const levelParam = url.searchParams.get("level");
+      const pool = getMysqlPool();
+      const authUser = await getAuthUserFromRequest(request, store, pool);
+      const auth = requireAuth(authUser, qUserId);
+      if (!auth.success) {
+        return auth.response;
+      }
+      const userId = auth.effectiveUserId;
+
+      let downline: ReturnType<typeof calculateDownlineLevelsTs>;
+
+      if (pool) {
+        try {
+          const [uRows] = await pool.query<any[]>(
+            `SELECT user_id, referral_code, name FROM users WHERE UPPER(user_id) = UPPER(?) LIMIT 1`,
+            [userId],
+          );
+          if (uRows && uRows.length > 0) {
+            const [allDbUsers] = await pool.query<any[]>(
+              `SELECT id, user_id, name, email, mobile, created_at, role, referral_code FROM users`,
+            );
+            downline = calculateDownlineLevelsTs(userId, allDbUsers || [], 10);
+          } else {
+            downline = calculateDownlineLevelsTs(userId, [], 10);
+          }
+        } catch (_e) {
+          downline = calculateDownlineLevelsTs(userId, store.users, 10);
+        }
+      } else {
+        downline = calculateDownlineLevelsTs(userId, store.users, 10);
+      }
+
+      let membersToReturn = downline.sanitizedMembers;
+      if (levelParam && levelParam.toLowerCase() !== "all") {
+        const filterLvl = Number(levelParam);
+        if (filterLvl >= 1 && filterLvl <= 10) {
+          membersToReturn = membersToReturn.filter((m) => m.level === filterLvl);
+        }
+      }
+
+      return jsonResponse({
+        success: true,
+        userId,
+        totalTeamCount: downline.totalTeamCount,
+        directCount: downline.directCount,
+        levelCounts: downline.levelCounts,
+        members: membersToReturn,
       });
     }
   }

@@ -73,20 +73,66 @@ export async function getReferralDashboardData(
   const allVideos = getStoredVideos();
   const ledger = await getUserLedger(normId);
 
-  // Direct referrals: users registered with referral_code matching this user's user_id or code
+  // Direct referrals: users registered with referral_code matching this user's user_id or verified promotional alias
   const currentUserRecord = dbUsers.find((u) => u.user_id.toUpperCase() === normId);
-  const myCode = currentUserRecord?.referral_code || currentUserRecord?.user_id || normId;
+  const knownAliases: Record<string, string[]> = {
+    FT102857: ["FTVIP"],
+    FT483921: ["CREATOR50"],
+  };
+  const mySponsorCodes = new Set([
+    normId,
+    ...(knownAliases[normId] || []).map((a) => a.toUpperCase()),
+  ]);
+  const shareCode = knownAliases[normId]?.[0] || normId;
 
   // Find direct referrals from genuine database / stored users
   const directUsers = dbUsers.filter(
     (u) =>
       u.user_id.toUpperCase() !== normId &&
-      (u.referral_code?.toUpperCase() === myCode.toUpperCase() ||
-        u.referral_code?.toUpperCase() === normId),
+      Boolean(u.referral_code && mySponsorCodes.has(u.referral_code.toUpperCase())),
   );
 
   const directUserIds = new Set(directUsers.map((u) => u.user_id.toUpperCase()));
-  const teamMembersCount = directUsers.length;
+
+  // Calculate multi-level downline across Levels 1–10 for fallback
+  const visited = new Set<string>([normId]);
+  let currentParents: string[] = [];
+  const allDescendantIds = new Set<string>();
+
+  for (const u of directUsers) {
+    const uid = u.user_id.toUpperCase();
+    visited.add(uid);
+    allDescendantIds.add(uid);
+    currentParents.push(uid);
+  }
+
+  for (let lvl = 2; lvl <= 10; lvl++) {
+    if (currentParents.length === 0) break;
+    const parentCodeSet = new Set<string>();
+    for (const pId of currentParents) {
+      parentCodeSet.add(pId);
+      const aliases = knownAliases[pId] || [];
+      for (const a of aliases) {
+        parentCodeSet.add(a.toUpperCase());
+      }
+    }
+    const nextLevelUsers = dbUsers.filter((u) => {
+      const uid = u.user_id.toUpperCase();
+      if (visited.has(uid)) return false;
+      const ref = (u.referral_code || "").toUpperCase();
+      return Boolean(ref && parentCodeSet.has(ref));
+    });
+    if (nextLevelUsers.length === 0) break;
+    currentParents = [];
+    for (const u of nextLevelUsers) {
+      const uid = u.user_id.toUpperCase();
+      visited.add(uid);
+      allDescendantIds.add(uid);
+      currentParents.push(uid);
+    }
+  }
+
+  const teamMembersCount = allDescendantIds.size;
 
   // Calculate direct commission from real ledger / premium video records
   let directCommissionTotal = 0;
@@ -142,7 +188,7 @@ export async function getReferralDashboardData(
 
   const directReferralsCount = directUsers.length;
   const referralNumber = currentUserRecord?.mobile || "";
-  const referralCode = currentUserRecord?.referral_code || normId;
+  const referralCode = shareCode;
   const referralLink = `https://facetube.online/register?ref=${encodeURIComponent(referralCode)}`;
 
   return {
@@ -154,4 +200,11 @@ export async function getReferralDashboardData(
     referralLink,
     members,
   };
+}
+
+/**
+ * Retrieves multi-level team members (Levels 1–10) from the authenticated API.
+ */
+export async function getTeamMembers(userId?: string, level?: number | "all") {
+  return api.referrals.getTeam(userId, level);
 }

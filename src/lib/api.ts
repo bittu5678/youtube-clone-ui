@@ -509,6 +509,33 @@ export const api = {
       const q = userId ? `?userId=${encodeURIComponent(userId)}` : "";
       return apiFetch<{ success: boolean; dashboard: any }>(`/referrals/dashboard.php${q}`);
     },
+    getTeam: async (userId?: string, level?: number | "all") => {
+      const params = new URLSearchParams();
+      if (userId) params.set("userId", userId);
+      if (level && level !== "all") params.set("level", String(level));
+      const q = params.toString() ? `?${params.toString()}` : "";
+      return apiFetch<{
+        success: boolean;
+        userId: string;
+        totalTeamCount: number;
+        directCount: number;
+        levelCounts: Record<string, number>;
+        members: Array<{
+          id: string;
+          userId: string;
+          name: string;
+          level: number;
+          sponsor: string;
+          sponsorUserId: string;
+          joinedAt: string;
+          role: string;
+          rank: string;
+          teamSize: number;
+          status: "Active" | "Inactive";
+          access: "Granted" | "Restricted";
+        }>;
+      }>(`/referrals/team.php${q}`);
+    },
   },
 
   // Certificates

@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../response.php';
+require_once __DIR__ . '/downline.php';
 
 $pdo = getDatabaseConnection();
 $requestedUserId = trim($_GET['userId'] ?? ($_GET['user_id'] ?? ''));
@@ -21,6 +22,10 @@ try {
     $user = $stmtUser->fetch();
 
     if (!$user) {
+        $emptyLevels = [];
+        for ($i = 1; $i <= 10; $i++) {
+            $emptyLevels[$i] = 0;
+        }
         jsonResponse([
             'success' => true,
             'dashboard' => [
@@ -35,27 +40,26 @@ try {
                 'totalReferralIncome' => 0.00,
                 'members' => [],
                 'referralMembers' => [],
+                'levelCounts' => $emptyLevels,
             ]
         ]);
         exit;
     }
 
-    $referralCode = !empty($user['referral_code']) ? $user['referral_code'] : $user['user_id'];
     $userNormId = $user['user_id'];
+    $knownAliases = getKnownPromotionalAliases();
+    $shareCode = (isset($knownAliases[strtoupper($userNormId)]) && !empty($knownAliases[strtoupper($userNormId)][0]))
+        ? $knownAliases[strtoupper($userNormId)][0]
+        : $userNormId;
 
-    // 2. Direct referrals (users registered with this user referral code or user_id)
-    $stmtDirect = $pdo->prepare('
-        SELECT id, user_id, name, email, mobile, created_at, role
-        FROM users
-        WHERE (UPPER(referral_code) = UPPER(?) OR UPPER(referral_code) = UPPER(?))
-          AND UPPER(user_id) != UPPER(?)
-        ORDER BY created_at DESC
-    ');
-    $stmtDirect->execute([$referralCode, $userNormId, $userNormId]);
-    $directReferrals = $stmtDirect->fetchAll();
+    // 2. Real cycle-safe multi-level downline calculation across Levels 1–10
+    // Uses user_id and verified promotional aliases to match genuine direct referrals
+    $downline = calculateDownlineLevels($pdo, $userNormId, 10);
+    $directCount = $downline['directCount'];
+    $totalTeamCount = $downline['totalTeamCount'];
 
-    $directCount = count($directReferrals);
-    $teamCount = $directCount;
+    // Direct referrals list for video earnings calculation
+    $directReferrals = $downline['membersByLevel'][1] ?? [];
 
     // 3. Fetch actual earned referral income from wallet_balances
     $stmtWallet = $pdo->prepare('SELECT referral_income FROM wallet_balances WHERE UPPER(user_id) = UPPER(?) LIMIT 1');
@@ -73,7 +77,8 @@ try {
     ');
 
     foreach ($directReferrals as $r) {
-        $mUserId = $r['user_id'];
+        $mUserId = $r['user_id'] ?? ($r['userId'] ?? '');
+        if (empty($mUserId)) continue;
         $stmtVideos->execute([$mUserId]);
         $vRows = $stmtVideos->fetchAll();
 
@@ -97,11 +102,11 @@ try {
             'id' => $r['id'] ?? ('mem_' . $mUserId),
             'userId' => $mUserId,
             'name' => $r['name'],
-            'email' => $r['email'],
-            'mobile' => $r['mobile'],
-            'joinedAt' => $r['created_at'],
+            'email' => $r['email'] ?? '',
+            'mobile' => $r['mobile'] ?? '',
+            'joinedAt' => $r['created_at'] ?? ($r['joinedAt'] ?? 'Recent'),
             'status' => 'Active',
-            'tier' => ($r['role'] === 'admin') ? 'Admin' : 'Creator',
+            'tier' => (($r['role'] ?? 'user') === 'admin') ? 'Admin' : 'Creator',
             'freeVideosCount' => $freeCount,
             'premiumVideosCount' => $premiumPaidCount,
             'totalVideosCount' => $freeCount + $premiumPaidCount,
@@ -115,14 +120,15 @@ try {
         'success' => true,
         'dashboard' => [
             'userId' => $userNormId,
-            'referralCode' => $referralCode,
+            'referralCode' => $shareCode,
             'referralNumber' => $user['mobile'] ?? '',
-            'referralLink' => 'https://facetube.online/register?ref=' . urlencode($referralCode),
+            'referralLink' => 'https://facetube.online/register?ref=' . urlencode($shareCode),
             'directReferralsCount' => $directCount,
-            'teamMembersCount' => $teamCount,
+            'teamMembersCount' => $totalTeamCount,
             'referralIncome' => $referralIncome,
             'directReferralIncome' => $referralIncome,
             'totalReferralIncome' => $referralIncome,
+            'levelCounts' => $downline['levelCounts'],
             'members' => $members,
             'referralMembers' => $members,
         ]
