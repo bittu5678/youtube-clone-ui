@@ -29,6 +29,7 @@ import { VideoHubLayout } from "@/components/videohub/VideoHubLayout";
 import { useAuth } from "@/lib/auth-context";
 import { fetchUploadedVideos, markVideoPromoted, type UploadedVideo } from "@/lib/video-service";
 import { resolveVideoThumbnail, SVG_FALLBACK_THUMBNAIL } from "@/lib/thumbnail-service";
+import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/ads-promotions")({
   head: () => ({
@@ -37,7 +38,7 @@ export const Route = createFileRoute("/ads-promotions")({
       {
         name: "description",
         content:
-          "Launch and manage targeted advertisement video campaigns on FaceTube with instant 10% direct referrer commission.",
+          "Launch and manage targeted advertisement video campaigns on FaceTube with instant direct referrer commission.",
       },
     ],
   }),
@@ -70,7 +71,7 @@ const AD_PLANS: AdPlan[] = [
       "Standard video feed placement",
       "Suggested video cards boost",
       "Real-time impressions & CTR analytics",
-      "Direct Referrer earns ₹10 (10%)",
+      "Direct referrer sponsor commission",
     ],
   },
   {
@@ -85,7 +86,7 @@ const AD_PLANS: AdPlan[] = [
       "Mid-roll stream placement",
       "Sidebar sticky recommendation",
       "Audience demographic targeting",
-      "Direct Referrer earns ₹20 (10%)",
+      "Direct referrer sponsor commission",
     ],
   },
   {
@@ -100,7 +101,7 @@ const AD_PLANS: AdPlan[] = [
       "Home feed hero showcase",
       "Top search result priority badge",
       "Priority 24/7 video rotation",
-      "Direct Referrer earns ₹30 (10%)",
+      "Direct referrer sponsor commission",
     ],
     isPopular: true,
   },
@@ -116,7 +117,7 @@ const AD_PLANS: AdPlan[] = [
       "365 Days Non-Stop Global Reach",
       "Verified Brand Partner spotlight",
       "Dedicated account manager support",
-      "Direct Referrer earns ₹300 (10%)",
+      "Direct referrer sponsor commission",
     ],
     isBestValue: true,
   },
@@ -220,6 +221,21 @@ function AdsPromotionsPage() {
   // Payment method
   const [paymentMethod, setPaymentMethod] = useState<"wallet" | "upi" | "card">("wallet");
   const [isActivating, setIsActivating] = useState(false);
+  const [marketingPercentage, setMarketingPercentage] = useState<number>(10);
+
+  // Load platform marketing income percentage
+  useEffect(() => {
+    api.admin
+      .getSettings()
+      .then((res) => {
+        if (res && res.success && res.settings) {
+          setMarketingPercentage(res.settings.marketing_income_percentage ?? 10);
+        }
+      })
+      .catch(() => {
+        // graceful default 10%
+      });
+  }, []);
 
   // Load authenticated user's published videos from the production API
   useEffect(() => {
@@ -325,7 +341,7 @@ function AdsPromotionsPage() {
           const now = new Date();
           const startDate = now.toISOString().slice(0, 10);
           const expiryDate = calculateExpiryDate(selectedPlan.days);
-          const commission = Math.round(selectedPlan.price * 0.1);
+          const commission = Math.round(selectedPlan.price * (marketingPercentage / 100));
           const paymentResult = res as { paymentId?: string } | undefined;
 
           // Call server-side promotion activation to persist is_promoted, promotion_plan, promotion_expires_at
@@ -681,7 +697,7 @@ function AdsPromotionsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {AD_PLANS.map((plan) => {
               const isSelected = plan.id === selectedPlanId;
-              const commissionAmount = Math.round(plan.price * 0.1);
+              const commissionAmount = Math.round(plan.price * (marketingPercentage / 100));
 
               return (
                 <div
@@ -739,11 +755,11 @@ function AdsPromotionsPage() {
                       </div>
                     </div>
 
-                    {/* 10% Commission Callout Tag */}
+                    {/* Dynamic Commission Callout Tag */}
                     <div className="mb-4 rounded-lg bg-amber-400/10 border border-amber-400/20 px-2.5 py-1.5 flex items-center justify-between text-[11px]">
                       <span className="text-amber-400 font-semibold">Direct Referrer</span>
                       <span className="font-extrabold text-amber-300">
-                        ₹{commissionAmount} (10%)
+                        ₹{commissionAmount} ({marketingPercentage}%)
                       </span>
                     </div>
 
@@ -818,14 +834,14 @@ function AdsPromotionsPage() {
                 <div className="flex items-center justify-between text-sm pb-2 border-b border-border">
                   <div className="flex items-center gap-1.5">
                     <span className="text-amber-400 font-medium">
-                      Direct Referrer 10% Commission
+                      Direct Referrer {marketingPercentage}% Commission
                     </span>
                     <span className="text-[10px] bg-amber-400/20 text-amber-300 px-1.5 py-0.2 rounded font-bold">
                       Credited
                     </span>
                   </div>
                   <span className="font-bold text-amber-400">
-                    ₹{Math.round(selectedPlan.price * 0.1).toLocaleString("en-IN")}
+                    ₹{Math.round(selectedPlan.price * (marketingPercentage / 100)).toLocaleString("en-IN")}
                   </span>
                 </div>
 
@@ -924,7 +940,7 @@ function AdsPromotionsPage() {
                   <div className="flex justify-between text-zinc-300">
                     <span>Direct Sponsor Credit:</span>
                     <span className="font-semibold text-amber-300">
-                      ₹{Math.round(selectedPlan.price * 0.1)} (10%)
+                      ₹{Math.round(selectedPlan.price * (marketingPercentage / 100))} ({marketingPercentage}%)
                     </span>
                   </div>
                 </div>

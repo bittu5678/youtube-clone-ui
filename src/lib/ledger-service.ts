@@ -7,7 +7,11 @@ export type IncomeType =
   | "global_income"
   | "admin_allocation"
   | "withdrawal"
-  | "ads_promotion_fee";
+  | "ads_promotion_fee"
+  | "adsense_income"
+  | "ad_boost_income"
+  | "affiliate_income"
+  | "marketing_income";
 
 export interface LedgerTransaction {
   id: string;

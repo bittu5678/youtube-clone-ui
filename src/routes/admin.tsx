@@ -32,6 +32,8 @@ import {
   X,
   FileSpreadsheet,
   Wallet,
+  Sliders,
+  Percent,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Navbar } from "@/components/videohub/Navbar";
@@ -56,7 +58,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-type AdminTab = "users" | "moderation" | "categories" | "payouts" | "earnings" | "database";
+type AdminTab = "users" | "moderation" | "categories" | "payouts" | "earnings" | "settings" | "database";
 
 interface ModerationVideo {
   id: string;
@@ -150,14 +152,16 @@ function AdminPage() {
       setIsLoadingReport(true);
       try {
         const targetPage = pageOverride !== undefined ? pageOverride : reportPage;
-        const res = await api.admin.getEarningsReport({
-          search: reportSearch.trim() || undefined,
-          startDate: reportStartDate || undefined,
-          endDate: reportEndDate || undefined,
+        const queryParams: Parameters<typeof api.admin.getEarningsReport>[0] = {
           dateMode: reportDateMode,
           page: targetPage,
           limit: reportLimit,
-        });
+        };
+        if (reportSearch.trim()) queryParams.search = reportSearch.trim();
+        if (reportStartDate) queryParams.startDate = reportStartDate;
+        if (reportEndDate) queryParams.endDate = reportEndDate;
+
+        const res = await api.admin.getEarningsReport(queryParams);
         if (res && res.success) {
           setEarningsUsers(res.users || []);
           if (res.summary) setEarningsSummary(res.summary);
@@ -182,10 +186,11 @@ function AdminPage() {
     setSelectedWithdrawalUser(userRecord);
     setIsLoadingWithdrawals(true);
     try {
-      const res = await api.admin.getUserWithdrawalHistory(userRecord.userId, {
-        startDate: reportStartDate || undefined,
-        endDate: reportEndDate || undefined,
-      });
+      const wParams: { startDate?: string; endDate?: string } = {};
+      if (reportStartDate) wParams.startDate = reportStartDate;
+      if (reportEndDate) wParams.endDate = reportEndDate;
+
+      const res = await api.admin.getUserWithdrawalHistory(userRecord.userId, wParams);
       if (res && res.success) {
         setUserWithdrawals(res.withdrawals || []);
       } else {
@@ -202,14 +207,16 @@ function AdminPage() {
   const handleExportCsv = async () => {
     setIsExportingCsv(true);
     try {
-      const res = await api.admin.getEarningsReport({
-        search: reportSearch.trim() || undefined,
-        startDate: reportStartDate || undefined,
-        endDate: reportEndDate || undefined,
+      const exportParams: Parameters<typeof api.admin.getEarningsReport>[0] = {
         dateMode: reportDateMode,
         limit: 5000,
         page: 1,
-      });
+      };
+      if (reportSearch.trim()) exportParams.search = reportSearch.trim();
+      if (reportStartDate) exportParams.startDate = reportStartDate;
+      if (reportEndDate) exportParams.endDate = reportEndDate;
+
+      const res = await api.admin.getEarningsReport(exportParams);
 
       const rows = res?.users || earningsUsers;
       if (!rows || rows.length === 0) {
@@ -271,6 +278,62 @@ function AdminPage() {
       toast.error("CSV export failed: " + (err?.message || "Unknown error"));
     } finally {
       setIsExportingCsv(false);
+    }
+  };
+
+  // Platform Settings State (Admin-controlled Marketing Income Percentage)
+  const [marketingPercentage, setMarketingPercentage] = useState<number>(10);
+  const [adsReferralRates, setAdsReferralRates] = useState<Record<number, number>>({
+    1: 15,
+    2: 10,
+    3: 5,
+    4: 4,
+    5: 3,
+    6: 2,
+    7: 1,
+  });
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(false);
+
+  const loadPlatformSettings = useCallback(async () => {
+    setIsLoadingSettings(true);
+    try {
+      const res = await api.admin.getSettings();
+      if (res && res.success && res.settings) {
+        setMarketingPercentage(res.settings.marketing_income_percentage ?? 10);
+        if (res.settings.ads_referral_rates) {
+          setAdsReferralRates(res.settings.ads_referral_rates);
+        }
+      }
+    } catch (err: any) {
+      console.error("Failed to load platform settings:", err);
+    } finally {
+      setIsLoadingSettings(false);
+    }
+  }, []);
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (marketingPercentage < 0 || marketingPercentage > 100) {
+      toast.error("Marketing income percentage must be between 0% and 100%.");
+      return;
+    }
+    setIsSavingSettings(true);
+    try {
+      const res = await api.admin.updateSettings({
+        marketingIncomePercentage: marketingPercentage,
+      });
+      if (res && res.success) {
+        toast.success(
+          `Platform settings updated! Marketing income set to ${res.marketing_income_percentage}%.`,
+        );
+      } else {
+        toast.error("Failed to update platform settings.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save settings.");
+    } finally {
+      setIsSavingSettings(false);
     }
   };
 
@@ -467,14 +530,25 @@ function AdminPage() {
       loadPendingPayouts();
       loadCategories();
       loadEarningsReport();
+      loadPlatformSettings();
     }
-  }, [isAdmin, loadModerationVideos, loadPendingPayouts, loadCategories, loadEarningsReport]);
+  }, [
+    isAdmin,
+    loadModerationVideos,
+    loadPendingPayouts,
+    loadCategories,
+    loadEarningsReport,
+    loadPlatformSettings,
+  ]);
 
   useEffect(() => {
     if (isAdmin && activeTab === "earnings") {
       loadEarningsReport();
     }
-  }, [isAdmin, activeTab, loadEarningsReport]);
+    if (isAdmin && activeTab === "settings") {
+      loadPlatformSettings();
+    }
+  }, [isAdmin, activeTab, loadEarningsReport, loadPlatformSettings]);
 
   if (isLoading) {
     return (
@@ -859,6 +933,32 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                   {payoutList.length}
                 </span>
               )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("earnings")}
+              className={`rounded-xl px-4 py-2 text-xs font-bold transition flex items-center gap-2 ${
+                activeTab === "earnings"
+                  ? "bg-brand text-brand-foreground shadow-sm"
+                  : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span>Earnings & Payouts Report (Req 15)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("settings")}
+              className={`rounded-xl px-4 py-2 text-xs font-bold transition flex items-center gap-2 ${
+                activeTab === "settings"
+                  ? "bg-brand text-brand-foreground shadow-sm"
+                  : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+            >
+              <Sliders className="h-4 w-4" />
+              <span>Income Settings</span>
             </button>
 
             <button
@@ -1559,7 +1659,666 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
             </div>
           )}
 
-          {/* TAB 4: DATABASE & SQL INFO */}
+          {/* TAB 5: REQUIREMENT 15 — EARNINGS & PAYOUTS REPORT */}
+          {activeTab === "earnings" && (
+            <div className="mt-6 space-y-6">
+              {/* Header and Filter Card */}
+              <section className="rounded-2xl border border-border bg-card p-6 shadow-card space-y-5">
+                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-brand/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand">
+                        Requirement 15
+                      </span>
+                      <h2 className="text-lg font-bold">Admin Earnings & Payouts Report</h2>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Authoritative user earnings breakdown across separate income streams: Referral,
+                      Global Pool, Google AdSense, and Affiliate / Marketing.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => loadEarningsReport(1)}
+                      disabled={isLoadingReport}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        className={`h-3.5 w-3.5 ${isLoadingReport ? "animate-spin text-brand" : ""}`}
+                      />
+                      <span>Refresh</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportCsv}
+                      disabled={isExportingCsv || earningsUsers.length === 0}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-lift transition hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span>{isExportingCsv ? "Exporting CSV..." : "Export CSV"}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter Controls Bar */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-2 border-t border-border/50">
+                  {/* Search Filter */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                      Search User
+                    </label>
+                    <div className="flex h-9 items-center rounded-xl border border-border bg-secondary/40 px-3 transition focus-within:border-brand">
+                      <Search className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                      <input
+                        type="search"
+                        placeholder="Name, email, user ID..."
+                        value={reportSearch}
+                        onChange={(e) => setReportSearch(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && loadEarningsReport(1)}
+                        className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Date Mode Filter */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                      Date Filter Mode
+                    </label>
+                    <select
+                      value={reportDateMode}
+                      onChange={(e) =>
+                        setReportDateMode(e.target.value as "joined" | "activity")
+                      }
+                      className="h-9 w-full rounded-xl border border-border bg-secondary/40 px-3 text-xs text-foreground outline-none focus:border-brand"
+                    >
+                      <option value="joined">User Registration Date</option>
+                      <option value="activity">Ledger Activity Date</option>
+                    </select>
+                  </div>
+
+                  {/* Start Date */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                      Start Date
+                    </label>
+                    <div className="flex h-9 items-center rounded-xl border border-border bg-secondary/40 px-3">
+                      <Calendar className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                      <input
+                        type="date"
+                        value={reportStartDate}
+                        onChange={(e) => setReportStartDate(e.target.value)}
+                        className="w-full bg-transparent text-xs text-foreground outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* End Date & Apply Button */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                      End Date
+                    </label>
+                    <div className="flex gap-2">
+                      <div className="flex h-9 flex-1 items-center rounded-xl border border-border bg-secondary/40 px-3">
+                        <Calendar className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                        <input
+                          type="date"
+                          value={reportEndDate}
+                          onChange={(e) => setReportEndDate(e.target.value)}
+                          className="w-full bg-transparent text-xs text-foreground outline-none"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => loadEarningsReport(1)}
+                        className="rounded-xl bg-brand px-3 text-xs font-bold text-brand-foreground shadow-sm hover:bg-brand-dark"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter Active Notice */}
+                {(reportSearch || reportStartDate || reportEndDate) && (
+                  <div className="flex items-center justify-between text-xs text-muted-foreground bg-secondary/30 px-3 py-2 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-foreground">Active Filters:</span>
+                      {reportSearch && (
+                        <span className="bg-brand/10 text-brand px-2 py-0.5 rounded-full text-[11px]">
+                          Search: "{reportSearch}"
+                        </span>
+                      )}
+                      {(reportStartDate || reportEndDate) && (
+                        <span className="bg-brand/10 text-brand px-2 py-0.5 rounded-full text-[11px]">
+                          Date: {reportStartDate || "Beginning"} to {reportEndDate || "Now"} ({reportDateMode})
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportSearch("");
+                        setReportStartDate("");
+                        setReportEndDate("");
+                        setTimeout(() => loadEarningsReport(1), 50);
+                      }}
+                      className="text-xs text-brand hover:underline font-semibold"
+                    >
+                      Clear All Filters
+                    </button>
+                  </div>
+                )}
+              </section>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-4">
+                <div className="rounded-2xl border border-border bg-secondary/30 p-4 shadow-card">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Total In Scope Users
+                  </p>
+                  <p className="mt-2 text-2xl font-black">{earningsSummary.totalUsers}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Registered accounts</p>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-secondary/30 p-4 shadow-card">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Current Wallet Balance
+                  </p>
+                  <p className="mt-2 text-2xl font-black text-brand">
+                    ₹{earningsSummary.totalWalletBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Outstanding creator liability</p>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-secondary/30 p-4 shadow-card">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Cumulative Earned
+                  </p>
+                  <p className="mt-2 text-2xl font-black text-emerald-400">
+                    ₹{earningsSummary.totalEarned.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">All-time settled income</p>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-secondary/30 p-4 shadow-card">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Total Withdrawn
+                  </p>
+                  <p className="mt-2 text-2xl font-black text-amber-400">
+                    ₹{earningsSummary.totalWithdrawn.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Disbursed to creators</p>
+                </div>
+              </div>
+
+              {/* Source Breakdown Badges */}
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+                <p className="text-xs font-bold text-foreground mb-3 flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-brand" />
+                  <span>Platform Aggregate Breakdown by Genuine Income Stream</span>
+                </p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">
+                      Referral Income
+                    </span>
+                    <p className="text-base font-black text-foreground mt-1">
+                      ₹{earningsSummary.totalReferralIncome.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Sponsor commissions</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">
+                      Global Pool Income
+                    </span>
+                    <p className="text-base font-black text-foreground mt-1">
+                      ₹{earningsSummary.totalGlobalIncome.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Weighted creator pool</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">
+                      Google AdSense Income
+                    </span>
+                    <p className="text-base font-black text-foreground mt-1">
+                      ₹{earningsSummary.totalAdsenseIncome.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Impressions & watch time</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">
+                      Affiliate / Marketing
+                    </span>
+                    <p className="text-base font-black text-foreground mt-1">
+                      ₹{earningsSummary.totalAffiliateIncome.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Ad promotion marketing ({marketingPercentage}%)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* User Directory Table */}
+              <section className="rounded-2xl border border-border bg-card p-6 shadow-card space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-foreground">
+                    User Ledger Records ({reportTotalUsers} total)
+                  </h3>
+                  <span className="text-xs text-muted-foreground">
+                    Page {reportPage} of {reportTotalPages}
+                  </span>
+                </div>
+
+                {isLoadingReport ? (
+                  <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+                    <p className="text-xs">Loading ledger analytics...</p>
+                  </div>
+                ) : earningsUsers.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-muted-foreground">
+                    No user records match the specified filters.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                          <th className="pb-3 pl-2 font-semibold">User</th>
+                          <th className="pb-3 font-semibold">Balance</th>
+                          <th className="pb-3 font-semibold">Total Earned</th>
+                          <th className="pb-3 font-semibold">Withdrawn</th>
+                          <th className="pb-3 font-semibold">Referral</th>
+                          <th className="pb-3 font-semibold">Global Pool</th>
+                          <th className="pb-3 font-semibold">AdSense</th>
+                          <th className="pb-3 font-semibold">Affiliate</th>
+                          <th className="pb-3 pr-2 text-right font-semibold">History</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/60">
+                        {earningsUsers.map((u) => (
+                          <tr key={u.userId} className="transition hover:bg-secondary/30">
+                            <td className="py-3 pl-2">
+                              <p className="font-semibold text-xs text-foreground">{u.name}</p>
+                              <p className="text-[11px] text-muted-foreground">{u.email}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="font-mono text-[10px] font-bold text-brand bg-brand/10 px-1 py-0.2 rounded">
+                                  {u.userId}
+                                </span>
+                                {u.referralCode && (
+                                  <span className="font-mono text-[10px] text-muted-foreground">
+                                    Ref: {u.referralCode}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 font-mono text-xs font-bold text-brand">
+                              ₹{Number(u.balance || 0).toFixed(2)}
+                            </td>
+                            <td className="py-3 font-mono text-xs font-bold text-emerald-400">
+                              ₹{Number(u.totalEarned || 0).toFixed(2)}
+                            </td>
+                            <td className="py-3 font-mono text-xs font-bold text-amber-400">
+                              ₹{Number(u.totalWithdrawn || 0).toFixed(2)}
+                            </td>
+                            <td className="py-3 font-mono text-xs text-foreground">
+                              ₹{Number(u.referralIncome || 0).toFixed(2)}
+                            </td>
+                            <td className="py-3 font-mono text-xs text-foreground">
+                              ₹{Number(u.globalIncome || 0).toFixed(2)}
+                            </td>
+                            <td className="py-3 font-mono text-xs text-foreground">
+                              ₹{Number(u.adsenseIncome || 0).toFixed(2)}
+                            </td>
+                            <td className="py-3 font-mono text-xs text-foreground">
+                              ₹{Number(u.affiliateIncome || 0).toFixed(2)}
+                            </td>
+                            <td className="py-3 pr-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleViewWithdrawals(u)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-border bg-secondary/50 px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-secondary hover:text-brand"
+                              >
+                                <Eye className="h-3 w-3" />
+                                <span>Withdrawals</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Pagination */}
+                {reportTotalPages > 1 && (
+                  <div className="flex items-center justify-between border-t border-border/60 pt-4">
+                    <span className="text-xs text-muted-foreground">
+                      Showing {(reportPage - 1) * reportLimit + 1} to{" "}
+                      {Math.min(reportPage * reportLimit, reportTotalUsers)} of {reportTotalUsers}{" "}
+                      creators
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={reportPage <= 1}
+                        onClick={() => loadEarningsReport(reportPage - 1)}
+                        className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                        Previous
+                      </button>
+                      <span className="text-xs font-bold px-2">
+                        {reportPage} / {reportTotalPages}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={reportPage >= reportTotalPages}
+                        onClick={() => loadEarningsReport(reportPage + 1)}
+                        className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Next
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              {/* Withdrawal History Modal */}
+              {selectedWithdrawalUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+                  <div className="w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4">
+                    <div className="flex items-center justify-between border-b border-border pb-3">
+                      <div>
+                        <h3 className="text-base font-bold text-foreground">
+                          Withdrawal History: {selectedWithdrawalUser.name}
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          User ID: <span className="font-mono text-brand font-bold">{selectedWithdrawalUser.userId}</span> · {selectedWithdrawalUser.email}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWithdrawalUser(null)}
+                        className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {isLoadingWithdrawals ? (
+                      <div className="py-8 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+                        <p className="text-xs">Fetching withdrawal transactions...</p>
+                      </div>
+                    ) : userWithdrawals.length === 0 ? (
+                      <div className="py-8 text-center text-xs text-muted-foreground">
+                        No completed withdrawal requests found for this user in the specified period.
+                      </div>
+                    ) : (
+                      <div className="max-h-80 overflow-y-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="border-b border-border uppercase tracking-wider text-muted-foreground">
+                              <th className="pb-2 font-semibold">Date</th>
+                              <th className="pb-2 font-semibold">Tx ID</th>
+                              <th className="pb-2 font-semibold">Amount</th>
+                              <th className="pb-2 font-semibold">Status</th>
+                              <th className="pb-2 font-semibold">Description</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/50">
+                            {userWithdrawals.map((w: any) => (
+                              <tr key={w.id || w.transactionId}>
+                                <td className="py-2.5 text-muted-foreground">
+                                  {new Date(w.createdAt).toLocaleDateString("en-IN", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  })}
+                                </td>
+                                <td className="py-2.5 font-mono text-[11px] text-foreground">
+                                  {w.transactionId || w.id}
+                                </td>
+                                <td className="py-2.5 font-mono font-bold text-amber-400">
+                                  ₹{Number(w.amount).toFixed(2)}
+                                </td>
+                                <td className="py-2.5">
+                                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+                                    {w.status}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 text-muted-foreground text-[11px]">
+                                  {w.description || "Creator Withdrawal"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end pt-2 border-t border-border">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWithdrawalUser(null)}
+                        className="rounded-xl bg-secondary px-4 py-2 text-xs font-semibold text-foreground hover:bg-secondary/80"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 6: INCOME SETTINGS & MARKETING COMMISSION */}
+          {activeTab === "settings" && (
+            <div className="mt-6 space-y-6">
+              <section className="rounded-2xl border border-border bg-card p-6 shadow-card space-y-6">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand/15 text-brand">
+                    <Sliders className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <h2 className="text-lg font-bold">Platform Income Sources & Marketing Configuration</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Admin-controlled commission percentages and separate income stream tracking.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Form to update Marketing Income Percentage */}
+                <form onSubmit={handleSaveSettings} className="space-y-6">
+                  <div className="rounded-xl border border-border bg-secondary/20 p-5 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                          <Percent className="h-4 w-4 text-brand" />
+                          <span>Marketing / Affiliate Income Percentage</span>
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-1 max-w-xl">
+                          Specifies the percentage of each Ad Promotion purchase distributed as direct
+                          marketing / affiliate commission to the referring sponsor. Stored in
+                          Hostinger MySQL <code className="font-mono text-brand">platform_settings</code> table.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-36">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={marketingPercentage}
+                            onChange={(e) => setMarketingPercentage(parseFloat(e.target.value) || 0)}
+                            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-right text-base font-black text-brand outline-none focus:border-brand pr-8"
+                          />
+                          <span className="absolute right-3 top-2.5 text-sm font-bold text-muted-foreground">
+                            %
+                          </span>
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={isSavingSettings || isLoadingSettings}
+                          className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2 text-xs font-bold text-brand-foreground shadow-lift transition hover:bg-brand-dark disabled:opacity-50"
+                        >
+                          {isSavingSettings ? (
+                            <>
+                              <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-foreground border-t-transparent" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="h-4 w-4" />
+                              <span>Save Settings</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Live Calculation Simulation Box */}
+                    <div className="rounded-xl border border-brand/20 bg-brand/5 p-4 space-y-2">
+                      <p className="text-xs font-bold text-brand flex items-center gap-1.5">
+                        <DollarSign className="h-3.5 w-3.5" />
+                        <span>Live Calculation Simulation based on {marketingPercentage}% Setting:</span>
+                      </p>
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 pt-1">
+                        <div className="rounded-lg bg-background/80 p-2.5 border border-border/40">
+                          <span className="text-[10px] text-muted-foreground font-semibold">7 Days (₹100)</span>
+                          <p className="text-sm font-bold text-foreground">
+                            ₹{(100 * marketingPercentage / 100).toFixed(2)}
+                          </p>
+                          <span className="text-[10px] text-emerald-400">Direct Referrer</span>
+                        </div>
+                        <div className="rounded-lg bg-background/80 p-2.5 border border-border/40">
+                          <span className="text-[10px] text-muted-foreground font-semibold">15 Days (₹200)</span>
+                          <p className="text-sm font-bold text-foreground">
+                            ₹{(200 * marketingPercentage / 100).toFixed(2)}
+                          </p>
+                          <span className="text-[10px] text-emerald-400">Direct Referrer</span>
+                        </div>
+                        <div className="rounded-lg bg-background/80 p-2.5 border border-border/40">
+                          <span className="text-[10px] text-muted-foreground font-semibold">1 Month (₹300)</span>
+                          <p className="text-sm font-bold text-foreground">
+                            ₹{(300 * marketingPercentage / 100).toFixed(2)}
+                          </p>
+                          <span className="text-[10px] text-emerald-400">Direct Referrer</span>
+                        </div>
+                        <div className="rounded-lg bg-background/80 p-2.5 border border-border/40">
+                          <span className="text-[10px] text-muted-foreground font-semibold">1 Year (₹3000)</span>
+                          <p className="text-sm font-bold text-foreground">
+                            ₹{(3000 * marketingPercentage / 100).toFixed(2)}
+                          </p>
+                          <span className="text-[10px] text-emerald-400">Direct Referrer</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+
+                {/* 7-Level Referral Schedule Overview */}
+                <div className="rounded-xl border border-border bg-secondary/20 p-5 space-y-3">
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-brand" />
+                    <span>7-Level Ads Referral Commission Schedule</span>
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    In addition to direct marketing income, Ad Promotion campaigns disburse 7-level
+                    upline referral earnings totalling 40% with integer paise precision and zero rounding loss:
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7 pt-2">
+                    {[
+                      { level: 1, rate: adsReferralRates[1] ?? 15 },
+                      { level: 2, rate: adsReferralRates[2] ?? 10 },
+                      { level: 3, rate: adsReferralRates[3] ?? 5 },
+                      { level: 4, rate: adsReferralRates[4] ?? 4 },
+                      { level: 5, rate: adsReferralRates[5] ?? 3 },
+                      { level: 6, rate: adsReferralRates[6] ?? 2 },
+                      { level: 7, rate: adsReferralRates[7] ?? 1 },
+                    ].map((lvl) => (
+                      <div
+                        key={lvl.level}
+                        className="rounded-lg border border-border/60 bg-background/60 p-2.5 text-center"
+                      >
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase">
+                          Level {lvl.level}
+                        </span>
+                        <p className="text-base font-black text-brand mt-0.5">{lvl.rate}%</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Separate Income Sources Architectural Matrix */}
+                <div className="rounded-xl border border-border bg-secondary/20 p-5 space-y-3">
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-brand" />
+                    <span>Authoritative Income Sources Supported in Hostinger MySQL Ledger</span>
+                  </h3>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 pt-2">
+                    <div className="rounded-lg border border-border/50 bg-background/50 p-3">
+                      <span className="font-mono text-xs font-bold text-brand">referral_income</span>
+                      <h4 className="text-xs font-bold text-foreground mt-1">Direct Referral Income</h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        ₹1 per ₹6 Premium Video upload + L1–L7 upline referral commissions on Ad Promotions.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-border/50 bg-background/50 p-3">
+                      <span className="font-mono text-xs font-bold text-emerald-400">global_pool_income</span>
+                      <h4 className="text-xs font-bold text-foreground mt-1">Global Pool Share</h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        ₹3 pool per normal premium video upload, distributed to active creators weighted by video ad earnings.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-border/50 bg-background/50 p-3">
+                      <span className="font-mono text-xs font-bold text-sky-400">adsense_income</span>
+                      <h4 className="text-xs font-bold text-foreground mt-1">Google AdSense Income</h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Creator earnings from video ad views, banner impressions, and monetized watch time.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-border/50 bg-background/50 p-3">
+                      <span className="font-mono text-xs font-bold text-amber-400">affiliate_income</span>
+                      <h4 className="text-xs font-bold text-foreground mt-1">Affiliate / Marketing Income</h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Direct marketing commission calculated dynamically using the admin percentage above.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-border/50 bg-background/50 p-3">
+                      <span className="font-mono text-xs font-bold text-purple-400">ad_boost_income</span>
+                      <h4 className="text-xs font-bold text-foreground mt-1">Ad Boost Income</h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Campaign bonuses and creator incentives for featured promotional campaigns.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-border/50 bg-background/50 p-3">
+                      <span className="font-mono text-xs font-bold text-rose-400">withdrawal</span>
+                      <h4 className="text-xs font-bold text-foreground mt-1">Creator Withdrawals</h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        ₹12 gateway fee deduction per withdrawal, with instant or batch bank/UPI disbursement.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* TAB 7: DATABASE & SQL INFO */}
           {activeTab === "database" && (
             <section className="mt-6 rounded-2xl border border-border bg-secondary/20 p-6">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">

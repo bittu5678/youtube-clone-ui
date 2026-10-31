@@ -820,6 +820,27 @@ export const api = {
         }>;
       }>(`/admin/earnings-report.php?${query.toString()}`);
     },
+
+    getSettings: async () => {
+      return apiFetch<{
+        success: boolean;
+        settings: {
+          marketing_income_percentage: number;
+          ads_referral_rates: Record<number, number>;
+        };
+      }>("/admin/settings.php");
+    },
+
+    updateSettings: async (params: { marketingIncomePercentage: number }) => {
+      return apiFetch<{
+        success: boolean;
+        message: string;
+        marketing_income_percentage: number;
+      }>("/admin/settings.php", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+    },
   },
 
   // Categories

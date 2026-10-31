@@ -15,6 +15,7 @@ import {
   evaluateAdsDistribution,
   resolveUplineSponsors,
   type AdsUplineSponsor,
+  calculateWeightedPoolPayouts,
 } from "./payments.ts";
 import {
   sendWelcomeEmailServer,
@@ -100,11 +101,11 @@ export function buildMaskedBeneficiaryDetails(bank?: any): string | null {
   const upi = String(bank.upiId || bank.upi_id || "").trim();
 
   const details: Record<string, string> = {};
-  if (holder) details.account_holder = holder;
-  if (bankName) details.bank_name = bankName;
-  if (accNum) details.account_number_masked = maskAccountNumber(accNum);
-  if (ifsc) details.ifsc_code = ifsc.toUpperCase();
-  if (upi) details.upi_id_masked = maskUpiId(upi);
+  if (holder) details["account_holder"] = holder;
+  if (bankName) details["bank_name"] = bankName;
+  if (accNum) details["account_number_masked"] = maskAccountNumber(accNum);
+  if (ifsc) details["ifsc_code"] = ifsc.toUpperCase();
+  if (upi) details["upi_id_masked"] = maskUpiId(upi);
 
   return Object.keys(details).length > 0 ? JSON.stringify(details) : null;
 }
@@ -1496,8 +1497,12 @@ export async function handleApiRequest(
             let missingLevels: number[] = [];
             let adminPercent = 60;
             let totalReferralAmount = 0.0;
-            const creatorPayouts: Array<{ userId: string; amount: number; amountPaise: number }> =
-              [];
+            const creatorPayouts: Array<{
+              userId: string;
+              videoId?: string;
+              amount: number;
+              amountPaise: number;
+            }> = [];
             let eligibleCreatorCount = 0;
 
             // Resolve Admin user ID from database
@@ -5268,6 +5273,7 @@ export async function handleApiRequest(
 
         for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
           const chunk = chunks[chunkIndex];
+          if (!chunk) continue;
           const conn = await pool.getConnection();
           let chunkBegun = false;
 
@@ -5664,6 +5670,7 @@ export async function handleApiRequest(
       // Process in safe chunks with per-chunk atomic rollback semantics
       for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
         const chunk = chunks[chunkIndex];
+        if (!chunk) continue;
         // Snapshot store state before chunk execution for atomic rollback
         const walletsSnapshot = JSON.parse(JSON.stringify(store.wallets));
         const transactionsSnapshot = JSON.parse(JSON.stringify(store.walletTransactions));
@@ -6362,6 +6369,115 @@ export async function handleApiRequest(
     }
   }
 
+  // 20b. Admin Platform Settings (Marketing Commission Percentage)
+  if (route === "admin/settings") {
+    const pool = getMysqlPool();
+    const authUser = await getAuthUserFromRequest(request, store, pool);
+    if (!authUser) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Authentication required. Please provide a valid Bearer session token.",
+        },
+        401,
+      );
+    }
+    if (authUser.role !== "admin") {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Admin authorization required.",
+        },
+        403,
+      );
+    }
+
+    if (method === "GET") {
+      let marketingPct = 10.0;
+      const adsRates: Record<number, number> = { 1: 15, 2: 10, 3: 5, 4: 4, 5: 3, 6: 2, 7: 1 };
+
+      if (pool) {
+        try {
+          const [rows]: any = await pool.query(
+            "SELECT setting_key, setting_value FROM platform_settings",
+          );
+          for (const r of rows || []) {
+            if (r.setting_key === "marketing_income_percentage") {
+              marketingPct = parseFloat(r.setting_value) || 10.0;
+            } else if (/^ads_referral_rate_l([1-7])$/.test(r.setting_key)) {
+              const lvl = parseInt(r.setting_key.replace("ads_referral_rate_l", ""), 10);
+              adsRates[lvl] = parseInt(r.setting_value, 10) || adsRates[lvl] || 0;
+            }
+          }
+        } catch {
+          // Table not yet migrated, fallback to defaults
+        }
+      }
+
+      return jsonResponse({
+        success: true,
+        settings: {
+          marketing_income_percentage: marketingPct,
+          ads_referral_rates: adsRates,
+        },
+      });
+    }
+
+    if (method === "POST") {
+      const payload: any = await request.json().catch(() => ({}));
+      const rawPct =
+        payload?.["marketing_income_percentage"] ?? payload?.["marketingIncomePercentage"];
+      const marketingPct = typeof rawPct === "number" ? rawPct : parseFloat(String(rawPct || ""));
+
+      if (isNaN(marketingPct) || marketingPct < 0 || marketingPct > 100) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Marketing income percentage must be between 0% and 100%.",
+          },
+          400,
+        );
+      }
+
+      if (pool) {
+        try {
+          await pool.query(`
+            CREATE TABLE IF NOT EXISTS platform_settings (
+              setting_key VARCHAR(100) NOT NULL,
+              setting_value TEXT NOT NULL,
+              description VARCHAR(255) DEFAULT NULL,
+              updated_by VARCHAR(50) DEFAULT 'SYSTEM',
+              updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              PRIMARY KEY (setting_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+          `);
+
+          await pool.query(
+            `
+            INSERT INTO platform_settings (setting_key, setting_value, description, updated_by, updated_at)
+            VALUES ('marketing_income_percentage', ?, 'Default marketing commission percentage', ?, NOW())
+            ON DUPLICATE KEY UPDATE 
+              setting_value = VALUES(setting_value),
+              updated_by = VALUES(updated_by),
+              updated_at = NOW()
+          `,
+            [String(marketingPct), authUser.user_id],
+          );
+        } catch (dbErr: any) {
+          console.error("[admin/settings] DB error:", dbErr);
+        }
+      }
+
+      return jsonResponse({
+        success: true,
+        message: `Marketing income percentage successfully updated to ${marketingPct}%.`,
+        marketing_income_percentage: marketingPct,
+      });
+    }
+
+    return jsonResponse({ success: false, error: "Method Not Allowed" }, 405);
+  }
+
   // 21. Admin User-Wise Earnings & Payouts Report
   if (route === "admin/earnings-report") {
     if (method === "GET") {
@@ -6380,7 +6496,8 @@ export async function handleApiRequest(
         return jsonResponse(
           {
             success: false,
-            error: "Admin authorization required. Only verified administrators can access the earnings report.",
+            error:
+              "Admin authorization required. Only verified administrators can access the earnings report.",
           },
           403,
         );
@@ -6403,8 +6520,16 @@ export async function handleApiRequest(
           );
         }
 
-        const startDate = (url.searchParams.get("start_date") || url.searchParams.get("startDate") || "").trim();
-        const endDate = (url.searchParams.get("end_date") || url.searchParams.get("endDate") || "").trim();
+        const startDate = (
+          url.searchParams.get("start_date") ||
+          url.searchParams.get("startDate") ||
+          ""
+        ).trim();
+        const endDate = (
+          url.searchParams.get("end_date") ||
+          url.searchParams.get("endDate") ||
+          ""
+        ).trim();
 
         if (pool) {
           try {
@@ -6452,18 +6577,27 @@ export async function handleApiRequest(
         const allTx = store.walletTransactions || [];
         const normTarget = targetUserId.toUpperCase();
         let userTxs = allTx.filter((t: any) => {
-          const uId = String(t.user_id || t.userId || "").trim().toUpperCase();
-          const isWithdrawal = (t.type === "withdrawal" || t.income_type === "withdrawal" || t.incomeType === "withdrawal");
+          const uId = String(t.user_id || t.userId || "")
+            .trim()
+            .toUpperCase();
+          const isWithdrawal =
+            t.type === "withdrawal" ||
+            t.income_type === "withdrawal" ||
+            t.incomeType === "withdrawal";
           return uId === normTarget && isWithdrawal;
         });
 
         if (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
           const startMs = new Date(`${startDate}T00:00:00Z`).getTime();
-          userTxs = userTxs.filter((t: any) => new Date(t.created_at || t.createdAt || 0).getTime() >= startMs);
+          userTxs = userTxs.filter(
+            (t: any) => new Date(t.created_at || t.createdAt || 0).getTime() >= startMs,
+          );
         }
         if (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
           const endMs = new Date(`${endDate}T23:59:59Z`).getTime();
-          userTxs = userTxs.filter((t: any) => new Date(t.created_at || t.createdAt || 0).getTime() <= endMs);
+          userTxs = userTxs.filter(
+            (t: any) => new Date(t.created_at || t.createdAt || 0).getTime() <= endMs,
+          );
         }
 
         const mapped = userTxs.map((tx: any) => ({
@@ -6489,10 +6623,20 @@ export async function handleApiRequest(
 
       // Main Report Query: Filtered & Paginated Users
       const search = (url.searchParams.get("search") || url.searchParams.get("q") || "").trim();
-      const startDate = (url.searchParams.get("start_date") || url.searchParams.get("startDate") || "").trim();
-      const endDate = (url.searchParams.get("end_date") || url.searchParams.get("endDate") || "").trim();
+      const startDate = (
+        url.searchParams.get("start_date") ||
+        url.searchParams.get("startDate") ||
+        ""
+      ).trim();
+      const endDate = (
+        url.searchParams.get("end_date") ||
+        url.searchParams.get("endDate") ||
+        ""
+      ).trim();
       const dateMode = (url.searchParams.get("date_mode") || "joined").trim().toLowerCase();
-      const exportType = (url.searchParams.get("export") || url.searchParams.get("format") || "").trim().toLowerCase();
+      const exportType = (url.searchParams.get("export") || url.searchParams.get("format") || "")
+        .trim()
+        .toLowerCase();
 
       let page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
       let limit = Math.max(1, Math.min(100, parseInt(url.searchParams.get("limit") || "20", 10)));
@@ -6508,7 +6652,9 @@ export async function handleApiRequest(
           const params: any[] = [];
 
           if (search) {
-            whereClauses.push("(u.user_id LIKE ? OR u.name LIKE ? OR u.email LIKE ? OR u.referral_code LIKE ?)");
+            whereClauses.push(
+              "(u.user_id LIKE ? OR u.name LIKE ? OR u.email LIKE ? OR u.referral_code LIKE ?)",
+            );
             const like = `%${search}%`;
             params.push(like, like, like, like);
           }
@@ -6518,13 +6664,19 @@ export async function handleApiRequest(
 
           if (dateMode === "activity") {
             if (hasStart && hasEnd) {
-              whereClauses.push("u.user_id IN (SELECT DISTINCT user_id FROM income_ledger WHERE created_at >= ? AND created_at <= ?)");
+              whereClauses.push(
+                "u.user_id IN (SELECT DISTINCT user_id FROM income_ledger WHERE created_at >= ? AND created_at <= ?)",
+              );
               params.push(`${startDate} 00:00:00`, `${endDate} 23:59:59`);
             } else if (hasStart) {
-              whereClauses.push("u.user_id IN (SELECT DISTINCT user_id FROM income_ledger WHERE created_at >= ?)");
+              whereClauses.push(
+                "u.user_id IN (SELECT DISTINCT user_id FROM income_ledger WHERE created_at >= ?)",
+              );
               params.push(`${startDate} 00:00:00`);
             } else if (hasEnd) {
-              whereClauses.push("u.user_id IN (SELECT DISTINCT user_id FROM income_ledger WHERE created_at <= ?)");
+              whereClauses.push(
+                "u.user_id IN (SELECT DISTINCT user_id FROM income_ledger WHERE created_at <= ?)",
+              );
               params.push(`${endDate} 23:59:59`);
             }
           } else {
@@ -6541,7 +6693,10 @@ export async function handleApiRequest(
           const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
           // 1. Total Count
-          const [countRows]: any = await pool.query(`SELECT COUNT(*) AS total FROM users u ${whereSql}`, params);
+          const [countRows]: any = await pool.query(
+            `SELECT COUNT(*) AS total FROM users u ${whereSql}`,
+            params,
+          );
           const totalUsers = Number(countRows?.[0]?.total) || 0;
 
           // 2. Summary aggregates
@@ -6549,14 +6704,27 @@ export async function handleApiRequest(
             SELECT 
               COUNT(u.id) AS total_count,
               COALESCE(SUM(wb.balance), 0) AS total_wallet_balance,
-              COALESCE(SUM(wb.total_earned), 0) AS total_earned,
-              COALESCE(SUM(wb.total_withdrawn), 0) AS total_withdrawn,
-              COALESCE(SUM(wb.referral_income), 0) AS total_referral_income,
-              COALESCE(SUM(wb.global_income), 0) AS total_global_income,
-              COALESCE(SUM(wb.adsense_income), 0) AS total_adsense_income,
-              COALESCE(SUM(wb.affiliate_income), 0) AS total_affiliate_income
+              COALESCE(SUM(COALESCE(wb.total_earned, lt.ledger_total_earned, 0)), 0) AS total_earned,
+              COALESCE(SUM(COALESCE(wb.total_withdrawn, lt.ledger_total_withdrawn, 0)), 0) AS total_withdrawn,
+              COALESCE(SUM(COALESCE(lt.ledger_referral_income, wb.referral_income, 0)), 0) AS total_referral_income,
+              COALESCE(SUM(COALESCE(lt.ledger_global_income, wb.global_income, 0)), 0) AS total_global_income,
+              COALESCE(SUM(COALESCE(lt.ledger_adsense_income, wb.adsense_income, 0)), 0) AS total_adsense_income,
+              COALESCE(SUM(COALESCE(lt.ledger_affiliate_income, wb.affiliate_income, 0)), 0) AS total_affiliate_income
             FROM users u
             LEFT JOIN wallet_balances wb ON UPPER(wb.user_id) = UPPER(u.user_id)
+            LEFT JOIN (
+              SELECT 
+                UPPER(user_id) AS user_id,
+                SUM(CASE WHEN income_type IN ('referral_income', 'direct_commission') THEN amount ELSE 0 END) AS ledger_referral_income,
+                SUM(CASE WHEN income_type = 'global_income' THEN amount ELSE 0 END) AS ledger_global_income,
+                SUM(CASE WHEN income_type = 'adsense_income' THEN amount ELSE 0 END) AS ledger_adsense_income,
+                SUM(CASE WHEN income_type IN ('affiliate_income', 'marketing_income') THEN amount ELSE 0 END) AS ledger_affiliate_income,
+                SUM(CASE WHEN income_type = 'withdrawal' THEN amount ELSE 0 END) AS ledger_total_withdrawn,
+                SUM(CASE WHEN income_type != 'withdrawal' THEN amount ELSE 0 END) AS ledger_total_earned
+              FROM income_ledger
+              WHERE status = 'settled'
+              GROUP BY UPPER(user_id)
+            ) lt ON UPPER(lt.user_id) = UPPER(u.user_id)
             ${whereSql}
           `;
           const [sumRows]: any = await pool.query(summarySql, params);
@@ -6569,7 +6737,8 @@ export async function handleApiRequest(
             totalReferralIncome: Math.round((Number(sRow.total_referral_income) || 0) * 100) / 100,
             totalGlobalIncome: Math.round((Number(sRow.total_global_income) || 0) * 100) / 100,
             totalAdsenseIncome: Math.round((Number(sRow.total_adsense_income) || 0) * 100) / 100,
-            totalAffiliateIncome: Math.round((Number(sRow.total_affiliate_income) || 0) * 100) / 100,
+            totalAffiliateIncome:
+              Math.round((Number(sRow.total_affiliate_income) || 0) * 100) / 100,
           };
 
           // 3. Paginated Data Rows
@@ -6583,14 +6752,27 @@ export async function handleApiRequest(
               u.referral_code,
               u.created_at,
               COALESCE(wb.balance, 0.00) AS balance,
-              COALESCE(wb.total_earned, 0.00) AS total_earned,
-              COALESCE(wb.total_withdrawn, 0.00) AS total_withdrawn,
-              COALESCE(wb.referral_income, 0.00) AS referral_income,
-              COALESCE(wb.global_income, 0.00) AS global_income,
-              COALESCE(wb.adsense_income, 0.00) AS adsense_income,
-              COALESCE(wb.affiliate_income, 0.00) AS affiliate_income
+              COALESCE(wb.total_earned, lt.ledger_total_earned, 0.00) AS total_earned,
+              COALESCE(wb.total_withdrawn, lt.ledger_total_withdrawn, 0.00) AS total_withdrawn,
+              COALESCE(lt.ledger_referral_income, wb.referral_income, 0.00) AS referral_income,
+              COALESCE(lt.ledger_global_income, wb.global_income, 0.00) AS global_income,
+              COALESCE(lt.ledger_adsense_income, wb.adsense_income, 0.00) AS adsense_income,
+              COALESCE(lt.ledger_affiliate_income, wb.affiliate_income, 0.00) AS affiliate_income
             FROM users u
             LEFT JOIN wallet_balances wb ON UPPER(wb.user_id) = UPPER(u.user_id)
+            LEFT JOIN (
+              SELECT 
+                UPPER(user_id) AS user_id,
+                SUM(CASE WHEN income_type IN ('referral_income', 'direct_commission') THEN amount ELSE 0 END) AS ledger_referral_income,
+                SUM(CASE WHEN income_type = 'global_income' THEN amount ELSE 0 END) AS ledger_global_income,
+                SUM(CASE WHEN income_type = 'adsense_income' THEN amount ELSE 0 END) AS ledger_adsense_income,
+                SUM(CASE WHEN income_type IN ('affiliate_income', 'marketing_income') THEN amount ELSE 0 END) AS ledger_affiliate_income,
+                SUM(CASE WHEN income_type = 'withdrawal' THEN amount ELSE 0 END) AS ledger_total_withdrawn,
+                SUM(CASE WHEN income_type != 'withdrawal' THEN amount ELSE 0 END) AS ledger_total_earned
+              FROM income_ledger
+              WHERE status = 'settled'
+              GROUP BY UPPER(user_id)
+            ) lt ON UPPER(lt.user_id) = UPPER(u.user_id)
             ${whereSql}
             ORDER BY u.created_at DESC
             LIMIT ? OFFSET ?
@@ -6715,7 +6897,9 @@ export async function handleApiRequest(
 
       if (hasStart) {
         const startMs = new Date(`${startDate}T00:00:00Z`).getTime();
-        filteredUsers = filteredUsers.filter((u) => new Date(u.created_at || 0).getTime() >= startMs);
+        filteredUsers = filteredUsers.filter(
+          (u) => new Date(u.created_at || 0).getTime() >= startMs,
+        );
       }
       if (hasEnd) {
         const endMs = new Date(`${endDate}T23:59:59Z`).getTime();

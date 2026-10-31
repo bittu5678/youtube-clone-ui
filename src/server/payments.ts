@@ -83,9 +83,12 @@ export interface AdsDistributionResult {
  * Uses integer paise to ensure that the sum of level payouts and Admin remainder
  * strictly equals the exact plan amount with zero rounding loss.
  */
+export const DEFAULT_MARKETING_INCOME_PERCENTAGE = 10;
+
 export function evaluateAdsDistribution(
   planAmount: number,
   uplines: (AdsUplineSponsor | { level: number; userId: string; name?: string | undefined })[] = [],
+  customRates?: readonly { level: number; percent: number; rate?: number }[] | { level: number; percent: number }[],
 ): AdsDistributionResult {
   const totalPaise = Math.round(planAmount * 100);
   const uplineMap = new Map<number, { userId: string; name?: string | undefined }>();
@@ -99,7 +102,9 @@ export function evaluateAdsDistribution(
   const missingLevels: number[] = [];
   let allocatedPaise = 0;
 
-  for (const tier of ADS_REFERRAL_RATES) {
+  const activeRates = customRates && customRates.length > 0 ? customRates : ADS_REFERRAL_RATES;
+
+  for (const tier of activeRates) {
     const sponsor = uplineMap.get(tier.level);
     if (sponsor) {
       const commPaise = Math.round(totalPaise * (tier.percent / 100));
@@ -234,7 +239,7 @@ export function calculateWeightedPoolPayouts(
     return {
       payouts: creators.map((c) => ({
         userId: c.userId,
-        videoId: c.videoId,
+        ...(c.videoId ? { videoId: c.videoId } : {}),
         amountPaise: perCreatorPaise,
         amount: perCreatorPaise / 100,
         weight: 1 / creators.length,
@@ -252,7 +257,7 @@ export function calculateWeightedPoolPayouts(
     totalAllocated += amountPaise;
     return {
       userId: c.userId,
-      videoId: c.videoId,
+      ...(c.videoId ? { videoId: c.videoId } : {}),
       amountPaise,
       amount: amountPaise / 100,
       weight,
@@ -981,7 +986,7 @@ export async function verifyServerPayment(
             seenCreatorKeys.add(key);
             eligibleItems.push({
               userId: norm,
-              videoId: item.videoId,
+              ...(item.videoId ? { videoId: item.videoId } : {}),
               adEarnings: Math.max(0, Number(item.adEarnings) || 0),
             });
           }
@@ -1024,7 +1029,7 @@ export async function verifyServerPayment(
           for (const p of weighted.payouts) {
             creatorPayouts.push({
               userId: p.userId,
-              videoId: p.videoId,
+              ...(p.videoId ? { videoId: p.videoId } : {}),
               amount: p.amount,
               amountPaise: p.amountPaise,
             });

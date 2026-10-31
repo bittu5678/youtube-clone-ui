@@ -63,7 +63,57 @@ const videoAdEarnings = [
   },
 ];
 
+import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api";
+
 function AdSenseIncomePage() {
+  const { user } = useAuth();
+  const [wallet, setWallet] = useState<any>(null);
+  const [adsenseTransactions, setAdsenseTransactions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      setIsLoading(true);
+      try {
+        const [wRes, txRes] = await Promise.all([
+          api.wallet.getBalance(user?.user_id),
+          api.wallet.getTransactions(user?.user_id, 50),
+        ]);
+        if (isMounted) {
+          if (wRes && wRes.success && wRes.wallet) {
+            setWallet(wRes.wallet);
+          }
+          if (txRes && txRes.success && Array.isArray(txRes.transactions)) {
+            const filtered = txRes.transactions.filter(
+              (t: any) =>
+                t.income_type === "adsense_income" ||
+                t.incomeType === "adsense_income" ||
+                t.purpose === "adsense_income" ||
+                String(t.description || "").toLowerCase().includes("adsense") ||
+                String(t.description || "").toLowerCase().includes("video ad"),
+            );
+            setAdsenseTransactions(filtered);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load user AdSense data:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.user_id]);
+
+  const adsenseRevenue = Number(wallet?.adsense_income ?? 0);
+  const totalEarned = Number(wallet?.total_earned ?? 0);
+  const walletBalance = Number(wallet?.balance ?? 0);
+
   return (
     <VideoHubLayout>
       <div className="px-4 py-6 sm:px-6 lg:px-8 space-y-6">
@@ -75,11 +125,11 @@ function AdSenseIncomePage() {
             </div>
             <div>
               <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
-                AdSense Income
+                Google AdSense Income
               </h1>
               <p className="text-sm text-muted-foreground">
-                In-stream video ad revenue (70% creator share), skippable pre-rolls, and display
-                impressions
+                In-stream video ad revenue (70% creator share), skippable pre-rolls, and monetized
+                display impressions backed by your genuine Hostinger ledger.
               </p>
             </div>
           </div>
@@ -96,20 +146,22 @@ function AdSenseIncomePage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Total AdSense Revenue</span>
-            <p className="text-2xl font-black text-yellow-400">₹1,890.20</p>
+            <p className="text-2xl font-black text-yellow-400">
+              ₹{adsenseRevenue.toFixed(2)}
+            </p>
             <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" /> +18.4% this month
+              <TrendingUp className="h-3 w-3" /> Authoritative ledger total
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Average Playback CPM</span>
-            <p className="text-2xl font-black text-foreground">₹5.33</p>
-            <p className="text-[11px] text-muted-foreground">Per 1,000 ad plays</p>
+            <span className="text-xs text-muted-foreground font-medium">Available Wallet Balance</span>
+            <p className="text-2xl font-black text-foreground">₹{walletBalance.toFixed(2)}</p>
+            <p className="text-[11px] text-muted-foreground">Ready for creator payout</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Monetized Plays</span>
-            <p className="text-2xl font-black text-foreground">353.5K</p>
-            <p className="text-[11px] text-muted-foreground">86.8% monetization rate</p>
+            <span className="text-xs text-muted-foreground font-medium">Cumulative Earned</span>
+            <p className="text-2xl font-black text-emerald-400">₹{totalEarned.toFixed(2)}</p>
+            <p className="text-[11px] text-muted-foreground">All income channels combined</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Creator Rev Share</span>
@@ -118,40 +170,78 @@ function AdSenseIncomePage() {
           </div>
         </div>
 
-        {/* Video Table */}
+        {/* Ledger Transactions Table */}
         <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-card">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <h3 className="text-sm font-bold text-foreground">Ad Revenue per Video</h3>
-            <span className="text-xs text-muted-foreground">Top earning uploads</span>
+            <div>
+              <h3 className="text-sm font-bold text-foreground">
+                Authoritative AdSense Ledger Transactions
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Settled in Hostinger MySQL <code className="font-mono text-brand">income_ledger</code>
+              </p>
+            </div>
+            <span className="text-xs text-muted-foreground font-semibold">
+              {adsenseTransactions.length} records
+            </span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-border bg-secondary/40 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">Video Title</th>
-                  <th className="px-4 py-3">Views</th>
-                  <th className="px-4 py-3">Monetized Plays</th>
-                  <th className="px-4 py-3">CPM</th>
-                  <th className="px-4 py-3 text-right">Ad Revenue</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {videoAdEarnings.map((vid) => (
-                  <tr key={vid.title} className="transition hover:bg-secondary/20">
-                    <td className="px-4 py-3.5 font-bold text-foreground max-w-sm truncate">
-                      {vid.title}
-                    </td>
-                    <td className="px-4 py-3.5 text-muted-foreground">{vid.views}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground">{vid.monetizedPlays}</td>
-                    <td className="px-4 py-3.5 font-bold text-amber-400">{vid.cpm}</td>
-                    <td className="px-4 py-3.5 text-right font-black text-yellow-400 text-sm">
-                      {vid.revenue}
-                    </td>
+
+          {isLoading ? (
+            <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+              <p className="text-xs">Loading ledger transactions...</p>
+            </div>
+          ) : adsenseTransactions.length === 0 ? (
+            <div className="py-12 text-center text-xs text-muted-foreground space-y-2">
+              <p>No settled AdSense transactions recorded yet for user account.</p>
+              <p className="text-[11px]">
+                Ad impressions and view-time monetization are settled directly to your wallet.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-border bg-secondary/40 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Transaction ID</th>
+                    <th className="px-4 py-3">Source / Video</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Net Credit</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {adsenseTransactions.map((tx: any) => (
+                    <tr key={tx.id || tx.transactionId || tx.transaction_id} className="transition hover:bg-secondary/20">
+                      <td className="px-4 py-3.5 text-muted-foreground">
+                        {tx.created_at || tx.createdAt
+                          ? new Date(tx.created_at || tx.createdAt).toLocaleDateString("en-IN", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })
+                          : "Settled"}
+                      </td>
+                      <td className="px-4 py-3.5 font-mono text-foreground font-bold">
+                        {tx.transaction_id || tx.transactionId || tx.id}
+                      </td>
+                      <td className="px-4 py-3.5 text-muted-foreground">
+                        {tx.description || tx.video_title || "Video Ad Impression Revenue"}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+                          {tx.status || "settled"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-black text-yellow-400 text-sm font-mono">
+                        +₹{Number(tx.amount || 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </VideoHubLayout>
