@@ -49,6 +49,66 @@ export function isAdPromotionActive(video: {
   return expiryTime > Date.now();
 }
 
+/**
+ * Masks sensitive bank account number leaving only the last 4 characters visible.
+ * E.g. '50100481920194' -> 'XXXXXXXXXX0194'
+ */
+export function maskAccountNumber(acc: string): string {
+  const clean = String(acc || "").replace(/[^0-9A-Za-z]/g, "");
+  const len = clean.length;
+  if (len === 0) return "";
+  if (len <= 4) return "X".repeat(len);
+  return "X".repeat(len - 4) + clean.slice(-4);
+}
+
+/**
+ * Masks sensitive UPI handle before the domain.
+ * E.g. 'alexrivera@okhdfcbank' -> 'al***ra@okhdfcbank'
+ */
+export function maskUpiId(upi: string): string {
+  const clean = String(upi || "").trim();
+  if (!clean) return "";
+  const parts = clean.split("@");
+  const handle = parts[0] || "";
+  const hLen = handle.length;
+  let maskedHandle: string;
+  if (hLen <= 2) {
+    maskedHandle = handle.slice(0, 1) + "*";
+  } else if (hLen <= 4) {
+    maskedHandle = handle.slice(0, 1) + "**" + handle.slice(-1);
+  } else {
+    maskedHandle = handle.slice(0, 2) + "***" + handle.slice(-2);
+  }
+  return parts.length > 1 ? `${maskedHandle}@${parts[1]}` : maskedHandle;
+}
+
+/**
+ * Builds protected, masked beneficiary representation for secure storage.
+ */
+export function buildMaskedBeneficiaryDetails(bank?: any): string | null {
+  if (!bank || typeof bank !== "object") return null;
+  const holder = String(
+    bank.accountHolder ||
+      bank.account_holder ||
+      bank.accountHolderName ||
+      bank.account_holder_name ||
+      "",
+  ).trim();
+  const bankName = String(bank.bankName || bank.bank_name || "").trim();
+  const accNum = String(bank.accountNumber || bank.account_number || "").trim();
+  const ifsc = String(bank.ifscCode || bank.ifsc_code || "").trim();
+  const upi = String(bank.upiId || bank.upi_id || "").trim();
+
+  const details: Record<string, string> = {};
+  if (holder) details.account_holder = holder;
+  if (bankName) details.bank_name = bankName;
+  if (accNum) details.account_number_masked = maskAccountNumber(accNum);
+  if (ifsc) details.ifsc_code = ifsc.toUpperCase();
+  if (upi) details.upi_id_masked = maskUpiId(upi);
+
+  return Object.keys(details).length > 0 ? JSON.stringify(details) : null;
+}
+
 interface ServerStore {
   users: Array<{
     id: string;
@@ -4320,14 +4380,30 @@ export async function handleApiRequest(
             });
           }
         } catch (_e) {
-          if (process.env["NODE_ENV"] === "production") {
-            return jsonResponse(
-              {
-                success: false,
-                error: "Database error while retrieving wallet transactions.",
-              },
-              503,
-            );
+          try {
+            const queryLedger =
+              authUser.role === "admin" && !qUserId
+                ? `SELECT * FROM income_ledger ORDER BY created_at DESC LIMIT 100`
+                : `SELECT * FROM income_ledger WHERE UPPER(user_id) = UPPER(?) ORDER BY created_at DESC LIMIT 100`;
+            const params = authUser.role === "admin" && !qUserId ? [] : [targetUserId];
+            const [rows]: any = await pool.query(queryLedger, params);
+            if (rows) {
+              return jsonResponse({
+                success: true,
+                transactions: rows,
+                total: rows.length,
+              });
+            }
+          } catch (_e2) {
+            if (process.env["NODE_ENV"] === "production") {
+              return jsonResponse(
+                {
+                  success: false,
+                  error: "Database error while retrieving wallet transactions.",
+                },
+                503,
+              );
+            }
           }
         }
       }
@@ -4376,6 +4452,13 @@ export async function handleApiRequest(
       const payload = await request.json();
       const amount = Number(payload.amount);
       const requestedUserId = String(payload.userId || payload.user_id || "").trim();
+      const payoutMethodInput = String(payload.payoutMethod || payload.payout_method || "").trim();
+      let bankDetails =
+        payload.bankDetails && typeof payload.bankDetails === "object"
+          ? payload.bankDetails
+          : payload.bank_details && typeof payload.bank_details === "object"
+            ? payload.bank_details
+            : null;
 
       // Enforce ownership: standard users can ONLY withdraw from their own account
       let effectiveUserId = authUser.user_id;
@@ -4411,6 +4494,41 @@ export async function handleApiRequest(
           400,
         );
       }
+
+      // If bankDetails was not provided in request, attempt lookup from KYC
+      if (pool && !bankDetails) {
+        try {
+          const [kRows]: any = await pool.query(
+            `SELECT account_holder_name, bank_name, account_number, ifsc_code, upi_id FROM kyc_bank_details WHERE UPPER(user_id) = UPPER(?) LIMIT 1`,
+            [effectiveUserId],
+          );
+          if (kRows && kRows.length > 0) {
+            bankDetails = {
+              accountHolder: kRows[0].account_holder_name,
+              bankName: kRows[0].bank_name,
+              accountNumber: kRows[0].account_number,
+              ifscCode: kRows[0].ifsc_code,
+              upiId: kRows[0].upi_id,
+            };
+          }
+        } catch (_eKyc) {
+          // ignore
+        }
+      }
+
+      let payoutMethod = payoutMethodInput;
+      if (!payoutMethod) {
+        if (bankDetails?.upiId || bankDetails?.upi_id) {
+          if (!bankDetails?.accountNumber && !bankDetails?.account_number) {
+            payoutMethod = "upi";
+          } else {
+            payoutMethod = "bank_transfer";
+          }
+        } else {
+          payoutMethod = "bank_transfer";
+        }
+      }
+      const beneficiaryDetailsJson = buildMaskedBeneficiaryDetails(bankDetails);
 
       // Company Confirmed Withdrawal Fee Rule:
       // - Minimum: ₹100, Maximum: ₹1,000
@@ -4466,11 +4584,45 @@ export async function handleApiRequest(
           );
 
           const txId = `tx_wdr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-          await conn.query(
-            `INSERT INTO wallet_transactions (id, user_id, type, amount, status, created_at)
-             VALUES (?, ?, 'withdrawal', ?, 'approved', NOW())`,
-            [txId, effectiveUserId, amount],
-          );
+          let recorded = false;
+          try {
+            await conn.query(
+              `INSERT INTO wallet_transactions (id, user_id, type, amount, status, payout_method, beneficiary_details, created_at)
+               VALUES (?, ?, 'withdrawal', ?, 'approved', ?, ?, NOW())`,
+              [txId, effectiveUserId, amount, payoutMethod, beneficiaryDetailsJson],
+            );
+            recorded = true;
+          } catch (_eWt) {
+            try {
+              await conn.query(
+                `INSERT INTO income_ledger (id, transaction_id, user_id, income_type, amount, status, description, payout_method, beneficiary_details, created_at)
+                 VALUES (?, ?, ?, 'withdrawal', ?, 'settled', ?, ?, ?, NOW())`,
+                [
+                  txId,
+                  txId,
+                  effectiveUserId,
+                  amount,
+                  `Withdrawal request approved for ₹${amount.toFixed(2)} (Net: ₹${netAmount.toFixed(2)} after 20% charges: 18% GST ₹${gstAmount.toFixed(2)} + 2% PG ₹${pgFeeAmount.toFixed(2)})`,
+                  payoutMethod,
+                  beneficiaryDetailsJson,
+                ],
+              );
+              recorded = true;
+            } catch (_eLedger) {
+              await conn.query(
+                `INSERT INTO income_ledger (id, transaction_id, user_id, income_type, amount, status, description, created_at)
+                 VALUES (?, ?, ?, 'withdrawal', ?, 'settled', ?, NOW())`,
+                [
+                  txId,
+                  txId,
+                  effectiveUserId,
+                  amount,
+                  `Withdrawal request approved for ₹${amount.toFixed(2)} (Net: ₹${netAmount.toFixed(2)} after 20% charges: 18% GST ₹${gstAmount.toFixed(2)} + 2% PG ₹${pgFeeAmount.toFixed(2)})`,
+                ],
+              );
+              recorded = true;
+            }
+          }
 
           await conn.commit();
 
@@ -4488,6 +4640,10 @@ export async function handleApiRequest(
               chargesBreakdown,
               type: "withdrawal",
               status: "approved",
+              payout_method: payoutMethod,
+              payoutMethod: payoutMethod,
+              beneficiary_details: beneficiaryDetailsJson,
+              beneficiaryDetails: beneficiaryDetailsJson,
               createdAt: new Date().toISOString(),
             },
             updatedWallet: {
@@ -4547,6 +4703,8 @@ export async function handleApiRequest(
 
       const tx = {
         id: `tx-wdr-${Date.now()}`,
+        transactionId: `tx-wdr-${Date.now()}`,
+        transaction_id: `tx-wdr-${Date.now()}`,
         userId: effectiveUserId,
         user_id: effectiveUserId,
         amount,
@@ -4555,7 +4713,13 @@ export async function handleApiRequest(
         net_amount: netAmount,
         chargesBreakdown,
         type: "withdrawal",
+        incomeType: "withdrawal",
+        income_type: "withdrawal",
         status: "approved",
+        payout_method: payoutMethod,
+        payoutMethod: payoutMethod,
+        beneficiary_details: beneficiaryDetailsJson,
+        beneficiaryDetails: beneficiaryDetailsJson,
         createdAt: new Date().toISOString(),
         created_at: new Date().toISOString(),
       };
@@ -5150,15 +5314,26 @@ export async function handleApiRequest(
                 if (!existingTx) {
                   try {
                     const [rows]: any = await conn.query(
-                      `SELECT id, transaction_id, user_id, amount, status FROM income_ledger WHERE transaction_id = ? OR id = ? FOR UPDATE`,
+                      `SELECT id, transaction_id, user_id, amount, status, batch_id, payout_method FROM income_ledger WHERE transaction_id = ? OR id = ? FOR UPDATE`,
                       [inputTxId, inputTxId],
                     );
                     if (rows && rows.length > 0) {
                       existingTx = rows[0];
                       isWalletTxTable = false;
                     }
-                  } catch (_e) {
-                    // Ignore
+                  } catch (_eCols) {
+                    try {
+                      const [rows]: any = await conn.query(
+                        `SELECT id, transaction_id, user_id, amount, status FROM income_ledger WHERE transaction_id = ? OR id = ? FOR UPDATE`,
+                        [inputTxId, inputTxId],
+                      );
+                      if (rows && rows.length > 0) {
+                        existingTx = rows[0];
+                        isWalletTxTable = false;
+                      }
+                    } catch (_e) {
+                      // Ignore
+                    }
                   }
                 }
 
@@ -5181,7 +5356,8 @@ export async function handleApiRequest(
                   throw err;
                 }
 
-                if (String(existingTx.status || "").toLowerCase() === "completed") {
+                const statusLower = String(existingTx.status || "").toLowerCase();
+                if (statusLower === "completed" || statusLower === "settled") {
                   // Idempotent retry: check if it was already marked completed in the SAME batch
                   if (existingTx.batch_id && existingTx.batch_id === batchId) {
                     const payoutAmt = Number(existingTx.amount) || amt;
@@ -5204,16 +5380,25 @@ export async function handleApiRequest(
                   throw err;
                 }
 
+                const itemPayoutMethod =
+                  String(p.payout_method || p.payoutMethod || "").trim() || "bulk_bank_transfer";
                 if (isWalletTxTable) {
                   await conn.query(
-                    `UPDATE wallet_transactions SET status = 'completed', batch_id = ?, updated_at = NOW() WHERE id = ?`,
-                    [batchId, inputTxId],
+                    `UPDATE wallet_transactions SET status = 'completed', batch_id = ?, payout_method = COALESCE(payout_method, ?), updated_at = NOW() WHERE id = ?`,
+                    [batchId, itemPayoutMethod, inputTxId],
                   );
                 } else {
-                  await conn.query(
-                    `UPDATE income_ledger SET status = 'settled' WHERE transaction_id = ? OR id = ?`,
-                    [inputTxId, inputTxId],
-                  );
+                  try {
+                    await conn.query(
+                      `UPDATE income_ledger SET status = 'settled', batch_id = ?, payout_method = COALESCE(payout_method, ?) WHERE transaction_id = ? OR id = ?`,
+                      [batchId, itemPayoutMethod, inputTxId, inputTxId],
+                    );
+                  } catch (_eUpLedger) {
+                    await conn.query(
+                      `UPDATE income_ledger SET status = 'settled' WHERE transaction_id = ? OR id = ?`,
+                      [inputTxId, inputTxId],
+                    );
+                  }
                 }
 
                 // Do NOT deduct from wallet_balances again!
@@ -5231,17 +5416,37 @@ export async function handleApiRequest(
                 const deterministicTxId = `tx_wdr_bulk_${batchId}_${globalIndex}`;
 
                 // Check for idempotent retry of this direct payout in the same batch
+                let alreadyDirect: any = null;
                 try {
                   const [alreadyRows]: any = await conn.query(
                     `SELECT id, user_id, amount, status FROM wallet_transactions WHERE id = ? AND batch_id = ?`,
                     [deterministicTxId, batchId],
                   );
-                  if (
-                    alreadyRows &&
-                    alreadyRows.length > 0 &&
-                    String(alreadyRows[0].status || "").toLowerCase() === "completed"
-                  ) {
-                    const payoutAmt = Number(alreadyRows[0].amount) || amt;
+                  if (alreadyRows && alreadyRows.length > 0) {
+                    alreadyDirect = alreadyRows[0];
+                  }
+                } catch (_eDirectCheck) {
+                  // Ignore
+                }
+
+                if (!alreadyDirect) {
+                  try {
+                    const [alreadyLedgerRows]: any = await conn.query(
+                      `SELECT id, transaction_id, user_id, amount, status, batch_id FROM income_ledger WHERE (id = ? OR transaction_id = ?) AND batch_id = ?`,
+                      [deterministicTxId, deterministicTxId, batchId],
+                    );
+                    if (alreadyLedgerRows && alreadyLedgerRows.length > 0) {
+                      alreadyDirect = alreadyLedgerRows[0];
+                    }
+                  } catch (_eDirectLedger) {
+                    // Ignore
+                  }
+                }
+
+                if (alreadyDirect) {
+                  const directStatus = String(alreadyDirect.status || "").toLowerCase();
+                  if (directStatus === "completed" || directStatus === "settled") {
+                    const payoutAmt = Number(alreadyDirect.amount) || amt;
                     chunkProcessed.push({
                       transaction_id: deterministicTxId,
                       user_id: uId,
@@ -5253,8 +5458,6 @@ export async function handleApiRequest(
                     chunkAmount += payoutAmt;
                     continue;
                   }
-                } catch (_eDirectCheck) {
-                  // Ignore
                 }
 
                 const [bRows]: any = await conn.query(
@@ -5271,24 +5474,53 @@ export async function handleApiRequest(
                   throw err;
                 }
 
+                const itemPayoutMethod =
+                  String(p.payout_method || p.payoutMethod || "").trim() || "bulk_bank_transfer";
+                const itemBank =
+                  p.bankDetails && typeof p.bankDetails === "object"
+                    ? p.bankDetails
+                    : p.bank_details && typeof p.bank_details === "object"
+                      ? p.bank_details
+                      : p.beneficiary_details && typeof p.beneficiary_details === "object"
+                        ? p.beneficiary_details
+                        : null;
+                const itemBeneficiaryMasked = buildMaskedBeneficiaryDetails(itemBank);
+
                 try {
                   await conn.query(
-                    `INSERT INTO wallet_transactions (id, user_id, batch_id, type, amount, status, payout_method, created_at)
-                     VALUES (?, ?, ?, 'withdrawal', ?, 'completed', 'bulk_bank_transfer', NOW())`,
-                    [deterministicTxId, uId, batchId, amt],
+                    `INSERT INTO wallet_transactions (id, user_id, batch_id, type, amount, status, payout_method, beneficiary_details, created_at)
+                     VALUES (?, ?, ?, 'withdrawal', ?, 'completed', ?, ?, NOW())`,
+                    [deterministicTxId, uId, batchId, amt, itemPayoutMethod, itemBeneficiaryMasked],
                   );
                 } catch (_e) {
-                  await conn.query(
-                    `INSERT INTO income_ledger (id, transaction_id, user_id, income_type, amount, status, description, created_at)
-                     VALUES (?, ?, ?, 'withdrawal', ?, 'settled', ?, NOW())`,
-                    [
-                      deterministicTxId,
-                      deterministicTxId,
-                      uId,
-                      amt,
-                      `Direct bulk payout disbursement (Batch ${batchId})`,
-                    ],
-                  );
+                  try {
+                    await conn.query(
+                      `INSERT INTO income_ledger (id, transaction_id, user_id, batch_id, income_type, amount, status, payout_method, beneficiary_details, description, created_at)
+                       VALUES (?, ?, ?, ?, 'withdrawal', ?, 'settled', ?, ?, ?, NOW())`,
+                      [
+                        deterministicTxId,
+                        deterministicTxId,
+                        uId,
+                        batchId,
+                        amt,
+                        itemPayoutMethod,
+                        itemBeneficiaryMasked,
+                        `Direct bulk payout disbursement (Batch ${batchId})`,
+                      ],
+                    );
+                  } catch (_eLedger) {
+                    await conn.query(
+                      `INSERT INTO income_ledger (id, transaction_id, user_id, income_type, amount, status, description, created_at)
+                       VALUES (?, ?, ?, 'withdrawal', ?, 'settled', ?, NOW())`,
+                      [
+                        deterministicTxId,
+                        deterministicTxId,
+                        uId,
+                        amt,
+                        `Direct bulk payout disbursement (Batch ${batchId})`,
+                      ],
+                    );
+                  }
                 }
 
                 await conn.query(
@@ -5553,9 +5785,15 @@ export async function handleApiRequest(
                   continue;
                 }
 
+                const itemPayoutMethod =
+                  String(p.payout_method || p.payoutMethod || "").trim() || "bulk_bank_transfer";
                 existingTx["status"] = "completed";
                 existingTx["batch_id"] = batchId;
                 existingTx["batchId"] = batchId;
+                if (!existingTx["payout_method"] && !existingTx["payoutMethod"]) {
+                  existingTx["payout_method"] = itemPayoutMethod;
+                  existingTx["payoutMethod"] = itemPayoutMethod;
+                }
                 existingTx["updated_at"] = new Date().toISOString();
                 existingTx["updatedAt"] = new Date().toISOString();
 
@@ -5598,6 +5836,18 @@ export async function handleApiRequest(
               w.updated_at = new Date().toISOString();
               store.wallets[uId] = w;
 
+              const itemPayoutMethod =
+                String(p.payout_method || p.payoutMethod || "").trim() || "bulk_bank_transfer";
+              const itemBank =
+                p.bankDetails && typeof p.bankDetails === "object"
+                  ? p.bankDetails
+                  : p.bank_details && typeof p.bank_details === "object"
+                    ? p.bank_details
+                    : p.beneficiary_details && typeof p.beneficiary_details === "object"
+                      ? p.beneficiary_details
+                      : null;
+              const itemBeneficiaryMasked = buildMaskedBeneficiaryDetails(itemBank);
+
               store.walletTransactions.push({
                 id: deterministicTxId,
                 transaction_id: deterministicTxId,
@@ -5611,8 +5861,10 @@ export async function handleApiRequest(
                 incomeType: "withdrawal",
                 amount: amt,
                 status: "completed",
-                payout_method: "bulk_bank_transfer",
-                payoutMethod: "bulk_bank_transfer",
+                payout_method: itemPayoutMethod,
+                payoutMethod: itemPayoutMethod,
+                beneficiary_details: itemBeneficiaryMasked,
+                beneficiaryDetails: itemBeneficiaryMasked,
                 description: `Direct bulk payout disbursement (Batch ${batchId})`,
                 created_at: new Date().toISOString(),
                 createdAt: new Date().toISOString(),

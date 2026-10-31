@@ -22,6 +22,59 @@ if (!$authUser || strtolower($authUser['role'] ?? '') !== 'admin') {
     jsonResponse(['success' => false, 'error' => 'Admin authorization required'], 403);
 }
 
+/**
+ * Masks sensitive bank account number leaving only the last 4 characters visible.
+ * E.g. '50100481920194' -> 'XXXXXXXXXX0194'
+ */
+function maskAccountNumber(string $acc): string {
+    $clean = preg_replace('/[^0-9A-Za-z]/', '', $acc);
+    $len = strlen($clean);
+    if ($len === 0) return '';
+    if ($len <= 4) return str_repeat('X', $len);
+    return str_repeat('X', $len - 4) . substr($clean, -4);
+}
+
+/**
+ * Masks sensitive UPI handle before the domain.
+ * E.g. 'alexrivera@okhdfcbank' -> 'al***ra@okhdfcbank'
+ */
+function maskUpiId(string $upi): string {
+    $clean = trim($upi);
+    if (empty($clean)) return '';
+    $parts = explode('@', $clean, 2);
+    $handle = $parts[0];
+    $hLen = strlen($handle);
+    if ($hLen <= 2) {
+        $maskedHandle = substr($handle, 0, 1) . '*';
+    } elseif ($hLen <= 4) {
+        $maskedHandle = substr($handle, 0, 1) . '**' . substr($handle, -1);
+    } else {
+        $maskedHandle = substr($handle, 0, 2) . '***' . substr($handle, -2);
+    }
+    return count($parts) > 1 ? ($maskedHandle . '@' . $parts[1]) : $maskedHandle;
+}
+
+/**
+ * Builds protected, masked beneficiary representation for secure storage.
+ */
+function buildMaskedBeneficiaryDetails(?array $bank): ?string {
+    if (empty($bank) || !is_array($bank)) return null;
+    $holder = trim($bank['accountHolder'] ?? ($bank['account_holder'] ?? ($bank['accountHolderName'] ?? ($bank['account_holder_name'] ?? ''))));
+    $bankName = trim($bank['bankName'] ?? ($bank['bank_name'] ?? ''));
+    $accNum = trim($bank['accountNumber'] ?? ($bank['account_number'] ?? ''));
+    $ifsc = trim($bank['ifscCode'] ?? ($bank['ifsc_code'] ?? ''));
+    $upi = trim($bank['upiId'] ?? ($bank['upi_id'] ?? ''));
+
+    $details = [];
+    if (!empty($holder)) $details['account_holder'] = $holder;
+    if (!empty($bankName)) $details['bank_name'] = $bankName;
+    if (!empty($accNum)) $details['account_number_masked'] = maskAccountNumber($accNum);
+    if (!empty($ifsc)) $details['ifsc_code'] = strtoupper($ifsc);
+    if (!empty($upi)) $details['upi_id_masked'] = maskUpiId($upi);
+
+    return !empty($details) ? json_encode($details, JSON_UNESCAPED_SLASHES) : null;
+}
+
 $input = getRequestPayload();
 $payouts = $input['payouts'] ?? [];
 $notes = trim($input['notes'] ?? 'Batch disbursement approved by admin');
@@ -75,6 +128,11 @@ foreach ($chunks as $chunkIndex => $chunk) {
             $userId = trim($item['user_id'] ?? ($item['userId'] ?? ''));
             $amount = floatval($item['amount'] ?? 0);
             $txId = trim($item['transaction_id'] ?? ($item['id'] ?? ''));
+            $itemPayoutMethod = !empty($item['payout_method'] ?? ($item['payoutMethod'] ?? ''))
+                ? trim($item['payout_method'] ?? $item['payoutMethod'])
+                : 'bulk_bank_transfer';
+            $itemBank = $item['bankDetails'] ?? ($item['bank_details'] ?? ($item['beneficiary_details'] ?? null));
+            $itemBeneficiaryMasked = buildMaskedBeneficiaryDetails(is_array($itemBank) ? $itemBank : null);
 
             if (empty($userId) || $amount <= 0) {
                 $fatalHttpCode = 400;
@@ -95,14 +153,23 @@ foreach ($chunks as $chunkIndex => $chunk) {
 
                 if (!$existingTx) {
                     try {
-                        $stmtCheckLedger = $pdo->prepare('SELECT id, transaction_id, user_id, amount, status FROM income_ledger WHERE transaction_id = ? OR id = ? FOR UPDATE');
+                        $stmtCheckLedger = $pdo->prepare('SELECT id, transaction_id, user_id, amount, status, batch_id, payout_method FROM income_ledger WHERE transaction_id = ? OR id = ? FOR UPDATE');
                         $stmtCheckLedger->execute([$txId, $txId]);
                         $existingTx = $stmtCheckLedger->fetch();
                         if ($existingTx) {
                             $tableName = 'income_ledger';
                         }
-                    } catch (PDOException $eLedger) {
-                        // Ignore
+                    } catch (PDOException $eLedgerCols) {
+                        try {
+                            $stmtCheckLedger = $pdo->prepare('SELECT id, transaction_id, user_id, amount, status FROM income_ledger WHERE transaction_id = ? OR id = ? FOR UPDATE');
+                            $stmtCheckLedger->execute([$txId, $txId]);
+                            $existingTx = $stmtCheckLedger->fetch();
+                            if ($existingTx) {
+                                $tableName = 'income_ledger';
+                            }
+                        } catch (PDOException $_eLedgerFallback) {
+                            // Ignore
+                        }
                     }
                 }
 
@@ -118,7 +185,8 @@ foreach ($chunks as $chunkIndex => $chunk) {
                 }
 
                 // Status check: reject already completed/disbursed transactions to prevent replay
-                if (strtolower($existingTx['status'] ?? '') === 'completed') {
+                $statusLower = strtolower($existingTx['status'] ?? '');
+                if ($statusLower === 'completed' || $statusLower === 'settled') {
                     // Idempotent retry: check if it was already marked completed in the SAME batch
                     if (!empty($existingTx['batch_id']) && $existingTx['batch_id'] === $batchId) {
                         $payoutAmount = floatval($existingTx['amount'] ?? $amount);
@@ -139,21 +207,30 @@ foreach ($chunks as $chunkIndex => $chunk) {
                     throw new RuntimeException("Transaction '{$txId}' has already been marked as completed.", 400);
                 }
 
-                // Update transaction status to completed and assign batch_id
+                // Update transaction status to completed and assign batch_id and payout_method
                 if ($tableName === 'wallet_transactions') {
                     $stmtUpdate = $pdo->prepare('
                         UPDATE wallet_transactions
-                        SET status = "completed", batch_id = ?, updated_at = NOW()
+                        SET status = "completed", batch_id = ?, payout_method = COALESCE(payout_method, ?), updated_at = NOW()
                         WHERE id = ?
                     ');
-                    $stmtUpdate->execute([$batchId, $txId]);
+                    $stmtUpdate->execute([$batchId, $itemPayoutMethod, $txId]);
                 } else {
-                    $stmtUpdate = $pdo->prepare('
-                        UPDATE income_ledger
-                        SET status = "settled"
-                        WHERE transaction_id = ? OR id = ?
-                    ');
-                    $stmtUpdate->execute([$txId, $txId]);
+                    try {
+                        $stmtUpdate = $pdo->prepare('
+                            UPDATE income_ledger
+                            SET status = "settled", batch_id = ?, payout_method = COALESCE(payout_method, ?)
+                            WHERE transaction_id = ? OR id = ?
+                        ');
+                        $stmtUpdate->execute([$batchId, $itemPayoutMethod, $txId, $txId]);
+                    } catch (PDOException $eUpLedger) {
+                        $stmtUpdate = $pdo->prepare('
+                            UPDATE income_ledger
+                            SET status = "settled"
+                            WHERE transaction_id = ? OR id = ?
+                        ');
+                        $stmtUpdate->execute([$txId, $txId]);
+                    }
                 }
 
                 // NOTE: Do NOT deduct from wallet_balances here!
@@ -173,12 +250,28 @@ foreach ($chunks as $chunkIndex => $chunk) {
                 $deterministicTxId = 'tx_wdr_bulk_' . $batchId . '_' . $globalIndex;
 
                 // Check for idempotent retry of this direct payout in the same batch
+                $alreadyDirect = null;
                 try {
                     $stmtCheckDirect = $pdo->prepare('SELECT id, user_id, amount, status FROM wallet_transactions WHERE id = ? AND batch_id = ?');
                     $stmtCheckDirect->execute([$deterministicTxId, $batchId]);
                     $alreadyDirect = $stmtCheckDirect->fetch();
+                } catch (PDOException $_eDirectCheck) {
+                    // Ignore
+                }
 
-                    if ($alreadyDirect && strtolower($alreadyDirect['status'] ?? '') === 'completed') {
+                if (!$alreadyDirect) {
+                    try {
+                        $stmtCheckDirectLedger = $pdo->prepare('SELECT id, transaction_id, user_id, amount, status, batch_id FROM income_ledger WHERE (id = ? OR transaction_id = ?) AND batch_id = ?');
+                        $stmtCheckDirectLedger->execute([$deterministicTxId, $deterministicTxId, $batchId]);
+                        $alreadyDirect = $stmtCheckDirectLedger->fetch();
+                    } catch (PDOException $_eDirectLedger) {
+                        // Ignore
+                    }
+                }
+
+                if ($alreadyDirect) {
+                    $directStatus = strtolower($alreadyDirect['status'] ?? '');
+                    if ($directStatus === 'completed' || $directStatus === 'settled') {
                         $payoutAmount = floatval($alreadyDirect['amount'] ?? $amount);
                         $chunkProcessed[] = [
                             'transaction_id' => $deterministicTxId,
@@ -191,8 +284,6 @@ foreach ($chunks as $chunkIndex => $chunk) {
                         $chunkAmount += $payoutAmount;
                         continue;
                     }
-                } catch (PDOException $_eDirectCheck) {
-                    // Ignore
                 }
 
                 // Check balance under row lock
@@ -209,16 +300,33 @@ foreach ($chunks as $chunkIndex => $chunk) {
                 $txId = $deterministicTxId;
                 try {
                     $stmtInsert = $pdo->prepare('
-                        INSERT INTO wallet_transactions (id, user_id, batch_id, type, amount, status, payout_method, created_at)
-                        VALUES (?, ?, ?, "withdrawal", ?, "completed", "bulk_bank_transfer", NOW())
+                        INSERT INTO wallet_transactions (id, user_id, batch_id, type, amount, status, payout_method, beneficiary_details, created_at)
+                        VALUES (?, ?, ?, "withdrawal", ?, "completed", ?, ?, NOW())
                     ');
-                    $stmtInsert->execute([$txId, $userId, $batchId, $amount]);
+                    $stmtInsert->execute([$txId, $userId, $batchId, $amount, $itemPayoutMethod, $itemBeneficiaryMasked]);
                 } catch (PDOException $eIns) {
-                    $stmtLedger = $pdo->prepare('
-                        INSERT INTO income_ledger (id, transaction_id, user_id, income_type, amount, status, description, created_at)
-                        VALUES (?, ?, ?, "withdrawal", ?, "settled", ?, NOW())
-                    ');
-                    $stmtLedger->execute([$txId, $txId, $userId, $amount, "Direct bulk payout disbursement (Batch {$batchId})"]);
+                    try {
+                        $stmtLedger = $pdo->prepare('
+                            INSERT INTO income_ledger (id, transaction_id, user_id, batch_id, income_type, amount, status, payout_method, beneficiary_details, description, created_at)
+                            VALUES (?, ?, ?, ?, "withdrawal", ?, "settled", ?, ?, ?, NOW())
+                        ');
+                        $stmtLedger->execute([
+                            $txId,
+                            $txId,
+                            $userId,
+                            $batchId,
+                            $amount,
+                            $itemPayoutMethod,
+                            $itemBeneficiaryMasked,
+                            "Direct bulk payout disbursement (Batch {$batchId})"
+                        ]);
+                    } catch (PDOException $eLedgerNew) {
+                        $stmtLedger = $pdo->prepare('
+                            INSERT INTO income_ledger (id, transaction_id, user_id, income_type, amount, status, description, created_at)
+                            VALUES (?, ?, ?, "withdrawal", ?, "settled", ?, NOW())
+                        ');
+                        $stmtLedger->execute([$txId, $txId, $userId, $amount, "Direct bulk payout disbursement (Batch {$batchId})"]);
+                    }
                 }
 
                 // Deduct exactly once for new direct payout

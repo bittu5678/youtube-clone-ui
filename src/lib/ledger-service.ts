@@ -23,6 +23,12 @@ export interface LedgerTransaction {
   status: "settled" | "pending" | "failed";
   specialTag?: "SPECIAL_GLOBAL_RULE" | "SPECIAL_TRANSACTION" | undefined;
   description: string;
+  batchId?: string | undefined;
+  batch_id?: string | undefined;
+  payoutMethod?: string | undefined;
+  payout_method?: string | undefined;
+  beneficiaryDetails?: string | undefined;
+  beneficiary_details?: string | undefined;
   createdAt: string;
   isStale?: boolean | undefined;
 }
@@ -181,6 +187,12 @@ export async function getUserLedger(userId?: string): Promise<LedgerTransaction[
         status: d.status || "settled",
         specialTag: d.special_tag || d.specialTag || undefined,
         description: d.description || "",
+        batchId: d.batch_id || d.batchId || undefined,
+        batch_id: d.batch_id || d.batchId || undefined,
+        payoutMethod: d.payout_method || d.payoutMethod || undefined,
+        payout_method: d.payout_method || d.payoutMethod || undefined,
+        beneficiaryDetails: d.beneficiary_details || d.beneficiaryDetails || undefined,
+        beneficiary_details: d.beneficiary_details || d.beneficiaryDetails || undefined,
         createdAt: d.created_at || d.createdAt,
         isStale: false,
       }));

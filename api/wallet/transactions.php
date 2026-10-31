@@ -22,7 +22,8 @@ try {
     try {
         $stmt = $pdo->prepare("
             SELECT id, transaction_id, user_id, source_user_id, source_user_name, video_id, 
-                   income_type, amount, status, special_tag, description, created_at
+                   income_type, amount, status, special_tag, description,
+                   batch_id, payout_method, beneficiary_details, created_at
             FROM income_ledger 
             {$whereLedger} 
             ORDER BY created_at DESC 
@@ -31,13 +32,27 @@ try {
         $stmt->execute($params);
         $transactions = $stmt->fetchAll();
     } catch (PDOException $eLedger) {
-        // Fallback to wallet_transactions if income_ledger is not present
+        // Fallback to legacy income_ledger columns if new columns not yet migrated
         try {
-            $stmt2 = $pdo->prepare("SELECT * FROM wallet_transactions {$whereLedger} ORDER BY created_at DESC LIMIT 50");
-            $stmt2->execute($params);
-            $transactions = $stmt2->fetchAll();
-        } catch (PDOException $e2) {
-            $transactions = [];
+            $stmt = $pdo->prepare("
+                SELECT id, transaction_id, user_id, source_user_id, source_user_name, video_id, 
+                       income_type, amount, status, special_tag, description, created_at
+                FROM income_ledger 
+                {$whereLedger} 
+                ORDER BY created_at DESC 
+                LIMIT 50
+            ");
+            $stmt->execute($params);
+            $transactions = $stmt->fetchAll();
+        } catch (PDOException $eLedgerLegacy) {
+            // Fallback to wallet_transactions if income_ledger is not present
+            try {
+                $stmt2 = $pdo->prepare("SELECT * FROM wallet_transactions {$whereLedger} ORDER BY created_at DESC LIMIT 50");
+                $stmt2->execute($params);
+                $transactions = $stmt2->fetchAll();
+            } catch (PDOException $e2) {
+                $transactions = [];
+            }
         }
     }
 
@@ -54,6 +69,12 @@ try {
             'status' => $tx['status'] ?? 'settled',
             'specialTag' => $tx['special_tag'] ?? null,
             'description' => $tx['description'] ?? 'Transaction',
+            'batchId' => $tx['batch_id'] ?? null,
+            'batch_id' => $tx['batch_id'] ?? null,
+            'payoutMethod' => $tx['payout_method'] ?? null,
+            'payout_method' => $tx['payout_method'] ?? null,
+            'beneficiaryDetails' => $tx['beneficiary_details'] ?? null,
+            'beneficiary_details' => $tx['beneficiary_details'] ?? null,
             'createdAt' => $tx['created_at'] ?? date('c'),
         ];
     }, $transactions);

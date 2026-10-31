@@ -13,7 +13,13 @@ import {
   getPersistentPremiumTxNumber,
   resetPersistentPremiumState,
 } from "./payments";
-import { handleApiRequest, isAdPromotionActive } from "./api-handler";
+import {
+  handleApiRequest,
+  isAdPromotionActive,
+  maskAccountNumber,
+  maskUpiId,
+  buildMaskedBeneficiaryDetails,
+} from "./api-handler";
 import { isPromotionActive, getVideoBadgeLabels } from "../lib/video-service";
 import { api } from "../lib/api";
 import { processWithdrawal, getUserWallet, saveStoredLedger } from "../lib/ledger-service";
@@ -2982,5 +2988,215 @@ describe("Bulk Payout Double-Deduction Regression & Integrity Tests", () => {
       balAfterFirst,
       "Idempotent retry must not deduct balance a second time!",
     );
+  });
+});
+
+describe("Payout Metadata and Sensitive Beneficiary Masking Audit Tests", () => {
+  it("Masks bank account numbers preserving only the trailing 4 digits without plain text leakage", () => {
+    assert.equal(maskAccountNumber("50100481920194"), "XXXXXXXXXX0194");
+    assert.equal(maskAccountNumber("849201948201"), "XXXXXXXX8201");
+    assert.equal(maskAccountNumber("1234"), "XXXX");
+    assert.equal(maskAccountNumber(""), "");
+  });
+
+  it("Masks UPI handles protecting user identity while retaining domain", () => {
+    assert.equal(maskUpiId("alexrivera@okhdfcbank"), "al***ra@okhdfcbank");
+    assert.equal(maskUpiId("alex@upi"), "a**x@upi");
+    assert.equal(maskUpiId("a@upi"), "a*@upi");
+  });
+
+  it("buildMaskedBeneficiaryDetails returns valid JSON with masked account and UPI without plaintext", () => {
+    const masked = buildMaskedBeneficiaryDetails({
+      accountHolder: "Alex Rivera",
+      bankName: "HDFC Bank",
+      accountNumber: "50100481920194",
+      ifscCode: "hdfc0001234",
+      upiId: "alexrivera@okhdfcbank",
+    });
+    assert.ok(masked);
+    const parsed = JSON.parse(masked!);
+    assert.equal(parsed.account_holder, "Alex Rivera");
+    assert.equal(parsed.bank_name, "HDFC Bank");
+    assert.equal(parsed.account_number_masked, "XXXXXXXXXX0194");
+    assert.equal(parsed.ifsc_code, "HDFC0001234");
+    assert.equal(parsed.upi_id_masked, "al***ra@okhdfcbank");
+    // Explicit assertion: plaintext account number does NOT exist
+    assert.equal("accountNumber" in parsed, false);
+    assert.equal("account_number" in parsed, false);
+    assert.equal(masked!.includes("50100481920194"), false);
+  });
+
+  it("Explicitly persists payout_method and beneficiary_details on withdrawal requests", async () => {
+    const env = { JWT_SECRET: "test_jwt_secret_key" };
+    const userLogin = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "FT102857", password: "password" }),
+      }),
+      env,
+    );
+    assert.ok(userLogin);
+    const { token: userToken } = await userLogin.json();
+
+    const withdrawRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${userToken}` },
+        body: JSON.stringify({
+          amount: 100,
+          userId: "FT102857",
+          payout_method: "bank_transfer",
+          bankDetails: {
+            accountHolder: "FaceTube Admin",
+            bankName: "State Bank of India",
+            accountNumber: "123456789012",
+            ifscCode: "SBIN0001234",
+            upiId: "admin@oksbi",
+          },
+        }),
+      }),
+      env,
+    );
+    assert.ok(withdrawRes);
+    const wData = await withdrawRes.json();
+    assert.equal(wData.success, true, `Withdrawal failed: ${wData.error}`);
+    assert.ok(wData.transaction);
+    assert.equal(wData.transaction.payout_method, "bank_transfer");
+    assert.ok(wData.transaction.beneficiary_details);
+    const parsedBeneficiary = JSON.parse(wData.transaction.beneficiary_details);
+    assert.equal(parsedBeneficiary.account_number_masked, "XXXXXXXX9012");
+    assert.equal(wData.transaction.beneficiary_details.includes("123456789012"), false);
+  });
+
+  it("Bulk payout settlement assigns batch_id and payout_method to existing withdrawal records", async () => {
+    const env = { JWT_SECRET: "test_jwt_secret_key" };
+    const adminLogin = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "admin@facetube.com", password: "password" }),
+      }),
+      env,
+    );
+    const { token: adminToken } = await adminLogin.json();
+
+    // 1. Create a withdrawal request as admin/user
+    const wRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          amount: 100,
+          userId: "FT102857",
+        }),
+      }),
+      env,
+    );
+    const wData = await wRes.json();
+    assert.equal(wData.success, true);
+    const txId = wData.transaction.id;
+
+    // 2. Settle this withdrawal via bulk payout
+    const batchId = `settle_batch_${Date.now()}`;
+    const bulkRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          batch_id: batchId,
+          payouts: [
+            {
+              userId: "FT102857",
+              transaction_id: txId,
+              amount: 100,
+              payout_method: "bulk_bank_transfer",
+            },
+          ],
+        }),
+      }),
+      env,
+    );
+    const bulkData = await bulkRes.json();
+    assert.equal(bulkData.success, true);
+    assert.equal(bulkData.processed.length, 1);
+    assert.equal(bulkData.processed[0].status, "completed");
+
+    // 3. Verify transactions list contains batch_id and payout_method
+    const txListRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/transactions?userId=FT102857", {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }),
+      env,
+    );
+    const txListData = await txListRes.json();
+    const settledTx = txListData.transactions.find(
+      (t: any) => t.id === txId || t.transaction_id === txId || t.transactionId === txId,
+    );
+    assert.ok(settledTx);
+    assert.equal(settledTx.batch_id || settledTx.batchId, batchId);
+    assert.ok(settledTx.payout_method || settledTx.payoutMethod);
+  });
+
+  it("Direct bulk payout records batch_id, payout_method, and masked beneficiary details", async () => {
+    const env = { JWT_SECRET: "test_jwt_secret_key" };
+    const adminLogin = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "admin@facetube.com", password: "password" }),
+      }),
+      env,
+    );
+    const { token: adminToken } = await adminLogin.json();
+
+    const batchId = `direct_meta_batch_${Date.now()}`;
+    const directRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          batch_id: batchId,
+          payouts: [
+            {
+              userId: "FT102857",
+              amount: 50,
+              payout_method: "bulk_bank_transfer",
+              bankDetails: {
+                accountHolder: "Admin Beneficiary",
+                accountNumber: "987654321098",
+                bankName: "HDFC Bank",
+                ifscCode: "HDFC0001234",
+              },
+            },
+          ],
+        }),
+      }),
+      env,
+    );
+    const directData = await directRes.json();
+    assert.equal(directData.success, true);
+    assert.equal(directData.processed.length, 1);
+    const directTxId = directData.processed[0].transaction_id;
+
+    // Verify transactions list has batch_id and payout_method and masked beneficiary details
+    const txListRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/transactions?userId=FT102857", {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }),
+      env,
+    );
+    const txListData = await txListRes.json();
+    const directTx = txListData.transactions.find(
+      (t: any) => t.id === directTxId || t.transaction_id === directTxId,
+    );
+    assert.ok(directTx);
+    assert.equal(directTx.batch_id || directTx.batchId, batchId);
+    assert.equal(directTx.payout_method || directTx.payoutMethod, "bulk_bank_transfer");
+    if (directTx.beneficiary_details || directTx.beneficiaryDetails) {
+      const bStr = directTx.beneficiary_details || directTx.beneficiaryDetails;
+      assert.equal(bStr.includes("987654321098"), false);
+      assert.equal(bStr.includes("XXXXXXXX1098"), true);
+    }
   });
 });
