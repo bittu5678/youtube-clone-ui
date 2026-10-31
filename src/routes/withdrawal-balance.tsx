@@ -30,7 +30,7 @@ export const Route = createFileRoute("/withdrawal-balance")({
       {
         name: "description",
         content:
-          "Track your FaceTube payout history, completed bank transfers, and withdrawal receipts with ₹100 min, ₹12 Admin/GST charges, and ₹10,000 daily limit verification.",
+          "Track your FaceTube payout history, completed bank transfers, and withdrawal receipts with ₹1,000 min and ₹10,000 daily limit verification.",
       },
     ],
   }),
@@ -119,13 +119,12 @@ export function WithdrawalBalancePage() {
             </div>
             <div className="space-y-0.5 text-xs">
               <div className="font-bold text-foreground text-sm">
-                Enforced Withdrawal Limits: ₹100 Minimum · ₹10,000 Daily Maximum
+                Enforced Withdrawal Limits: ₹1,000 Minimum · ₹10,000 Daily Maximum
               </div>
               <p className="text-muted-foreground">
-                Minimum per transaction: <strong>₹100</strong>. Daily cumulative withdrawal cap:{" "}
-                <strong>₹10,000 per day</strong>. Fixed Admin &amp; processing charge of{" "}
-                <strong>₹12</strong> (₹5 Base + ₹0.90 GST [18%] + ₹0.10 PG fee [2%] ≈ ₹6, plus ₹6
-                Admin allocation) is deducted from the gross withdrawal amount.
+                Minimum per transaction: <strong>₹1,000</strong>. Daily cumulative withdrawal cap:{" "}
+                <strong>₹10,000 per day</strong>. Payouts and account settlements are verified and
+                processed directly by the authoritative backend ledger.
               </p>
             </div>
           </div>
@@ -160,13 +159,13 @@ export function WithdrawalBalancePage() {
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Minimum Allowed</span>
-            <p className="text-2xl font-black text-foreground">₹100.00</p>
-            <p className="text-[11px] text-emerald-400 font-semibold">Updated Point 7 floor</p>
+            <p className="text-2xl font-black text-foreground">₹1,000.00</p>
+            <p className="text-[11px] text-emerald-400 font-semibold">Per transaction floor</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Fixed Charges</span>
-            <p className="text-2xl font-black text-orange-400">₹12.00</p>
-            <p className="text-[11px] text-muted-foreground">₹5.90 GST/PG + ₹6 Admin</p>
+            <span className="text-xs text-muted-foreground font-medium">Daily Limit</span>
+            <p className="text-2xl font-black text-foreground">₹10,000.00</p>
+            <p className="text-[11px] text-muted-foreground">Maximum daily quota</p>
           </div>
         </div>
 
@@ -194,7 +193,7 @@ export function WithdrawalBalancePage() {
                 {withdrawalTxs.length > 0 ? (
                   withdrawalTxs.map((item) => {
                     const gross = Math.abs(item.amount);
-                    const net = item.netAmount ?? (gross >= 12 ? gross - 12 : gross);
+                    const net = item.netAmount ?? gross;
                     return (
                       <tr key={item.id} className="transition hover:bg-secondary/20">
                         <td className="px-4 py-3.5 font-mono font-bold text-foreground">
@@ -208,7 +207,7 @@ export function WithdrawalBalancePage() {
                         </td>
                         <td className="px-4 py-3.5">
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
-                            <CheckCircle2 className="h-3 w-3" /> Settled
+                            <CheckCircle2 className="h-3 w-3" /> {item.status === 'pending' ? 'Pending' : 'Settled'}
                           </span>
                         </td>
                         <td className="px-4 py-3.5 text-right font-mono font-bold text-muted-foreground">
@@ -216,9 +215,6 @@ export function WithdrawalBalancePage() {
                         </td>
                         <td className="px-4 py-3.5 text-right font-mono font-black text-emerald-400 text-sm">
                           ₹{net.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                          <span className="block text-[10px] text-orange-400/80 font-normal">
-                            (-₹12 fee)
-                          </span>
                         </td>
                       </tr>
                     );

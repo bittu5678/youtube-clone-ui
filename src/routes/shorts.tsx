@@ -1,6 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
+  ArrowLeft,
   ThumbsUp,
   ThumbsDown,
   MessageSquare,
@@ -47,8 +48,32 @@ export const Route = createFileRoute("/shorts")({
 });
 
 function ShortsPage() {
+  const router = useRouter();
   const searchParams = Route.useSearch();
   const { user, profile } = useAuth();
+
+  const handleBack = useCallback(
+    (e?: React.MouseEvent) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      const hasHistory =
+        typeof window !== "undefined" &&
+        ((window.history.state &&
+          typeof window.history.state.idx === "number" &&
+          window.history.state.idx > 0) ||
+          (document.referrer && document.referrer.startsWith(window.location.origin)));
+
+      if (hasHistory) {
+        window.history.back();
+      } else {
+        router.navigate({ to: "/" });
+      }
+    },
+    [router],
+  );
+
   const [uploadedShorts, setUploadedShorts] = useState<ShortItem[]>([]);
 
   useEffect(() => {
@@ -228,7 +253,16 @@ function ShortsPage() {
       {/* Top Header */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="group inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground/80 transition-all hover:bg-secondary hover:text-foreground active:scale-95 cursor-pointer"
+              aria-label="Back to previous page"
+              title="Back to previous page"
+            >
+              <ArrowLeft className="h-5 w-5 transition-transform group-hover:-translate-x-0.5" />
+            </button>
             <Logo size={30} />
             <span className="rounded-full bg-red-500/10 px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider text-red-500">
               Shorts
@@ -281,9 +315,21 @@ function ShortsPage() {
               />
             </div>
 
-            {/* Top Bar on Video: Sound, Status, Progress Bar */}
+            {/* Top Bar on Video: Back Button, Sound, Status, Progress Bar */}
             <div className="relative z-10 flex items-center justify-between p-4">
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleBack(e);
+                  }}
+                  className="grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white backdrop-blur-md transition hover:bg-black/80 active:scale-95 cursor-pointer"
+                  aria-label="Back to previous page"
+                  title="Back to previous page"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
                 <span className="inline-flex items-center gap-1 rounded-full bg-black/60 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-md">
                   <Sparkles className="h-3 w-3 text-red-400" />
                   {currentIndex + 1} of {allShorts.length}

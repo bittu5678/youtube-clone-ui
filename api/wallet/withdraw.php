@@ -94,18 +94,50 @@ if (!empty($requestedUserId) && strcasecmp($requestedUserId, $authUser['user_id'
     $userId = $requestedUserId;
 }
 
-if ($amount < 100) {
+if ($amount < 1000) {
     jsonResponse([
         'success' => false,
-        'error' => 'Minimum withdrawal amount is ₹100. You cannot withdraw less than ₹100.'
+        'error' => 'Minimum withdrawal amount is ₹1,000. You cannot withdraw less than ₹1,000.'
     ], 400);
 }
 
-if ($amount > 1000) {
+if ($amount > 10000) {
     jsonResponse([
         'success' => false,
-        'error' => 'Maximum daily withdrawal limit is ₹1,000. You cannot withdraw more than ₹1,000 per day.'
+        'error' => 'Maximum daily withdrawal limit is ₹10,000. You cannot withdraw more than ₹10,000 in a single request.'
     ], 400);
+}
+
+// Validate daily cumulative withdrawal limit using authoritative Hostinger MySQL income_ledger
+try {
+    $stmtDaily = $pdo->prepare("
+        SELECT COALESCE(SUM(ABS(amount)), 0) AS daily_total
+        FROM income_ledger
+        WHERE UPPER(user_id) = UPPER(?)
+          AND income_type = 'withdrawal'
+          AND status != 'failed'
+          AND DATE(created_at) = CURDATE()
+    ");
+    $stmtDaily->execute([$userId]);
+    $dailyRow = $stmtDaily->fetch();
+    $alreadyWithdrawnToday = floatval($dailyRow['daily_total'] ?? 0);
+
+    if ($alreadyWithdrawnToday >= 10000) {
+        jsonResponse([
+            'success' => false,
+            'error' => 'Daily withdrawal limit of ₹10,000 reached. Further withdrawals are blocked until tomorrow.'
+        ], 400);
+    }
+
+    if ($alreadyWithdrawnToday + $amount > 10000) {
+        $remainingDaily = max(0, 10000 - $alreadyWithdrawnToday);
+        jsonResponse([
+            'success' => false,
+            'error' => 'Daily limit exceeded. You have already withdrawn ₹' . number_format($alreadyWithdrawnToday, 2) . ' today. You can withdraw at most ₹' . number_format($remainingDaily, 2) . ' more today.'
+        ], 400);
+    }
+} catch (PDOException $_eDaily) {
+    // Proceed if daily query throws
 }
 
 // Prepare bank details and masked beneficiary information
@@ -158,12 +190,11 @@ try {
     }
 
     // Company Confirmed Withdrawal Fee Rule:
-    // - Minimum: ₹100, Maximum: ₹1,000
+    // - Minimum: ₹1,000, Maximum: ₹10,000 per day
     // - GST: 18% of FULL withdrawal amount
     // - PG Fee: 2% of FULL withdrawal amount
     // - Total Deduction: 20% of withdrawal amount
     // - Net Payout: 80% of withdrawal amount
-    // Examples: ₹100 -> ₹18 GST + ₹2 PG -> ₹80 net; ₹500 -> ₹90 GST + ₹10 PG -> ₹400 net; ₹1,000 -> ₹180 GST + ₹20 PG -> ₹800 net
     $gstAmount = round($amount * 0.18, 2);
     $pgFeeAmount = round($amount * 0.02, 2);
     $fee = round($gstAmount + $pgFeeAmount, 2);
@@ -188,51 +219,42 @@ try {
     $stmtUp->execute([$amount, $amount, $userId]);
 
     $txId = 'tx_wdr_' . round(microtime(true) * 1000) . '_' . substr(md5(random_bytes(6)), 0, 5);
+    $desc = "Withdrawal request for ₹" . number_format($amount, 2) . " (Net: ₹" . number_format($netAmount, 2) . " after 20% charges: 18% GST ₹" . number_format($gstAmount, 2) . " + 2% PG ₹" . number_format($pgFeeAmount, 2) . ")";
 
-    // Record transaction using wallet_transactions, with graceful fallback to income_ledger
+    // Record directly in authoritative income_ledger schema (never wallet_transactions)
     $recorded = false;
     try {
-        $stmtTx = $pdo->prepare('
-            INSERT INTO wallet_transactions (id, user_id, type, amount, status, payout_method, beneficiary_details, created_at)
-            VALUES (?, ?, "withdrawal", ?, "approved", ?, ?, NOW())
+        $stmtLedger = $pdo->prepare('
+            INSERT INTO income_ledger (id, transaction_id, user_id, income_type, amount, status, description, payout_method, beneficiary_details, created_at)
+            VALUES (?, ?, ?, "withdrawal", ?, "pending", ?, ?, ?, NOW())
         ');
-        $stmtTx->execute([$txId, $userId, $amount, $payoutMethod, $beneficiaryDetailsJson]);
+        $stmtLedger->execute([
+            $txId,
+            $txId,
+            $userId,
+            $amount,
+            $desc,
+            $payoutMethod,
+            $beneficiaryDetailsJson
+        ]);
         $recorded = true;
-    } catch (PDOException $eTx) {
-        // Fallback: If wallet_transactions is not created, record in income_ledger
+    } catch (PDOException $_eLedgerCols) {
         try {
-            $stmtLedger = $pdo->prepare('
-                INSERT INTO income_ledger (id, transaction_id, user_id, income_type, amount, status, description, payout_method, beneficiary_details, created_at)
-                VALUES (?, ?, ?, "withdrawal", ?, "settled", ?, ?, ?, NOW())
+            $stmtLedgerBase = $pdo->prepare('
+                INSERT INTO income_ledger (id, transaction_id, user_id, income_type, amount, status, description, created_at)
+                VALUES (?, ?, ?, "withdrawal", ?, "pending", ?, NOW())
             ');
-            $stmtLedger->execute([
+            $stmtLedgerBase->execute([
                 $txId,
                 $txId,
                 $userId,
                 $amount,
-                "Withdrawal request approved for ₹" . number_format($amount, 2) . " (Net: ₹" . number_format($netAmount, 2) . " after 20% charges: 18% GST ₹" . number_format($gstAmount, 2) . " + 2% PG ₹" . number_format($pgFeeAmount, 2) . ")",
-                $payoutMethod,
-                $beneficiaryDetailsJson
+                $desc
             ]);
             $recorded = true;
-        } catch (PDOException $eLedger) {
-            try {
-                $stmtLedgerOld = $pdo->prepare('
-                    INSERT INTO income_ledger (id, transaction_id, user_id, income_type, amount, status, description, created_at)
-                    VALUES (?, ?, ?, "withdrawal", ?, "settled", ?, NOW())
-                ');
-                $stmtLedgerOld->execute([
-                    $txId,
-                    $txId,
-                    $userId,
-                    $amount,
-                    "Withdrawal request approved for ₹" . number_format($amount, 2) . " (Net: ₹" . number_format($netAmount, 2) . " after 20% charges: 18% GST ₹" . number_format($gstAmount, 2) . " + 2% PG ₹" . number_format($pgFeeAmount, 2) . ")"
-                ]);
-                $recorded = true;
-            } catch (PDOException $eOld) {
-                // Log fallback exception
-                error_log('[withdraw.php] Could not write transaction record: ' . $eOld->getMessage());
-            }
+        } catch (PDOException $eBase) {
+            error_log('[withdraw.php] Could not write transaction record to income_ledger: ' . $eBase->getMessage());
+            throw $eBase;
         }
     }
 
@@ -240,7 +262,7 @@ try {
 
     jsonResponse([
         'success' => true,
-        'message' => 'Withdrawal request for ₹' . number_format($amount, 2) . ' (Net Payable: ₹' . number_format($netAmount, 2) . ' after 20% charges: 18% GST ₹' . number_format($gstAmount, 2) . ' + 2% PG ₹' . number_format($pgFeeAmount, 2) . ') validated and approved.',
+        'message' => 'Withdrawal request for ₹' . number_format($amount, 2) . ' (Net Payable: ₹' . number_format($netAmount, 2) . ' after 20% charges: 18% GST ₹' . number_format($gstAmount, 2) . ' + 2% PG ₹' . number_format($pgFeeAmount, 2) . ') submitted successfully.',
         'transaction' => [
             'id' => $txId,
             'userId' => $userId,
@@ -250,7 +272,7 @@ try {
             'net_amount' => $netAmount,
             'chargesBreakdown' => $chargesBreakdown,
             'type' => 'withdrawal',
-            'status' => 'approved',
+            'status' => 'pending',
             'payout_method' => $payoutMethod,
             'payoutMethod' => $payoutMethod,
             'beneficiary_details' => $beneficiaryDetailsJson,

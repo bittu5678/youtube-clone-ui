@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
+  ArrowLeft,
   Play,
   Pause,
   Volume2,
@@ -22,6 +23,7 @@ interface FaceTubeVideoPlayerProps {
   duration?: string | undefined;
   autoPlay?: boolean | undefined;
   onEnded?: (() => void) | undefined;
+  onBack?: (() => void) | undefined;
 }
 
 function formatTime(seconds: number): string {
@@ -47,6 +49,7 @@ export function FaceTubeVideoPlayer({
   duration: initialDurationStr,
   autoPlay = true,
   onEnded,
+  onBack,
 }: FaceTubeVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -445,9 +448,25 @@ export function FaceTubeVideoPlayer({
           showControls ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
-        <div className="flex items-center justify-between text-white">
-          <p className="text-sm font-bold truncate max-w-md drop-shadow">{title}</p>
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full">
+        <div className="flex items-center justify-between text-white gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {onBack && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onBack();
+                }}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-black/60 text-white backdrop-blur-md transition hover:bg-black/85 active:scale-90 cursor-pointer pointer-events-auto"
+                aria-label="Back to previous page"
+                title="Back to previous page"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            )}
+            <p className="text-sm font-bold truncate max-w-md drop-shadow">{title}</p>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full">
             <Sparkles className="h-3 w-3 text-brand" />
             FaceTube Player
           </span>

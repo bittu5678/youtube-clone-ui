@@ -1,6 +1,7 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import {
+  ArrowLeft,
   Play,
   ThumbsUp,
   ThumbsDown,
@@ -82,7 +83,28 @@ function WatchNotFound() {
 
 function WatchPage() {
   const { video } = Route.useLoaderData();
+  const router = useRouter();
   const { user, profile } = useAuth();
+
+  const handleBack = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const hasHistory =
+      typeof window !== "undefined" &&
+      ((window.history.state &&
+        typeof window.history.state.idx === "number" &&
+        window.history.state.idx > 0) ||
+        (document.referrer && document.referrer.startsWith(window.location.origin)));
+
+    if (hasHistory) {
+      window.history.back();
+    } else {
+      router.navigate({ to: "/" });
+    }
+  };
+
   const [subscribed, setSubscribed] = useState(false);
   const [liked, setLiked] = useState(false);
   const [disliked, setDisliked] = useState(false);
@@ -192,6 +214,23 @@ function WatchPage() {
 
       <main className="mx-auto grid max-w-[1600px] gap-8 px-4 py-6 pb-24 sm:px-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:pb-10">
         <div className="min-w-0">
+          {/* Top Back Navigation Bar */}
+          <div className="mb-3 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="group inline-flex items-center gap-2 rounded-full border border-border/80 bg-secondary/70 hover:bg-secondary px-3.5 py-1.5 text-xs font-semibold text-foreground transition-all active:scale-95 shadow-xs cursor-pointer"
+              aria-label="Back to previous page"
+              title="Back to previous page"
+            >
+              <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+              <span>Back</span>
+            </button>
+            {video.category && (
+              <span className="text-xs font-medium text-muted-foreground">{video.category}</span>
+            )}
+          </div>
+
           <div className="overflow-hidden rounded-2xl bg-black shadow-lift">
             <FaceTubeVideoPlayer
               src={video.videoUrl}
@@ -199,6 +238,7 @@ function WatchPage() {
               title={video.title}
               duration={video.duration}
               autoPlay={true}
+              onBack={handleBack}
             />
           </div>
 
