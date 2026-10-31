@@ -841,7 +841,10 @@ function AdsPromotionsPage() {
                     </span>
                   </div>
                   <span className="font-bold text-amber-400">
-                    ₹{Math.round(selectedPlan.price * (marketingPercentage / 100)).toLocaleString("en-IN")}
+                    ₹
+                    {Math.round(selectedPlan.price * (marketingPercentage / 100)).toLocaleString(
+                      "en-IN",
+                    )}
                   </span>
                 </div>
 
@@ -940,7 +943,8 @@ function AdsPromotionsPage() {
                   <div className="flex justify-between text-zinc-300">
                     <span>Direct Sponsor Credit:</span>
                     <span className="font-semibold text-amber-300">
-                      ₹{Math.round(selectedPlan.price * (marketingPercentage / 100))} ({marketingPercentage}%)
+                      ₹{Math.round(selectedPlan.price * (marketingPercentage / 100))} (
+                      {marketingPercentage}%)
                     </span>
                   </div>
                 </div>

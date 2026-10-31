@@ -58,7 +58,8 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-type AdminTab = "users" | "moderation" | "categories" | "payouts" | "earnings" | "settings" | "database";
+type AdminTab =
+  "users" | "moderation" | "categories" | "payouts" | "earnings" | "settings" | "database";
 
 interface ModerationVideo {
   id: string;
@@ -1673,8 +1674,8 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                       <h2 className="text-lg font-bold">Admin Earnings & Payouts Report</h2>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Authoritative user earnings breakdown across separate income streams: Referral,
-                      Global Pool, Google AdSense, and Affiliate / Marketing.
+                      Authoritative user earnings breakdown across separate income streams:
+                      Referral, Global Pool, Google AdSense, and Affiliate / Marketing.
                     </p>
                   </div>
 
@@ -1729,9 +1730,7 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                     </label>
                     <select
                       value={reportDateMode}
-                      onChange={(e) =>
-                        setReportDateMode(e.target.value as "joined" | "activity")
-                      }
+                      onChange={(e) => setReportDateMode(e.target.value as "joined" | "activity")}
                       className="h-9 w-full rounded-xl border border-border bg-secondary/40 px-3 text-xs text-foreground outline-none focus:border-brand"
                     >
                       <option value="joined">User Registration Date</option>
@@ -1793,7 +1792,8 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                       )}
                       {(reportStartDate || reportEndDate) && (
                         <span className="bg-brand/10 text-brand px-2 py-0.5 rounded-full text-[11px]">
-                          Date: {reportStartDate || "Beginning"} to {reportEndDate || "Now"} ({reportDateMode})
+                          Date: {reportStartDate || "Beginning"} to {reportEndDate || "Now"} (
+                          {reportDateMode})
                         </span>
                       )}
                     </div>
@@ -1828,9 +1828,14 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                     Current Wallet Balance
                   </p>
                   <p className="mt-2 text-2xl font-black text-brand">
-                    ₹{earningsSummary.totalWalletBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    ₹
+                    {earningsSummary.totalWalletBalance.toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                    })}
                   </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">Outstanding creator liability</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Outstanding creator liability
+                  </p>
                 </div>
 
                 <div className="rounded-2xl border border-border bg-secondary/30 p-4 shadow-card">
@@ -1838,7 +1843,10 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                     Cumulative Earned
                   </p>
                   <p className="mt-2 text-2xl font-black text-emerald-400">
-                    ₹{earningsSummary.totalEarned.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    ₹
+                    {earningsSummary.totalEarned.toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                    })}
                   </p>
                   <p className="mt-1 text-[11px] text-muted-foreground">All-time settled income</p>
                 </div>
@@ -1848,7 +1856,10 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                     Total Withdrawn
                   </p>
                   <p className="mt-2 text-2xl font-black text-amber-400">
-                    ₹{earningsSummary.totalWithdrawn.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    ₹
+                    {earningsSummary.totalWithdrawn.toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                    })}
                   </p>
                   <p className="mt-1 text-[11px] text-muted-foreground">Disbursed to creators</p>
                 </div>
@@ -1866,7 +1877,10 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                       Referral Income
                     </span>
                     <p className="text-base font-black text-foreground mt-1">
-                      ₹{earningsSummary.totalReferralIncome.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      ₹
+                      {earningsSummary.totalReferralIncome.toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                      })}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">Sponsor commissions</p>
                   </div>
@@ -1875,25 +1889,38 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                       Global Pool Income
                     </span>
                     <p className="text-base font-black text-foreground mt-1">
-                      ₹{earningsSummary.totalGlobalIncome.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      ₹
+                      {earningsSummary.totalGlobalIncome.toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                      })}
                     </p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Weighted creator pool</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Weighted creator pool
+                    </p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
                     <span className="text-[10px] uppercase font-bold text-muted-foreground">
                       Google AdSense Income
                     </span>
                     <p className="text-base font-black text-foreground mt-1">
-                      ₹{earningsSummary.totalAdsenseIncome.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      ₹
+                      {earningsSummary.totalAdsenseIncome.toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                      })}
                     </p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Impressions & watch time</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Impressions & watch time
+                    </p>
                   </div>
                   <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
                     <span className="text-[10px] uppercase font-bold text-muted-foreground">
                       Affiliate / Marketing
                     </span>
                     <p className="text-base font-black text-foreground mt-1">
-                      ₹{earningsSummary.totalAffiliateIncome.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      ₹
+                      {earningsSummary.totalAffiliateIncome.toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                      })}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">
                       Ad promotion marketing ({marketingPercentage}%)
@@ -2038,7 +2065,11 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                           Withdrawal History: {selectedWithdrawalUser.name}
                         </h3>
                         <p className="text-xs text-muted-foreground">
-                          User ID: <span className="font-mono text-brand font-bold">{selectedWithdrawalUser.userId}</span> · {selectedWithdrawalUser.email}
+                          User ID:{" "}
+                          <span className="font-mono text-brand font-bold">
+                            {selectedWithdrawalUser.userId}
+                          </span>{" "}
+                          · {selectedWithdrawalUser.email}
                         </p>
                       </div>
                       <button
@@ -2057,7 +2088,8 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                       </div>
                     ) : userWithdrawals.length === 0 ? (
                       <div className="py-8 text-center text-xs text-muted-foreground">
-                        No completed withdrawal requests found for this user in the specified period.
+                        No completed withdrawal requests found for this user in the specified
+                        period.
                       </div>
                     ) : (
                       <div className="max-h-80 overflow-y-auto">
@@ -2126,7 +2158,9 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                     <Sliders className="h-4 w-4" />
                   </span>
                   <div>
-                    <h2 className="text-lg font-bold">Platform Income Sources & Marketing Configuration</h2>
+                    <h2 className="text-lg font-bold">
+                      Platform Income Sources & Marketing Configuration
+                    </h2>
                     <p className="text-xs text-muted-foreground">
                       Admin-controlled commission percentages and separate income stream tracking.
                     </p>
@@ -2143,9 +2177,10 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                           <span>Marketing / Affiliate Income Percentage</span>
                         </h3>
                         <p className="text-xs text-muted-foreground mt-1 max-w-xl">
-                          Specifies the percentage of each Ad Promotion purchase distributed as direct
-                          marketing / affiliate commission to the referring sponsor. Stored in
-                          Hostinger MySQL <code className="font-mono text-brand">platform_settings</code> table.
+                          Specifies the percentage of each Ad Promotion purchase distributed as
+                          direct marketing / affiliate commission to the referring sponsor. Stored
+                          in Hostinger MySQL{" "}
+                          <code className="font-mono text-brand">platform_settings</code> table.
                         </p>
                       </div>
 
@@ -2157,7 +2192,9 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                             max="100"
                             step="0.1"
                             value={marketingPercentage}
-                            onChange={(e) => setMarketingPercentage(parseFloat(e.target.value) || 0)}
+                            onChange={(e) =>
+                              setMarketingPercentage(parseFloat(e.target.value) || 0)
+                            }
                             className="w-full rounded-xl border border-border bg-background px-3 py-2 text-right text-base font-black text-brand outline-none focus:border-brand pr-8"
                           />
                           <span className="absolute right-3 top-2.5 text-sm font-bold text-muted-foreground">
@@ -2189,34 +2226,44 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                     <div className="rounded-xl border border-brand/20 bg-brand/5 p-4 space-y-2">
                       <p className="text-xs font-bold text-brand flex items-center gap-1.5">
                         <DollarSign className="h-3.5 w-3.5" />
-                        <span>Live Calculation Simulation based on {marketingPercentage}% Setting:</span>
+                        <span>
+                          Live Calculation Simulation based on {marketingPercentage}% Setting:
+                        </span>
                       </p>
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 pt-1">
                         <div className="rounded-lg bg-background/80 p-2.5 border border-border/40">
-                          <span className="text-[10px] text-muted-foreground font-semibold">7 Days (₹100)</span>
+                          <span className="text-[10px] text-muted-foreground font-semibold">
+                            7 Days (₹100)
+                          </span>
                           <p className="text-sm font-bold text-foreground">
-                            ₹{(100 * marketingPercentage / 100).toFixed(2)}
+                            ₹{((100 * marketingPercentage) / 100).toFixed(2)}
                           </p>
                           <span className="text-[10px] text-emerald-400">Direct Referrer</span>
                         </div>
                         <div className="rounded-lg bg-background/80 p-2.5 border border-border/40">
-                          <span className="text-[10px] text-muted-foreground font-semibold">15 Days (₹200)</span>
+                          <span className="text-[10px] text-muted-foreground font-semibold">
+                            15 Days (₹200)
+                          </span>
                           <p className="text-sm font-bold text-foreground">
-                            ₹{(200 * marketingPercentage / 100).toFixed(2)}
+                            ₹{((200 * marketingPercentage) / 100).toFixed(2)}
                           </p>
                           <span className="text-[10px] text-emerald-400">Direct Referrer</span>
                         </div>
                         <div className="rounded-lg bg-background/80 p-2.5 border border-border/40">
-                          <span className="text-[10px] text-muted-foreground font-semibold">1 Month (₹300)</span>
+                          <span className="text-[10px] text-muted-foreground font-semibold">
+                            1 Month (₹300)
+                          </span>
                           <p className="text-sm font-bold text-foreground">
-                            ₹{(300 * marketingPercentage / 100).toFixed(2)}
+                            ₹{((300 * marketingPercentage) / 100).toFixed(2)}
                           </p>
                           <span className="text-[10px] text-emerald-400">Direct Referrer</span>
                         </div>
                         <div className="rounded-lg bg-background/80 p-2.5 border border-border/40">
-                          <span className="text-[10px] text-muted-foreground font-semibold">1 Year (₹3000)</span>
+                          <span className="text-[10px] text-muted-foreground font-semibold">
+                            1 Year (₹3000)
+                          </span>
                           <p className="text-sm font-bold text-foreground">
-                            ₹{(3000 * marketingPercentage / 100).toFixed(2)}
+                            ₹{((3000 * marketingPercentage) / 100).toFixed(2)}
                           </p>
                           <span className="text-[10px] text-emerald-400">Direct Referrer</span>
                         </div>
@@ -2233,7 +2280,8 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     In addition to direct marketing income, Ad Promotion campaigns disburse 7-level
-                    upline referral earnings totalling 40% with integer paise precision and zero rounding loss:
+                    upline referral earnings totalling 40% with integer paise precision and zero
+                    rounding loss:
                   </p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7 pt-2">
                     {[
@@ -2266,39 +2314,59 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                   </h3>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 pt-2">
                     <div className="rounded-lg border border-border/50 bg-background/50 p-3">
-                      <span className="font-mono text-xs font-bold text-brand">referral_income</span>
-                      <h4 className="text-xs font-bold text-foreground mt-1">Direct Referral Income</h4>
+                      <span className="font-mono text-xs font-bold text-brand">
+                        referral_income
+                      </span>
+                      <h4 className="text-xs font-bold text-foreground mt-1">
+                        Direct Referral Income
+                      </h4>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        ₹1 per ₹6 Premium Video upload + L1–L7 upline referral commissions on Ad Promotions.
+                        ₹1 per ₹6 Premium Video upload + L1–L7 upline referral commissions on Ad
+                        Promotions.
                       </p>
                     </div>
 
                     <div className="rounded-lg border border-border/50 bg-background/50 p-3">
-                      <span className="font-mono text-xs font-bold text-emerald-400">global_pool_income</span>
+                      <span className="font-mono text-xs font-bold text-emerald-400">
+                        global_pool_income
+                      </span>
                       <h4 className="text-xs font-bold text-foreground mt-1">Global Pool Share</h4>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        ₹3 pool per normal premium video upload, distributed to active creators weighted by video ad earnings.
+                        ₹3 pool per normal premium video upload, distributed to active creators
+                        weighted by video ad earnings.
                       </p>
                     </div>
 
                     <div className="rounded-lg border border-border/50 bg-background/50 p-3">
-                      <span className="font-mono text-xs font-bold text-sky-400">adsense_income</span>
-                      <h4 className="text-xs font-bold text-foreground mt-1">Google AdSense Income</h4>
+                      <span className="font-mono text-xs font-bold text-sky-400">
+                        adsense_income
+                      </span>
+                      <h4 className="text-xs font-bold text-foreground mt-1">
+                        Google AdSense Income
+                      </h4>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Creator earnings from video ad views, banner impressions, and monetized watch time.
+                        Creator earnings from video ad views, banner impressions, and monetized
+                        watch time.
                       </p>
                     </div>
 
                     <div className="rounded-lg border border-border/50 bg-background/50 p-3">
-                      <span className="font-mono text-xs font-bold text-amber-400">affiliate_income</span>
-                      <h4 className="text-xs font-bold text-foreground mt-1">Affiliate / Marketing Income</h4>
+                      <span className="font-mono text-xs font-bold text-amber-400">
+                        affiliate_income
+                      </span>
+                      <h4 className="text-xs font-bold text-foreground mt-1">
+                        Affiliate / Marketing Income
+                      </h4>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Direct marketing commission calculated dynamically using the admin percentage above.
+                        Direct marketing commission calculated dynamically using the admin
+                        percentage above.
                       </p>
                     </div>
 
                     <div className="rounded-lg border border-border/50 bg-background/50 p-3">
-                      <span className="font-mono text-xs font-bold text-purple-400">ad_boost_income</span>
+                      <span className="font-mono text-xs font-bold text-purple-400">
+                        ad_boost_income
+                      </span>
                       <h4 className="text-xs font-bold text-foreground mt-1">Ad Boost Income</h4>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
                         Campaign bonuses and creator incentives for featured promotional campaigns.
@@ -2307,9 +2375,12 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
 
                     <div className="rounded-lg border border-border/50 bg-background/50 p-3">
                       <span className="font-mono text-xs font-bold text-rose-400">withdrawal</span>
-                      <h4 className="text-xs font-bold text-foreground mt-1">Creator Withdrawals</h4>
+                      <h4 className="text-xs font-bold text-foreground mt-1">
+                        Creator Withdrawals
+                      </h4>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        ₹12 gateway fee deduction per withdrawal, with instant or batch bank/UPI disbursement.
+                        ₹12 gateway fee deduction per withdrawal, with instant or batch bank/UPI
+                        disbursement.
                       </p>
                     </div>
                   </div>

@@ -88,9 +88,15 @@ function AffiliateIncomePage() {
                 t.incomeType === "marketing_income" ||
                 t.purpose === "affiliate_income" ||
                 t.purpose === "marketing_income" ||
-                String(t.description || "").toLowerCase().includes("affiliate") ||
-                String(t.description || "").toLowerCase().includes("marketing") ||
-                String(t.description || "").toLowerCase().includes("ad promotion"),
+                String(t.description || "")
+                  .toLowerCase()
+                  .includes("affiliate") ||
+                String(t.description || "")
+                  .toLowerCase()
+                  .includes("marketing") ||
+                String(t.description || "")
+                  .toLowerCase()
+                  .includes("ad promotion"),
             );
             setAffiliateTransactions(filtered);
           }
@@ -125,8 +131,8 @@ function AffiliateIncomePage() {
                 Affiliate &amp; Marketing Income
               </h1>
               <p className="text-sm text-muted-foreground">
-                Commissions earned from Ad Promotion marketing ({marketingPercentage}% platform rate),
-                gear recommendations, and campaign referrals backed by your Hostinger ledger.
+                Commissions earned from Ad Promotion marketing ({marketingPercentage}% platform
+                rate), gear recommendations, and campaign referrals backed by your Hostinger ledger.
               </p>
             </div>
           </div>
@@ -168,7 +174,8 @@ function AffiliateIncomePage() {
                 Authoritative Affiliate &amp; Marketing Transactions
               </h3>
               <p className="text-xs text-muted-foreground">
-                Settled in Hostinger MySQL <code className="font-mono text-brand">income_ledger</code>
+                Settled in Hostinger MySQL{" "}
+                <code className="font-mono text-brand">income_ledger</code>
               </p>
             </div>
             <span className="text-xs text-muted-foreground font-semibold">
@@ -185,7 +192,8 @@ function AffiliateIncomePage() {
             <div className="py-12 text-center text-xs text-muted-foreground space-y-2">
               <p>No settled affiliate or marketing transactions recorded yet for this account.</p>
               <p className="text-[11px]">
-                Earn {marketingPercentage}% on Ad Promotion campaigns when creators register with your sponsor link.
+                Earn {marketingPercentage}% on Ad Promotion campaigns when creators register with
+                your sponsor link.
               </p>
             </div>
           ) : (

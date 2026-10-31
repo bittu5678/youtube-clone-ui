@@ -88,7 +88,9 @@ export const DEFAULT_MARKETING_INCOME_PERCENTAGE = 10;
 export function evaluateAdsDistribution(
   planAmount: number,
   uplines: (AdsUplineSponsor | { level: number; userId: string; name?: string | undefined })[] = [],
-  customRates?: readonly { level: number; percent: number; rate?: number }[] | { level: number; percent: number }[],
+  customRates?:
+    | readonly { level: number; percent: number; rate?: number }[]
+    | { level: number; percent: number }[],
 ): AdsDistributionResult {
   const totalPaise = Math.round(planAmount * 100);
   const uplineMap = new Map<number, { userId: string; name?: string | undefined }>();
@@ -1093,7 +1095,23 @@ export async function verifyServerPayment(
     const effectiveUplines =
       uplines && uplines.length > 0 ? uplines : refId ? [{ level: 1, userId: refId }] : [];
 
-    const dist = evaluateAdsDistribution(amount, effectiveUplines);
+    let customRates: Array<{ level: number; percent: number }> | undefined = undefined;
+    const envMkt =
+      env?.["MARKETING_INCOME_PERCENTAGE"] || process.env["MARKETING_INCOME_PERCENTAGE"];
+    if (envMkt && !isNaN(Number(envMkt))) {
+      const mktPct = Math.max(0, Math.min(100, Number(envMkt)));
+      customRates = [
+        { level: 1, percent: mktPct },
+        { level: 2, percent: 10 },
+        { level: 3, percent: 5 },
+        { level: 4, percent: 4 },
+        { level: 5, percent: 3 },
+        { level: 6, percent: 2 },
+        { level: 7, percent: 1 },
+      ];
+    }
+
+    const dist = evaluateAdsDistribution(amount, effectiveUplines, customRates);
 
     // Create persistent transaction record for ads promotion to enforce idempotency
     // Note: txNumber remains unchanged because Ads promotions do NOT advance the ₹6 Premium Video sequence!

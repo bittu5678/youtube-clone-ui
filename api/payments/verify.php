@@ -553,8 +553,9 @@ try {
     } else {
         // -------------------------------------------------------------------------
         // ADS PROMOTION (Task 33: 7-Level Referral Commission Distribution)
-        // Rate Schedule: L1=15%, L2=10%, L3=5%, L4=4%, L5=3%, L6=2%, L7=1%
-        // Base Admin Share: 60%. Missing levels redirected to Admin.
+        // Dynamically loads Admin-controlled marketing percentage from platform_settings
+        // Base schedule: L1=15% (or Admin marketing_income_percentage), L2=10%, L3=5%, L4=4%, L5=3%, L6=2%, L7=1%
+        // Base Admin Share: 60% (or mathematical remainder). Missing levels redirected to Admin.
         // Sequence counter for Premium Videos is NOT incremented.
         // -------------------------------------------------------------------------
         $txNumber = 0;
@@ -609,8 +610,48 @@ try {
         $adminRow = $stmtAdmin->fetch();
         $adminUserId = $adminRow['user_id'] ?? 'FT102857';
 
-        // 7-Level Rate Percentages
+        // 7-Level Rate Percentages (Defaults)
         $rates = [1 => 15, 2 => 10, 3 => 5, 4 => 4, 5 => 3, 6 => 2, 7 => 1];
+        $marketingPercentage = null;
+
+        // Query Hostinger MySQL platform_settings table if present
+        try {
+            $stmtSettings = $pdo->query("SELECT setting_key, setting_value FROM platform_settings");
+            if ($stmtSettings) {
+                $settingRows = $stmtSettings->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($settingRows as $sRow) {
+                    $sKey = $sRow['setting_key'] ?? '';
+                    $sVal = $sRow['setting_value'] ?? '';
+                    if ($sKey === 'marketing_income_percentage' && is_numeric($sVal)) {
+                        $parsedMkt = floatval($sVal);
+                        if ($parsedMkt >= 0 && $parsedMkt <= 100) {
+                            $marketingPercentage = $parsedMkt;
+                        }
+                    } elseif (preg_match('/^ads_referral_rate_l([1-7])$/', $sKey, $m) && is_numeric($sVal)) {
+                        $lvl = intval($m[1]);
+                        $parsedRate = floatval($sVal);
+                        if ($parsedRate >= 0 && $parsedRate <= 100) {
+                            $rates[$lvl] = $parsedRate;
+                        }
+                    }
+                }
+            }
+        } catch (Exception $eSettings) {
+            // platform_settings table not yet created or inaccessible; safely fall back to default schedule
+        }
+
+        // If marketing_income_percentage was set by Admin, it governs Level 1 (Direct Referrer / Sponsor)
+        if ($marketingPercentage !== null) {
+            $rates[1] = $marketingPercentage;
+        }
+
+        // Safe mathematical check: total upline commission percentage cannot exceed 100%
+        $totalCommissionSchedule = array_sum($rates);
+        if ($totalCommissionSchedule > 100.0) {
+            error_log("[verify.php] Warning: Configured commission rates total {$totalCommissionSchedule}%, which exceeds 100%. Reverting Level 1 to safe default 15%.");
+            $rates[1] = 15;
+        }
+
         $totalPaise = (int)round($amount * 100);
         $allocatedPaise = 0;
         $levelPayouts = [];
@@ -634,7 +675,7 @@ try {
         }
 
         // Exact integer remainder formula guarantees sum of all credits equals plan amount with zero rounding loss
-        $adminPaise = $totalPaise - $allocatedPaise;
+        $adminPaise = max(0, $totalPaise - $allocatedPaise);
         $adminAmount = $adminPaise / 100;
         $totalReferralAmount = $allocatedPaise / 100;
         $adminAllocation = $adminAmount;
@@ -658,6 +699,23 @@ try {
             $totalReferralAmount, $adminAmount
         ]);
 
+        // Detect whether expanded ENUM ('ad_boost_income', 'marketing_income') is supported by income_ledger.income_type
+        $uplineIncomeType = 'referral_income';
+        try {
+            $colStmt = $pdo->query("SHOW COLUMNS FROM income_ledger LIKE 'income_type'");
+            if ($colStmt) {
+                $colRow = $colStmt->fetch(PDO::FETCH_ASSOC);
+                $typeStr = $colRow['Type'] ?? '';
+                if (strpos($typeStr, 'ad_boost_income') !== false) {
+                    $uplineIncomeType = 'ad_boost_income';
+                } elseif (strpos($typeStr, 'marketing_income') !== false) {
+                    $uplineIncomeType = 'marketing_income';
+                }
+            }
+        } catch (Exception $eCol) {
+            // Table inspection fallback
+        }
+
         // Insert atomic ledger entries and credit wallet balances for each valid upline sponsor
         $stmtLedger = $pdo->prepare('
             INSERT INTO income_ledger (
@@ -665,7 +723,7 @@ try {
                 income_type, amount, status, special_tag, description, created_at
             ) VALUES (
                 ?, ?, ?, ?, ?, ?,
-                "referral_income", ?, "settled", ?, ?, NOW()
+                ?, ?, "settled", ?, ?, NOW()
             )
         ');
         $stmtCredit = $pdo->prepare('
@@ -685,7 +743,7 @@ try {
                 mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
                 mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
                 mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
-            $desc = "Level {$lId} referral commission ({$payout['percent']}%) for Ads Promotion by {$userName} ({$userId})";
+            $desc = "Level {$lId} commission ({$payout['percent']}%) for Ads Promotion by {$userName} ({$userId})";
 
             $stmtLedger->execute([
                 $lUuid,
@@ -694,6 +752,7 @@ try {
                 $userId,
                 $userName,
                 $videoId ?: null,
+                $uplineIncomeType,
                 $payout['amount'],
                 "ADS_REF_L{$lId}",
                 $desc
@@ -707,14 +766,14 @@ try {
             ]);
         }
 
-        // Record Admin allocation (base 60% + missing level remainder) in income_ledger and wallet_balances
+        // Record Admin allocation (base share + missing level remainder) in income_ledger and wallet_balances
         if ($adminAmount > 0) {
             $txAdminId = "TX_ADS_ADM_{$paymentId}";
             $admUuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
                 mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
                 mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
                 mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
-            $admDesc = "Admin allocation ({$adminPercent}%) including base 60% and unallocated referral shares for Ads Promotion by {$userName} ({$userId})";
+            $admDesc = "Admin allocation ({$adminPercent}%) including base share and unallocated referral shares for Ads Promotion by {$userName} ({$userId})";
 
             $stmtLedger->execute([
                 $admUuid,
@@ -723,6 +782,7 @@ try {
                 $userId,
                 $userName,
                 $videoId ?: null,
+                "admin_allocation",
                 $adminAmount,
                 "ADS_ADMIN_SHARE",
                 $admDesc

@@ -92,8 +92,12 @@ function AdSenseIncomePage() {
                 t.income_type === "adsense_income" ||
                 t.incomeType === "adsense_income" ||
                 t.purpose === "adsense_income" ||
-                String(t.description || "").toLowerCase().includes("adsense") ||
-                String(t.description || "").toLowerCase().includes("video ad"),
+                String(t.description || "")
+                  .toLowerCase()
+                  .includes("adsense") ||
+                String(t.description || "")
+                  .toLowerCase()
+                  .includes("video ad"),
             );
             setAdsenseTransactions(filtered);
           }
@@ -146,15 +150,15 @@ function AdSenseIncomePage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
             <span className="text-xs text-muted-foreground font-medium">Total AdSense Revenue</span>
-            <p className="text-2xl font-black text-yellow-400">
-              ₹{adsenseRevenue.toFixed(2)}
-            </p>
+            <p className="text-2xl font-black text-yellow-400">₹{adsenseRevenue.toFixed(2)}</p>
             <p className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
               <TrendingUp className="h-3 w-3" /> Authoritative ledger total
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-card">
-            <span className="text-xs text-muted-foreground font-medium">Available Wallet Balance</span>
+            <span className="text-xs text-muted-foreground font-medium">
+              Available Wallet Balance
+            </span>
             <p className="text-2xl font-black text-foreground">₹{walletBalance.toFixed(2)}</p>
             <p className="text-[11px] text-muted-foreground">Ready for creator payout</p>
           </div>
@@ -178,7 +182,8 @@ function AdSenseIncomePage() {
                 Authoritative AdSense Ledger Transactions
               </h3>
               <p className="text-xs text-muted-foreground">
-                Settled in Hostinger MySQL <code className="font-mono text-brand">income_ledger</code>
+                Settled in Hostinger MySQL{" "}
+                <code className="font-mono text-brand">income_ledger</code>
               </p>
             </div>
             <span className="text-xs text-muted-foreground font-semibold">
@@ -212,7 +217,10 @@ function AdSenseIncomePage() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {adsenseTransactions.map((tx: any) => (
-                    <tr key={tx.id || tx.transactionId || tx.transaction_id} className="transition hover:bg-secondary/20">
+                    <tr
+                      key={tx.id || tx.transactionId || tx.transaction_id}
+                      className="transition hover:bg-secondary/20"
+                    >
                       <td className="px-4 py-3.5 text-muted-foreground">
                         {tx.created_at || tx.createdAt
                           ? new Date(tx.created_at || tx.createdAt).toLocaleDateString("en-IN", {
