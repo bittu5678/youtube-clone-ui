@@ -26,7 +26,8 @@ if (!is_array($payouts) || empty($payouts)) {
     jsonResponse(['success' => false, 'error' => 'No payouts specified for bulk execution'], 400);
 }
 
-$batchId = 'batch_' . round(microtime(true) * 1000) . '_' . substr(md5(random_bytes(6)), 0, 5);
+$inputBatchId = trim($input['batch_id'] ?? ($input['batchId'] ?? ''));
+$batchId = !empty($inputBatchId) ? $inputBatchId : ('batch_' . round(microtime(true) * 1000) . '_' . substr(md5(random_bytes(6)), 0, 5));
 $totalProcessed = 0;
 $totalAmount = 0.0;
 $processedItems = [];

@@ -295,42 +295,74 @@ try {
             // Base Admin = ₹1.00 (+ ₹1.00 if no valid referrer)
             $baseAdminPaise = 100 + $unallocatedReferrerPaise;
 
-            // Query distinct eligible previous Premium Video creators, strictly excluding current uploader:
-            $stmtEligible = $pdo->prepare('
-                SELECT DISTINCT user_id FROM (
-                    SELECT user_id FROM payment_transactions WHERE purpose = "premium_video_upload"
-                    UNION
-                    SELECT user_id FROM uploaded_videos WHERE video_type = "premium" AND payment_status = "paid"
-                ) AS prev_creators
-                WHERE UPPER(user_id) != UPPER(?)
-                ORDER BY user_id ASC
+            // Company Requirement: Per-video weighted Ads Earnings Share distribution of the ₹3 pool (300 paise).
+            // Query eligible previous videos from uploaded_videos, strictly excluding videos by the current uploader:
+            $stmtEligibleVideos = $pdo->prepare('
+                SELECT id AS video_id, user_id, COALESCE(ad_earnings, 0.00) AS ad_earnings
+                FROM uploaded_videos
+                WHERE (video_type = "premium" OR payment_status = "paid")
+                  AND UPPER(user_id) != UPPER(?)
+                  AND (is_blocked = 0 OR is_blocked IS NULL)
+                ORDER BY created_at ASC, id ASC
             ');
-            $stmtEligible->execute([$userId]);
-            $eligibleCreatorIds = $stmtEligible->fetchAll(PDO::FETCH_COLUMN);
-            $eligibleCreatorCount = count($eligibleCreatorIds);
+            $stmtEligibleVideos->execute([$userId]);
+            $eligibleVideos = $stmtEligibleVideos->fetchAll(PDO::FETCH_ASSOC);
+            $eligibleVideoCount = count($eligibleVideos);
 
-            if ($eligibleCreatorCount === 0) {
-                // If there are no eligible previous creators, redirect the entire ₹3 pool to Admin
+            if ($eligibleVideoCount === 0) {
+                // If there are no eligible previous videos, redirect the entire ₹3 pool to Admin
                 $adminPaise = $baseAdminPaise + 300;
                 $adminAllocation = $adminPaise / 100;
                 $globalPoolAllocation = 0.00;
             } else {
-                // Distribute ₹3 pool (300 paise) equally using integer division; residual paise goes to Admin
                 $poolPaise = 300;
-                $perCreatorPaise = intdiv($poolPaise, $eligibleCreatorCount);
-                $distributedPaise = $perCreatorPaise * $eligibleCreatorCount;
-                $residualPaise = $poolPaise - $distributedPaise;
+                $totalAdEarnings = 0.0;
+                foreach ($eligibleVideos as $ev) {
+                    $totalAdEarnings += max(0.0, floatval($ev['ad_earnings'] ?? 0));
+                }
 
-                $adminPaise = $baseAdminPaise + $residualPaise;
-                $adminAllocation = $adminPaise / 100;
-                $globalPoolAllocation = $distributedPaise / 100;
+                if ($totalAdEarnings > 0) {
+                    // Weighted allocation based on actual eligible uploaded_videos.ad_earnings
+                    $allocatedPaise = 0;
+                    foreach ($eligibleVideos as $ev) {
+                        $vEarnings = max(0.0, floatval($ev['ad_earnings'] ?? 0));
+                        $weight = $vEarnings / $totalAdEarnings;
+                        $amountPaise = intval(floor($weight * $poolPaise));
+                        $allocatedPaise += $amountPaise;
 
-                foreach ($eligibleCreatorIds as $cUserId) {
-                    $creatorPayouts[] = [
-                        'userId' => $cUserId,
-                        'amount' => $perCreatorPaise / 100,
-                        'amountPaise' => $perCreatorPaise,
-                    ];
+                        $creatorPayouts[] = [
+                            'userId' => $ev['user_id'],
+                            'videoId' => $ev['video_id'],
+                            'amount' => $amountPaise / 100,
+                            'amountPaise' => $amountPaise,
+                            'weight' => $weight,
+                            'adEarnings' => $vEarnings,
+                        ];
+                    }
+                    $residualPaise = max(0, $poolPaise - $allocatedPaise);
+                    $adminPaise = $baseAdminPaise + $residualPaise;
+                    $adminAllocation = $adminPaise / 100;
+                    $globalPoolAllocation = $allocatedPaise / 100;
+                } else {
+                    // Fallback to equal per-video integer distribution if total ad earnings is 0
+                    $perVideoPaise = intdiv($poolPaise, $eligibleVideoCount);
+                    $distributedPaise = $perVideoPaise * $eligibleVideoCount;
+                    $residualPaise = $poolPaise - $distributedPaise;
+
+                    $adminPaise = $baseAdminPaise + $residualPaise;
+                    $adminAllocation = $adminPaise / 100;
+                    $globalPoolAllocation = $distributedPaise / 100;
+
+                    foreach ($eligibleVideos as $ev) {
+                        $creatorPayouts[] = [
+                            'userId' => $ev['user_id'],
+                            'videoId' => $ev['video_id'],
+                            'amount' => $perVideoPaise / 100,
+                            'amountPaise' => $perVideoPaise,
+                            'weight' => 1 / $eligibleVideoCount,
+                            'adEarnings' => 0.0,
+                        ];
+                    }
                 }
             }
         }
@@ -483,12 +515,15 @@ try {
             ');
 
             foreach ($creatorPayouts as $payout) {
-                $txGlbId = "TX_GLB_{$paymentId}_{$payout['userId']}";
+                if ($payout['amount'] <= 0) {
+                    continue;
+                }
+                $txGlbId = "TX_GLB_{$paymentId}_{$payout['videoId']}";
                 $glbUuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
                     mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
                     mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
                     mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff));
-                $glbDesc = "Global Income Pool distribution (₹{$payout['amount']} share of ₹3 pool across {$eligibleCreatorCount} eligible creators for Premium Video #{$txNumber})";
+                $glbDesc = "Per-Video Ads Earnings Share for video #{$payout['videoId']} (₹{$payout['amount']} share of ₹3 pool for Premium Video #{$txNumber})";
 
                 $stmtGlbLedger->execute([
                     $glbUuid,
@@ -496,7 +531,7 @@ try {
                     $payout['userId'],
                     $userId,
                     $userName,
-                    $videoId ?: null,
+                    $payout['videoId'], // Record the exact rewarded video_id in income_ledger
                     $payout['amount'],
                     $specialTag,
                     $glbDesc

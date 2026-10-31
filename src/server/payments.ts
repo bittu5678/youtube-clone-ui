@@ -209,9 +209,9 @@ export function isSpecialGlobalTransaction(txNumber: number): boolean {
  */
 export function calculateWeightedPoolPayouts(
   poolPaise: number,
-  creators: Array<{ userId: string; adEarnings: number }>,
+  creators: Array<{ userId: string; videoId?: string; adEarnings: number }>,
 ): {
-  payouts: Array<{ userId: string; amountPaise: number; amount: number; weight: number }>;
+  payouts: Array<{ userId: string; videoId?: string; amountPaise: number; amount: number; weight: number }>;
   distributedPaise: number;
   residualPaise: number;
 } {
@@ -228,6 +228,7 @@ export function calculateWeightedPoolPayouts(
     return {
       payouts: creators.map((c) => ({
         userId: c.userId,
+        videoId: c.videoId,
         amountPaise: perCreatorPaise,
         amount: perCreatorPaise / 100,
         weight: 1 / creators.length,
@@ -245,6 +246,7 @@ export function calculateWeightedPoolPayouts(
     totalAllocated += amountPaise;
     return {
       userId: c.userId,
+      videoId: c.videoId,
       amountPaise,
       amount: amountPaise / 100,
       weight,
@@ -268,7 +270,7 @@ export function evaluatePremiumDistribution(
   txNumber: number,
   referrerId?: string | null,
   eligibleCreatorsCount = 1,
-  creatorEarnings?: Array<{ userId: string; adEarnings: number }>,
+  creatorEarnings?: Array<{ userId: string; videoId?: string; adEarnings: number }>,
 ): {
   txNumber: number;
   isSpecial: boolean;
@@ -280,7 +282,7 @@ export function evaluatePremiumDistribution(
   totalAmount: number;
   eligibleMembersCount: number;
   perMemberShare: number;
-  weightedPayouts?: Array<{ userId: string; amountPaise: number; amount: number; weight: number }>;
+  weightedPayouts?: Array<{ userId: string; videoId?: string; amountPaise: number; amount: number; weight: number }>;
 } {
   const isSpecial = isSpecialGlobalTransaction(txNumber);
   const hasValidReferrer = Boolean(referrerId && referrerId.trim().length > 0);
@@ -570,7 +572,7 @@ export interface PaymentVerifyResult {
     globalPoolAmount: number;
     eligibleMembersCount: number;
     perMemberShare: number;
-    creatorPayouts?: Array<{ userId: string; amount: number; amountPaise: number }>;
+    creatorPayouts?: Array<{ userId: string; videoId?: string; amount: number; amountPaise: number }>;
     totalReferralAmount?: number;
     levelPayouts?: AdsLevelPayout[];
     missingLevels?: number[];
@@ -692,7 +694,7 @@ export async function createServerPaymentOrder(
  */
 export async function verifyServerPayment(
   req: PaymentVerifyRequest,
-  eligiblePremiumCreatorIds: string[] = [],
+  eligiblePremiumCreatorIds: Array<string | { userId: string; videoId?: string; adEarnings?: number }> = [],
   referrerUserId?: string | null,
   env?: Record<string, string | undefined>,
   uplines?: AdsUplineSponsor[],
@@ -940,21 +942,32 @@ export async function verifyServerPayment(
         : 0.0;
       const unallocatedReferrerPaise = hasValidReferrer ? 0 : 100;
 
-      // Filter eligible previous creators: strictly exclude current uploader and duplicates
+      // Filter eligible previous videos / creators: strictly exclude current uploader
       const uploaderNorm = req.userId.trim().toUpperCase();
-      const distinctEligible = Array.from(
-        new Set(
-          eligiblePremiumCreatorIds
-            .map((id) => id.trim().toUpperCase())
-            .filter((id) => id.length > 0 && id !== uploaderNorm),
-        ),
-      );
-      const eligibleCount = distinctEligible.length;
+      const eligibleItems: Array<{ userId: string; videoId?: string; adEarnings: number }> = [];
+      for (const item of eligiblePremiumCreatorIds) {
+        if (typeof item === "string") {
+          const norm = item.trim().toUpperCase();
+          if (norm.length > 0 && norm !== uploaderNorm) {
+            eligibleItems.push({ userId: norm, adEarnings: 0 });
+          }
+        } else if (item && typeof item === "object") {
+          const norm = String(item.userId || "").trim().toUpperCase();
+          if (norm.length > 0 && norm !== uploaderNorm) {
+            eligibleItems.push({
+              userId: norm,
+              videoId: item.videoId,
+              adEarnings: Math.max(0, Number(item.adEarnings) || 0),
+            });
+          }
+        }
+      }
+      const eligibleCount = eligibleItems.length;
 
       let adminAllocation = 0.0;
       let globalPoolAllocation = 0.0;
       let perMemberShare = 0.0;
-      const creatorPayouts: Array<{ userId: string; amount: number; amountPaise: number }> = [];
+      const creatorPayouts: Array<{ userId: string; videoId?: string; amount: number; amountPaise: number }> = [];
 
       if (isSpecial) {
         // Special: ₹4 Admin + ₹1 (if no referrer redirected to Admin) = ₹4 or ₹5
@@ -970,22 +983,20 @@ export async function verifyServerPayment(
           adminAllocation = adminPaise / 100;
           globalPoolAllocation = 0.0;
         } else {
-          // Distribute 300 paise using integer division; residual paise goes to Admin
+          // Distribute 300 paise using per-video weighted Ads Earnings Share (zero leakage)
           const poolPaise = 300;
-          const perCreatorPaise = Math.floor(poolPaise / eligibleCount);
-          const distributedPaise = perCreatorPaise * eligibleCount;
-          const residualPaise = poolPaise - distributedPaise;
+          const weighted = calculateWeightedPoolPayouts(poolPaise, eligibleItems);
 
-          const adminPaise = baseAdminPaise + residualPaise;
-          adminAllocation = adminPaise / 100;
-          globalPoolAllocation = distributedPaise / 100;
-          perMemberShare = perCreatorPaise / 100;
+          adminAllocation = (baseAdminPaise + weighted.residualPaise) / 100;
+          globalPoolAllocation = weighted.distributedPaise / 100;
+          perMemberShare = weighted.payouts.length > 0 ? weighted.payouts[0]!.amount : 0;
 
-          for (const cUserId of distinctEligible) {
+          for (const p of weighted.payouts) {
             creatorPayouts.push({
-              userId: cUserId,
-              amount: perCreatorPaise / 100,
-              amountPaise: perCreatorPaise,
+              userId: p.userId,
+              videoId: p.videoId,
+              amount: p.amount,
+              amountPaise: p.amountPaise,
             });
           }
         }

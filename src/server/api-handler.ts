@@ -10,7 +10,7 @@ import {
   getPersistentTransactions,
   getPersistentPremiumTxNumber,
   PRICING_CONFIG,
-  AdsPlanId,
+  type AdsPlanId,
   ADS_REFERRAL_RATES,
   evaluateAdsDistribution,
   resolveUplineSponsors,
@@ -1496,21 +1496,25 @@ export async function handleApiRequest(
                 // Base Admin = ₹1.00 (+ ₹1.00 if no valid referrer)
                 const baseAdminPaise = 100 + unallocatedReferrerPaise;
 
-                // Query distinct eligible previous Premium Video creators, strictly excluding current uploader:
+                // Query eligible previous Premium videos, strictly excluding current uploader:
                 const [eligibleRows]: any = await conn.query(
-                  `SELECT DISTINCT user_id FROM (
-                     SELECT user_id FROM payment_transactions WHERE purpose = 'premium_video_upload'
-                     UNION
-                     SELECT user_id FROM uploaded_videos WHERE video_type = 'premium' AND payment_status = 'paid'
-                   ) AS prev_creators
-                   WHERE UPPER(user_id) != UPPER(?)
-                   ORDER BY user_id ASC`,
+                  `SELECT id AS video_id, user_id, COALESCE(ad_earnings, 0.00) AS ad_earnings
+                   FROM uploaded_videos
+                   WHERE (video_type = 'premium' OR payment_status = 'paid')
+                     AND UPPER(user_id) != UPPER(?)
+                     AND (is_blocked = 0 OR is_blocked IS NULL)
+                   ORDER BY created_at ASC, id ASC`,
                   [uploaderId],
                 );
-                const eligibleCreatorIds: string[] = Array.isArray(eligibleRows)
-                  ? eligibleRows.map((r: any) => String(r.user_id).trim().toUpperCase())
-                  : [];
-                eligibleCreatorCount = eligibleCreatorIds.length;
+                const eligibleVideos: Array<{ userId: string; videoId: string; adEarnings: number }> =
+                  Array.isArray(eligibleRows)
+                    ? eligibleRows.map((r: any) => ({
+                        userId: String(r.user_id).trim().toUpperCase(),
+                        videoId: String(r.video_id).trim(),
+                        adEarnings: Math.max(0, Number(r.ad_earnings) || 0),
+                      }))
+                    : [];
+                eligibleCreatorCount = eligibleVideos.length;
 
                 if (eligibleCreatorCount === 0) {
                   // Redirect entire ₹3 pool to Admin if no eligible previous creators
@@ -1518,21 +1522,19 @@ export async function handleApiRequest(
                   adminAllocation = adminPaise / 100;
                   globalPoolAllocation = 0.0;
                 } else {
-                  // Distribute ₹3 pool (300 paise) equally using integer division; residual paise goes to Admin
+                  // Distribute ₹3 pool (300 paise) via per-video weighted Ads Earnings Share
                   const poolPaise = 300;
-                  const perCreatorPaise = Math.floor(poolPaise / eligibleCreatorCount);
-                  const distributedPaise = perCreatorPaise * eligibleCreatorCount;
-                  const residualPaise = poolPaise - distributedPaise;
+                  const weighted = calculateWeightedPoolPayouts(poolPaise, eligibleVideos);
 
-                  const adminPaise = baseAdminPaise + residualPaise;
-                  adminAllocation = adminPaise / 100;
-                  globalPoolAllocation = distributedPaise / 100;
+                  adminAllocation = (baseAdminPaise + weighted.residualPaise) / 100;
+                  globalPoolAllocation = weighted.distributedPaise / 100;
 
-                  for (const cUserId of eligibleCreatorIds) {
+                  for (const p of weighted.payouts) {
                     creatorPayouts.push({
-                      userId: cUserId,
-                      amount: perCreatorPaise / 100,
-                      amountPaise: perCreatorPaise,
+                      userId: p.userId,
+                      videoId: p.videoId,
+                      amount: p.amount,
+                      amountPaise: p.amountPaise,
                     });
                   }
                 }
@@ -1662,8 +1664,11 @@ export async function handleApiRequest(
               // 5. Insert into income_ledger & credit wallet_balances for each eligible previous creator
               if (creatorPayouts.length > 0) {
                 for (const payout of creatorPayouts) {
-                  const txGlbId = `TX_GLB_${paymentId}_${payout.userId}`;
-                  const glbDesc = `Global Income Pool distribution (₹${payout.amount.toFixed(2)} share of ₹3 pool across ${creatorPayouts.length} eligible creators for Premium Video #${txNumber})`;
+                  if (payout.amount <= 0) continue;
+                  const txGlbId = `TX_GLB_${paymentId}_${payout.videoId || payout.userId}`;
+                  const glbDesc = payout.videoId
+                    ? `Per-Video Ads Earnings Share for video #${payout.videoId} (₹${payout.amount.toFixed(2)} share of ₹3 pool for Premium Video #${txNumber})`
+                    : `Per-Video Ads Earnings Share (₹${payout.amount.toFixed(2)} share of ₹3 pool for Premium Video #${txNumber})`;
 
                   await conn.query(
                     `INSERT INTO income_ledger (
@@ -1676,7 +1681,7 @@ export async function handleApiRequest(
                       payout.userId,
                       uploaderId,
                       userName,
-                      videoId || null,
+                      payout.videoId || videoId || null,
                       payout.amount,
                       specialTag,
                       glbDesc,
@@ -1916,19 +1921,20 @@ export async function handleApiRequest(
               ? resolveUplineSponsors(uploaderId, store.users)
               : undefined;
 
-          // Find all distinct users who uploaded paid premium videos, strictly excluding current uploader
-          const storeEligibleCreators = Array.from(
-            new Set(
-              (store.videos || [])
-                .filter(
-                  (v) =>
-                    v.video_type === "premium" &&
-                    v.payment_status === "paid" &&
-                    v.user_id.toUpperCase() !== uploaderId,
-                )
-                .map((v) => v.user_id.toUpperCase()),
-            ),
-          );
+          // Find all eligible videos for weighted Ads Earnings Share, strictly excluding current uploader
+          const storeEligibleVideos = (store.videos || [])
+            .filter(
+              (v) =>
+                v.video_type === "premium" &&
+                v.payment_status === "paid" &&
+                v.user_id.toUpperCase() !== uploaderId &&
+                !v.is_blocked,
+            )
+            .map((v) => ({
+              userId: v.user_id.toUpperCase(),
+              videoId: v.id,
+              adEarnings: Number(v.ad_earnings) || 0,
+            }));
 
           const result = await verifyServerPayment(
             {
@@ -1946,7 +1952,7 @@ export async function handleApiRequest(
                   ? { planId: payload.planId || payload.plan_id }
                   : undefined),
             },
-            storeEligibleCreators,
+            storeEligibleVideos,
             verifiedReferrerId,
             env,
             uplines,
@@ -2104,9 +2110,14 @@ export async function handleApiRequest(
                 w.global_income += payout.amount;
                 w.updated_at = new Date().toISOString();
 
-                const txGlbId = `TX_GLB_${result.paymentId}_${payout.userId}`;
+                if (payout.amount <= 0) continue;
+                const txGlbId = `TX_GLB_${result.paymentId}_${payout.videoId || payout.userId}`;
+                const glbDesc = payout.videoId
+                  ? `Per-Video Ads Earnings Share for video #${payout.videoId} (₹${payout.amount.toFixed(2)} share of ₹3 pool for Premium Video #${result.txNumber || 0})`
+                  : `Per-Video Ads Earnings Share (₹${payout.amount.toFixed(2)} share of ₹3 pool for Premium Video #${result.txNumber || 0})`;
+
                 store.walletTransactions.unshift({
-                  id: `tx-glb-${Date.now()}-${payout.userId}`,
+                  id: `tx-glb-${Date.now()}-${payout.videoId || payout.userId}`,
                   transactionId: txGlbId,
                   transaction_id: txGlbId,
                   userId: payout.userId,
@@ -2115,14 +2126,14 @@ export async function handleApiRequest(
                   source_user_id: uploaderId,
                   sourceUserName: userName,
                   source_user_name: userName,
-                  videoId: videoId || "",
-                  video_id: videoId || "",
+                  videoId: payout.videoId || videoId || "",
+                  video_id: payout.videoId || videoId || "",
                   incomeType: "global_income",
                   income_type: "global_income",
                   amount: payout.amount,
                   status: "settled",
                   specialTag: result.specialTag,
-                  description: `Global Income Pool distribution (₹${payout.amount.toFixed(2)} share of ₹3 pool across ${payouts.length} eligible creators for Premium Video #${result.txNumber || 0})`,
+                  description: glbDesc,
                   createdAt: new Date().toISOString(),
                   created_at: new Date().toISOString(),
                 });
@@ -4387,32 +4398,40 @@ export async function handleApiRequest(
           400,
         );
       }
-      if (amount > 10000) {
+      if (amount > 1000) {
         return jsonResponse(
           {
             success: false,
             error:
-              "Maximum daily withdrawal limit is ₹10,000. You cannot withdraw more than ₹10,000 per day.",
+              "Maximum daily withdrawal limit is ₹1,000. You cannot withdraw more than ₹1,000 per day.",
           },
           400,
         );
       }
 
-      // Requirement Point 7: Total ₹12 charge for Admin (₹5 base + ₹0.90 GST [18%] + ₹0.10 PG [2%] ≈ ₹6.00, plus ₹6.00 Admin allocation = ₹12.00)
-      // Deducted from creator's withdrawal amount (e.g. ₹100 requested -> ₹88 net payable)
-      const fee = 12;
-      const netAmount = Math.max(0, amount - fee);
+      // Company Confirmed Withdrawal Fee Rule:
+      // - Minimum: ₹100, Maximum: ₹1,000
+      // - GST: 18% of FULL withdrawal amount
+      // - PG Fee: 2% of FULL withdrawal amount
+      // - Total Deduction: 20% of withdrawal amount
+      // - Net Payout: 80% of withdrawal amount
+      // Examples: ₹100 -> ₹18 GST + ₹2 PG -> ₹80 net; ₹500 -> ₹90 GST + ₹10 PG -> ₹400 net; ₹1,000 -> ₹180 GST + ₹20 PG -> ₹800 net
+      const gstAmount = Math.round(amount * 0.18 * 100) / 100;
+      const pgFeeAmount = Math.round(amount * 0.02 * 100) / 100;
+      const fee = Math.round((gstAmount + pgFeeAmount) * 100) / 100;
+      const netAmount = Math.max(0, Math.round((amount - fee) * 100) / 100);
       const chargesBreakdown = {
         grossAmount: amount,
-        fee: 12,
-        baseProcessing: 5,
+        fee,
         gstRatePercent: 18,
-        gstAmount: 0.9,
+        gstAmount,
         pgFeePercent: 2,
-        pgFeeAmount: 0.1,
-        adminAllocation: 6,
-        totalCharge: 12,
+        pgFeeAmount,
+        totalDeductionPercent: 20,
+        totalCharge: fee,
         netPayable: netAmount,
+        baseProcessing: 0,
+        adminAllocation: 0,
       };
 
       if (pool) {
@@ -4454,7 +4473,7 @@ export async function handleApiRequest(
 
           return jsonResponse({
             success: true,
-            message: `Withdrawal request for ₹${amount.toLocaleString("en-IN")} (Net Payable: ₹${netAmount.toLocaleString("en-IN")} after ₹12 charges) validated and approved.`,
+            message: `Withdrawal request for ₹${amount.toLocaleString("en-IN")} (Net Payable: ₹${netAmount.toLocaleString("en-IN")} after 20% charges: 18% GST ₹${gstAmount.toFixed(2)} + 2% PG ₹${pgFeeAmount.toFixed(2)}) validated and approved.`,
             transaction: {
               id: txId,
               userId: effectiveUserId,
@@ -4542,7 +4561,7 @@ export async function handleApiRequest(
 
       return jsonResponse({
         success: true,
-        message: `Withdrawal request for ₹${amount.toLocaleString("en-IN")} (Net Payable: ₹${netAmount.toLocaleString("en-IN")} after ₹12 charges) validated and approved.`,
+        message: `Withdrawal request for ₹${amount.toLocaleString("en-IN")} (Net Payable: ₹${netAmount.toLocaleString("en-IN")} after 20% charges: 18% GST ₹${gstAmount.toFixed(2)} + 2% PG ₹${pgFeeAmount.toFixed(2)}) validated and approved.`,
         transaction: tx,
         updatedWallet: {
           userId: effectiveUserId,
@@ -5048,7 +5067,9 @@ export async function handleApiRequest(
         );
       }
 
-      const batchId = `batch_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
+      const batchId =
+        String(body.batch_id || body.batchId || "").trim() ||
+        `batch_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
       let totalProcessed = 0;
       let totalAmount = 0;
       const processed: any[] = [];

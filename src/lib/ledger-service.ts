@@ -499,45 +499,46 @@ export async function distributePremiumVideoIncome(
  */
 export const WITHDRAWAL_RULES = {
   MIN_AMOUNT: 100, // ₹100 minimum
-  MAX_DAILY_LIMIT: 10000, // ₹10,000 per day maximum
+  MAX_DAILY_LIMIT: 1000, // ₹1,000 per day maximum
 } as const;
 
 export const WITHDRAWAL_CHARGES = {
-  TOTAL_FEE: 12,
-  BASE_PROCESSING: 5,
-  GST_RATE: 0.18, // 18% GST (₹0.90)
-  GST_AMOUNT: 0.9,
-  PG_FEE_RATE: 0.02, // 2% PG fee (₹0.10)
-  PG_FEE_AMOUNT: 0.1,
-  ADMIN_ALLOCATION: 6,
+  GST_RATE: 0.18, // 18% GST on full withdrawal amount
+  PG_FEE_RATE: 0.02, // 2% PG fee on full withdrawal amount
+  TOTAL_DEDUCTION_RATE: 0.20, // 20% total deduction
+  NET_PAYOUT_RATE: 0.80, // 80% net payout
 } as const;
 
 export interface WithdrawalChargesBreakdown {
   grossAmount: number;
-  baseProcessing: number;
   gstRatePercent: number;
   gstAmount: number;
   pgFeePercent: number;
   pgFeeAmount: number;
-  adminAllocation: number;
+  totalDeductionPercent: number;
   totalCharge: number;
   netPayable: number;
+  baseProcessing?: number;
+  adminAllocation?: number;
 }
 
 export function calculateWithdrawalBreakdown(amount: number): WithdrawalChargesBreakdown {
   const grossAmount = Math.max(0, Number(amount) || 0);
-  const totalCharge = grossAmount >= WITHDRAWAL_RULES.MIN_AMOUNT ? WITHDRAWAL_CHARGES.TOTAL_FEE : 0;
-  const netPayable = Math.max(0, grossAmount - totalCharge);
+  const gstAmount = Math.round(grossAmount * WITHDRAWAL_CHARGES.GST_RATE * 100) / 100;
+  const pgFeeAmount = Math.round(grossAmount * WITHDRAWAL_CHARGES.PG_FEE_RATE * 100) / 100;
+  const totalCharge = Math.round((gstAmount + pgFeeAmount) * 100) / 100;
+  const netPayable = Math.max(0, Math.round((grossAmount - totalCharge) * 100) / 100);
   return {
     grossAmount,
-    baseProcessing: WITHDRAWAL_CHARGES.BASE_PROCESSING,
     gstRatePercent: 18,
-    gstAmount: WITHDRAWAL_CHARGES.GST_AMOUNT,
+    gstAmount,
     pgFeePercent: 2,
-    pgFeeAmount: WITHDRAWAL_CHARGES.PG_FEE_AMOUNT,
-    adminAllocation: WITHDRAWAL_CHARGES.ADMIN_ALLOCATION,
+    pgFeeAmount,
+    totalDeductionPercent: 20,
     totalCharge,
     netPayable,
+    baseProcessing: 0,
+    adminAllocation: 0,
   };
 }
 
@@ -595,7 +596,7 @@ export async function validateWithdrawalRequest(
     };
   }
 
-  // Check if daily total already reached ₹10,000
+  // Check if daily total already reached ₹1,000
   if (alreadyWithdrawnToday >= WITHDRAWAL_RULES.MAX_DAILY_LIMIT) {
     return {
       valid: false,
@@ -606,7 +607,7 @@ export async function validateWithdrawalRequest(
     };
   }
 
-  // Check if adding this amount exceeds daily ₹10,000 limit
+  // Check if adding this amount exceeds daily ₹1,000 limit
   if (alreadyWithdrawnToday + amount > WITHDRAWAL_RULES.MAX_DAILY_LIMIT) {
     return {
       valid: false,
