@@ -542,7 +542,7 @@ describe("Regression Tests: Stale Data Fallback & Withdrawal Error Resilience", 
           },
         });
 
-        // Request ₹500 withdrawal: fee is ₹12, net payable is ₹488
+        // Request ₹500 withdrawal: fee is ₹100 (20% total deduction: 18% GST + 2% PG), net payable is ₹400
         const res = await processWithdrawal("FT483921", 500, {
           upiId: "alex@upi",
           accountHolder: "Alex Rivera",
@@ -551,8 +551,8 @@ describe("Regression Tests: Stale Data Fallback & Withdrawal Error Resilience", 
         assert.equal(res.success, true);
         assert.ok(res.transaction);
         assert.equal(res.transaction.amount, -500);
-        assert.equal(res.transaction.fee, WITHDRAWAL_CHARGES.TOTAL_FEE, "Fee must be ₹12");
-        assert.equal(res.transaction.netAmount, 488, "Net payable must be ₹488 (500 - 12)");
+        assert.equal(res.transaction.fee, 100, "Fee must be ₹100");
+        assert.equal(res.transaction.netAmount, 400, "Net payable must be ₹400 (500 - 100)");
 
         // Verify updated wallet balance
         assert.ok(res.updatedWallet);
@@ -563,8 +563,8 @@ describe("Regression Tests: Stale Data Fallback & Withdrawal Error Resilience", 
         const ledger = getStoredLedger();
         assert.equal(ledger.length, 1);
         assert.equal(ledger[0]?.transactionId, "TX_WD_CONFIRMED_999");
-        assert.equal(ledger[0]?.fee, 12);
-        assert.equal(ledger[0]?.netAmount, 488);
+        assert.equal(ledger[0]?.fee, 100);
+        assert.equal(ledger[0]?.netAmount, 400);
       } finally {
         api.wallet.withdraw = originalWithdraw;
         api.wallet.getBalance = originalGetBalance;

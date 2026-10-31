@@ -211,7 +211,13 @@ export function calculateWeightedPoolPayouts(
   poolPaise: number,
   creators: Array<{ userId: string; videoId?: string; adEarnings: number }>,
 ): {
-  payouts: Array<{ userId: string; videoId?: string; amountPaise: number; amount: number; weight: number }>;
+  payouts: Array<{
+    userId: string;
+    videoId?: string;
+    amountPaise: number;
+    amount: number;
+    weight: number;
+  }>;
   distributedPaise: number;
   residualPaise: number;
 } {
@@ -282,7 +288,13 @@ export function evaluatePremiumDistribution(
   totalAmount: number;
   eligibleMembersCount: number;
   perMemberShare: number;
-  weightedPayouts?: Array<{ userId: string; videoId?: string; amountPaise: number; amount: number; weight: number }>;
+  weightedPayouts?: Array<{
+    userId: string;
+    videoId?: string;
+    amountPaise: number;
+    amount: number;
+    weight: number;
+  }>;
 } {
   const isSpecial = isSpecialGlobalTransaction(txNumber);
   const hasValidReferrer = Boolean(referrerId && referrerId.trim().length > 0);
@@ -572,7 +584,12 @@ export interface PaymentVerifyResult {
     globalPoolAmount: number;
     eligibleMembersCount: number;
     perMemberShare: number;
-    creatorPayouts?: Array<{ userId: string; videoId?: string; amount: number; amountPaise: number }>;
+    creatorPayouts?: Array<{
+      userId: string;
+      videoId?: string;
+      amount: number;
+      amountPaise: number;
+    }>;
     totalReferralAmount?: number;
     levelPayouts?: AdsLevelPayout[];
     missingLevels?: number[];
@@ -694,7 +711,9 @@ export async function createServerPaymentOrder(
  */
 export async function verifyServerPayment(
   req: PaymentVerifyRequest,
-  eligiblePremiumCreatorIds: Array<string | { userId: string; videoId?: string; adEarnings?: number }> = [],
+  eligiblePremiumCreatorIds: Array<
+    string | { userId: string; videoId?: string; adEarnings?: number }
+  > = [],
   referrerUserId?: string | null,
   env?: Record<string, string | undefined>,
   uplines?: AdsUplineSponsor[],
@@ -942,18 +961,24 @@ export async function verifyServerPayment(
         : 0.0;
       const unallocatedReferrerPaise = hasValidReferrer ? 0 : 100;
 
-      // Filter eligible previous videos / creators: strictly exclude current uploader
+      // Filter eligible previous videos / creators: strictly exclude current uploader and deduplicate
       const uploaderNorm = req.userId.trim().toUpperCase();
       const eligibleItems: Array<{ userId: string; videoId?: string; adEarnings: number }> = [];
+      const seenCreatorKeys = new Set<string>();
       for (const item of eligiblePremiumCreatorIds) {
         if (typeof item === "string") {
           const norm = item.trim().toUpperCase();
-          if (norm.length > 0 && norm !== uploaderNorm) {
+          if (norm.length > 0 && norm !== uploaderNorm && !seenCreatorKeys.has(norm)) {
+            seenCreatorKeys.add(norm);
             eligibleItems.push({ userId: norm, adEarnings: 0 });
           }
         } else if (item && typeof item === "object") {
-          const norm = String(item.userId || "").trim().toUpperCase();
-          if (norm.length > 0 && norm !== uploaderNorm) {
+          const norm = String(item.userId || "")
+            .trim()
+            .toUpperCase();
+          const key = item.videoId ? `${norm}:${item.videoId}` : norm;
+          if (norm.length > 0 && norm !== uploaderNorm && !seenCreatorKeys.has(key)) {
+            seenCreatorKeys.add(key);
             eligibleItems.push({
               userId: norm,
               videoId: item.videoId,
@@ -967,7 +992,12 @@ export async function verifyServerPayment(
       let adminAllocation = 0.0;
       let globalPoolAllocation = 0.0;
       let perMemberShare = 0.0;
-      const creatorPayouts: Array<{ userId: string; videoId?: string; amount: number; amountPaise: number }> = [];
+      const creatorPayouts: Array<{
+        userId: string;
+        videoId?: string;
+        amount: number;
+        amountPaise: number;
+      }> = [];
 
       if (isSpecial) {
         // Special: ₹4 Admin + ₹1 (if no referrer redirected to Admin) = ₹4 or ₹5

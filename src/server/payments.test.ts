@@ -16,7 +16,7 @@ import {
 import { handleApiRequest, isAdPromotionActive } from "./api-handler";
 import { isPromotionActive, getVideoBadgeLabels } from "../lib/video-service";
 import { api } from "../lib/api";
-import { processWithdrawal, getUserWallet } from "../lib/ledger-service";
+import { processWithdrawal, getUserWallet, saveStoredLedger } from "../lib/ledger-service";
 
 describe("Payment Verification & Referral Security Audit Tests", () => {
   const secret = "test_razorpay_secret_key_1234567890";
@@ -342,7 +342,7 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
     assert.equal(refRes.data.dashboard.userId, "FT483921");
   });
 
-  it("10. Enforces withdrawal limit boundaries (min ₹100 and max ₹10,000) with Point 7 charge breakdown", async () => {
+  it("10. Enforces withdrawal limit boundaries (min ₹100 and max ₹1,000) with company confirmed charge breakdown", async () => {
     const login = await makeApiCall("/api/auth/login.php", "POST", {
       identifier: "admin@facetube.com",
       password: "password",
@@ -354,7 +354,7 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
     assert.equal(belowMin.status, 400);
     assert.match(belowMin.data.error, /Minimum withdrawal amount is ₹100/i);
 
-    // Above maximum (> ₹10,000)
+    // Above maximum (> ₹1,000)
     const aboveMax = await makeApiCall(
       "/api/wallet/withdraw.php",
       "POST",
@@ -362,9 +362,9 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
       token,
     );
     assert.equal(aboveMax.status, 400);
-    assert.match(aboveMax.data.error, /Maximum daily withdrawal limit is ₹10,000/i);
+    assert.match(aboveMax.data.error, /Maximum daily withdrawal limit is ₹1,000/i);
 
-    // Valid ₹100 minimum withdrawal with Point 7 charges breakdown (₹12 total charge -> ₹88 net)
+    // Valid ₹100 minimum withdrawal with confirmed charges breakdown (20% total charge: 18% GST + 2% PG -> ₹80 net)
     const validWithdrawal = await makeApiCall(
       "/api/wallet/withdraw.php",
       "POST",
@@ -374,15 +374,13 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
     assert.equal(validWithdrawal.status, 200);
     assert.equal(validWithdrawal.data.success, true);
     assert.equal(validWithdrawal.data.transaction.amount, 100);
-    assert.equal(validWithdrawal.data.transaction.fee, 12);
-    assert.equal(validWithdrawal.data.transaction.netAmount, 88);
+    assert.equal(validWithdrawal.data.transaction.fee, 20);
+    assert.equal(validWithdrawal.data.transaction.netAmount, 80);
     assert.ok(validWithdrawal.data.transaction.chargesBreakdown);
-    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.baseProcessing, 5);
-    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.gstAmount, 0.9);
-    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.pgFeeAmount, 0.1);
-    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.adminAllocation, 6);
-    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.totalCharge, 12);
-    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.netPayable, 88);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.gstAmount, 18);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.pgFeeAmount, 2);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.totalCharge, 20);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.netPayable, 80);
   });
 
   it("11. Rejects payment verification for mismatched amount or unsupported purpose", async () => {
@@ -541,6 +539,7 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
       throw new Error("502 Bad Gateway: Upstream Hostinger API connection failed");
     };
 
+    saveStoredLedger([]);
     try {
       const res = await processWithdrawal("FT483921", 1000, {
         accountHolder: "Alex Rivera",
@@ -590,6 +589,7 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
       };
     };
 
+    saveStoredLedger([]);
     try {
       const res = await processWithdrawal("FT483921", 1000, {
         accountHolder: "Alex Rivera",
@@ -642,8 +642,8 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
       "POST",
       {
         payouts: [
-          { userId: "FT483921", amount: 100 },
-          { userId: "FT102857", amount: 200 },
+          { userId: "FT483921", amount: 50 },
+          { userId: "FT102857", amount: 250 },
         ],
         notes: "Test batch payout disbursement",
       },
@@ -2335,14 +2335,14 @@ describe("Phase 1 Security & Production Safety Tests", () => {
     const bodyBelowMin = await resBelowMin.json();
     assert.match(bodyBelowMin.error, /Minimum withdrawal/i);
 
-    // Balance sufficiency check: when amount is within daily limit (<= ₹10,000) but exceeds balance
+    // Balance sufficiency check: when amount is within daily limit (<= ₹1,000) but exceeds balance
     const reqInsufficient = new Request("http://localhost:3000/api/wallet/withdraw", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ amount: 9999 }),
+      body: JSON.stringify({ amount: 999 }),
     });
     const resInsufficient = await handleApiRequest(reqInsufficient, env);
     assert.ok(resInsufficient);
@@ -2374,10 +2374,10 @@ describe("Phase 1 Security & Production Safety Tests", () => {
     const bodyValid = await resValid.json();
     assert.equal(bodyValid.success, true);
     assert.equal(bodyValid.transaction.amount, 100);
-    assert.equal(bodyValid.transaction.fee, 12);
-    assert.equal(bodyValid.transaction.netAmount, 88);
-    assert.equal(bodyValid.transaction.chargesBreakdown.totalCharge, 12);
-    assert.equal(bodyValid.transaction.chargesBreakdown.netPayable, 88);
+    assert.equal(bodyValid.transaction.fee, 20);
+    assert.equal(bodyValid.transaction.netAmount, 80);
+    assert.equal(bodyValid.transaction.chargesBreakdown.totalCharge, 20);
+    assert.equal(bodyValid.transaction.chargesBreakdown.netPayable, 80);
   });
 
   it("6. Hardcoded password bypass ('admin123' / incorrect password) is strictly rejected", async () => {
@@ -2835,5 +2835,152 @@ describe("Bulk Payout Double-Deduction Regression & Integrity Tests", () => {
     const body = await res.json();
     assert.equal(body.success, false);
     assert.match(body.error, /Admin authorization required/i);
+  });
+
+  it("8. Safe internal chunking and progress tracking for 50+ users", async () => {
+    const adminLoginRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "FT102857", password: "password" }),
+      }),
+      env,
+    );
+    assert.ok(adminLoginRes);
+    const { token: adminToken } = await adminLoginRes.json();
+
+    // Create 60 small payouts to test 2 chunks (50 + 10)
+    const sixtyPayouts = Array.from({ length: 60 }, (_, i) => ({
+      userId: "FT102857",
+      amount: 1, // ₹1 each = ₹60 total
+    }));
+
+    const batchId = `test_batch_chunk_${Date.now()}`;
+    const bulkRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          batch_id: batchId,
+          chunk_size: 50,
+          payouts: sixtyPayouts,
+          notes: "Testing 60 users chunking",
+        }),
+      }),
+      env,
+    );
+
+    assert.ok(bulkRes);
+    assert.equal(bulkRes.status, 200);
+    const data = await bulkRes.json();
+    assert.equal(data.success, true);
+    assert.equal(data.batch_id, batchId);
+    assert.equal(data.total_recipients, 60);
+    assert.equal(data.total_amount, 60);
+    assert.equal(data.total_chunks, 2);
+    assert.equal(data.chunks_processed, 2);
+    assert.equal(data.chunk_size, 50);
+    assert.deepEqual(data.progress, {
+      total: 60,
+      processed: 60,
+      successful: 60,
+      failed: 0,
+    });
+    assert.equal(data.processed.length, 60);
+  });
+
+  it("9. Idempotent retry: re-submitting with identical batch_id succeeds without double deduction", async () => {
+    const adminLoginRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: "FT102857", password: "password" }),
+      }),
+      env,
+    );
+    assert.ok(adminLoginRes);
+    const { token: adminToken } = await adminLoginRes.json();
+
+    const initBalRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/wallet/balance?userId=FT102857", {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }),
+      env,
+    );
+    const balBefore = Number((await initBalRes.json()).wallet.balance);
+
+    const testBatchId = `idempotent_test_${Date.now()}`;
+    const payouts = [
+      { userId: "FT102857", amount: 25 },
+      { userId: "FT102857", amount: 35 },
+    ];
+
+    // First run
+    const firstRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          batch_id: testBatchId,
+          payouts,
+        }),
+      }),
+      env,
+    );
+    assert.ok(firstRes);
+    assert.equal(firstRes.status, 200);
+
+    const balAfterFirst = Number(
+      (
+        await (
+          await handleApiRequest(
+            new Request("http://localhost:3000/api/wallet/balance?userId=FT102857", {
+              headers: { Authorization: `Bearer ${adminToken}` },
+            }),
+            env,
+          )
+        ).json()
+      ).wallet.balance,
+    );
+    assert.equal(balAfterFirst, balBefore - 60);
+
+    // Second run with EXACT same batch_id (idempotent replay)
+    const retryRes = await handleApiRequest(
+      new Request("http://localhost:3000/api/admin/bulk-payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          batch_id: testBatchId,
+          payouts,
+        }),
+      }),
+      env,
+    );
+    assert.ok(retryRes);
+    assert.equal(retryRes.status, 200);
+    const retryData = await retryRes.json();
+    assert.equal(retryData.success, true);
+    assert.equal(retryData.processed.length, 2);
+    assert.equal(retryData.processed[0].idempotent_replay, true);
+    assert.equal(retryData.processed[1].idempotent_replay, true);
+
+    // Balance MUST remain unchanged (zero double deduction!)
+    const balAfterRetry = Number(
+      (
+        await (
+          await handleApiRequest(
+            new Request("http://localhost:3000/api/wallet/balance?userId=FT102857", {
+              headers: { Authorization: `Bearer ${adminToken}` },
+            }),
+            env,
+          )
+        ).json()
+      ).wallet.balance,
+    );
+    assert.equal(
+      balAfterRetry,
+      balAfterFirst,
+      "Idempotent retry must not deduct balance a second time!",
+    );
   });
 });

@@ -64,7 +64,11 @@ export function getStoredLedger(): LedgerTransaction[] {
 }
 
 export function saveStoredLedger(transactions: LedgerTransaction[]): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") {
+    INITIAL_SEED_LEDGER.length = 0;
+    INITIAL_SEED_LEDGER.push(...transactions);
+    return;
+  }
   try {
     localStorage.setItem(LOCAL_STORAGE_LEDGER_KEY, JSON.stringify(transactions));
   } catch {
@@ -88,7 +92,13 @@ export function getStoredWallets(): Record<string, UserWallet> {
 }
 
 export function saveStoredWallets(wallets: Record<string, UserWallet>): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") {
+    for (const key of Object.keys(INITIAL_SEED_WALLETS)) {
+      delete INITIAL_SEED_WALLETS[key];
+    }
+    Object.assign(INITIAL_SEED_WALLETS, wallets);
+    return;
+  }
   try {
     localStorage.setItem(LOCAL_STORAGE_WALLETS_KEY, JSON.stringify(wallets));
   } catch {
@@ -505,8 +515,8 @@ export const WITHDRAWAL_RULES = {
 export const WITHDRAWAL_CHARGES = {
   GST_RATE: 0.18, // 18% GST on full withdrawal amount
   PG_FEE_RATE: 0.02, // 2% PG fee on full withdrawal amount
-  TOTAL_DEDUCTION_RATE: 0.20, // 20% total deduction
-  NET_PAYOUT_RATE: 0.80, // 80% net payout
+  TOTAL_DEDUCTION_RATE: 0.2, // 20% total deduction
+  NET_PAYOUT_RATE: 0.8, // 80% net payout
 } as const;
 
 export interface WithdrawalChargesBreakdown {
