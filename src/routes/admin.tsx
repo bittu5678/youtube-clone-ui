@@ -24,6 +24,14 @@ import {
   Tag,
   PlusCircle,
   Layers,
+  BarChart3,
+  Download,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  FileSpreadsheet,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Navbar } from "@/components/videohub/Navbar";
@@ -48,7 +56,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-type AdminTab = "users" | "moderation" | "categories" | "payouts" | "database";
+type AdminTab = "users" | "moderation" | "categories" | "payouts" | "earnings" | "database";
 
 interface ModerationVideo {
   id: string;
@@ -110,6 +118,161 @@ function AdminPage() {
   const [processingBulk, setProcessingBulk] = useState(false);
   const [payoutNotes, setPayoutNotes] = useState("Batch disbursement approved by admin");
   const [lastBatchResult, setLastBatchResult] = useState<any | null>(null);
+
+  // Earnings & Payouts Report State (Req 15)
+  const [earningsUsers, setEarningsUsers] = useState<any[]>([]);
+  const [earningsSummary, setEarningsSummary] = useState({
+    totalUsers: 0,
+    totalWalletBalance: 0,
+    totalEarned: 0,
+    totalWithdrawn: 0,
+    totalReferralIncome: 0,
+    totalGlobalIncome: 0,
+    totalAdsenseIncome: 0,
+    totalAffiliateIncome: 0,
+  });
+  const [reportPage, setReportPage] = useState(1);
+  const [reportLimit, setReportLimit] = useState(20);
+  const [reportTotalPages, setReportTotalPages] = useState(1);
+  const [reportTotalUsers, setReportTotalUsers] = useState(0);
+  const [reportSearch, setReportSearch] = useState("");
+  const [reportStartDate, setReportStartDate] = useState("");
+  const [reportEndDate, setReportEndDate] = useState("");
+  const [reportDateMode, setReportDateMode] = useState<"joined" | "activity">("joined");
+  const [isLoadingReport, setIsLoadingReport] = useState(false);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const [selectedWithdrawalUser, setSelectedWithdrawalUser] = useState<any | null>(null);
+  const [userWithdrawals, setUserWithdrawals] = useState<any[]>([]);
+  const [isLoadingWithdrawals, setIsLoadingWithdrawals] = useState(false);
+
+  const loadEarningsReport = useCallback(
+    async (pageOverride?: number) => {
+      setIsLoadingReport(true);
+      try {
+        const targetPage = pageOverride !== undefined ? pageOverride : reportPage;
+        const res = await api.admin.getEarningsReport({
+          search: reportSearch.trim() || undefined,
+          startDate: reportStartDate || undefined,
+          endDate: reportEndDate || undefined,
+          dateMode: reportDateMode,
+          page: targetPage,
+          limit: reportLimit,
+        });
+        if (res && res.success) {
+          setEarningsUsers(res.users || []);
+          if (res.summary) setEarningsSummary(res.summary);
+          if (res.pagination) {
+            setReportPage(res.pagination.page);
+            setReportLimit(res.pagination.limit);
+            setReportTotalPages(res.pagination.totalPages);
+            setReportTotalUsers(res.pagination.total);
+          }
+        }
+      } catch (err: any) {
+        console.error("Failed to load earnings report:", err);
+        toast.error(err?.message || "Failed to load earnings report.");
+      } finally {
+        setIsLoadingReport(false);
+      }
+    },
+    [reportSearch, reportStartDate, reportEndDate, reportDateMode, reportPage, reportLimit],
+  );
+
+  const handleViewWithdrawals = async (userRecord: any) => {
+    setSelectedWithdrawalUser(userRecord);
+    setIsLoadingWithdrawals(true);
+    try {
+      const res = await api.admin.getUserWithdrawalHistory(userRecord.userId, {
+        startDate: reportStartDate || undefined,
+        endDate: reportEndDate || undefined,
+      });
+      if (res && res.success) {
+        setUserWithdrawals(res.withdrawals || []);
+      } else {
+        setUserWithdrawals([]);
+      }
+    } catch (err: any) {
+      toast.error("Failed to fetch withdrawal history: " + (err?.message || "Error"));
+      setUserWithdrawals([]);
+    } finally {
+      setIsLoadingWithdrawals(false);
+    }
+  };
+
+  const handleExportCsv = async () => {
+    setIsExportingCsv(true);
+    try {
+      const res = await api.admin.getEarningsReport({
+        search: reportSearch.trim() || undefined,
+        startDate: reportStartDate || undefined,
+        endDate: reportEndDate || undefined,
+        dateMode: reportDateMode,
+        limit: 5000,
+        page: 1,
+      });
+
+      const rows = res?.users || earningsUsers;
+      if (!rows || rows.length === 0) {
+        toast.error("No user data to export with the current filters.");
+        return;
+      }
+
+      const headers = [
+        "User ID",
+        "Name",
+        "Email",
+        "Role",
+        "Referral Code",
+        "Available Balance (INR)",
+        "Total Earned (INR)",
+        "Referral Income (INR)",
+        "Global Pool Income (INR)",
+        "AdSense Income (INR)",
+        "Affiliate Income (INR)",
+        "Total Withdrawn (INR)",
+        "Joined Date",
+      ];
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map((r: any) =>
+          [
+            `"${r.userId}"`,
+            `"${(r.name || "").replace(/"/g, '""')}"`,
+            `"${(r.email || "").replace(/"/g, '""')}"`,
+            `"${r.role}"`,
+            `"${r.referralCode || "N/A"}"`,
+            (Number(r.balance) || 0).toFixed(2),
+            (Number(r.totalEarned) || 0).toFixed(2),
+            (Number(r.referralIncome) || 0).toFixed(2),
+            (Number(r.globalIncome) || 0).toFixed(2),
+            (Number(r.adsenseIncome) || 0).toFixed(2),
+            (Number(r.affiliateIncome) || 0).toFixed(2),
+            (Number(r.totalWithdrawn) || 0).toFixed(2),
+            `"${r.createdAt || ""}"`,
+          ].join(","),
+        ),
+      ].join("\r\n");
+
+      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.setAttribute(
+        "download",
+        `facetube_earnings_report_${new Date().toISOString().slice(0, 10)}.csv`,
+      );
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+      toast.success(`Exported ${rows.length} user records to CSV.`);
+    } catch (err: any) {
+      toast.error("CSV export failed: " + (err?.message || "Unknown error"));
+    } finally {
+      setIsExportingCsv(false);
+    }
+  };
 
   // REDIRECT RULE: Only admin can access /admin.
   useEffect(() => {
@@ -303,8 +466,15 @@ function AdminPage() {
       loadModerationVideos();
       loadPendingPayouts();
       loadCategories();
+      loadEarningsReport();
     }
-  }, [isAdmin, loadModerationVideos, loadPendingPayouts, loadCategories]);
+  }, [isAdmin, loadModerationVideos, loadPendingPayouts, loadCategories, loadEarningsReport]);
+
+  useEffect(() => {
+    if (isAdmin && activeTab === "earnings") {
+      loadEarningsReport();
+    }
+  }, [isAdmin, activeTab, loadEarningsReport]);
 
   if (isLoading) {
     return (
@@ -533,6 +703,7 @@ ALTER TABLE uploaded_videos ADD COLUMN IF NOT EXISTS ad_earnings DECIMAL(12,2) D
                   loadModerationVideos();
                   loadPendingPayouts();
                   loadCategories();
+                  loadEarningsReport();
                   toast.success("Admin datasets refreshed.");
                 }}
                 className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary/70 px-4 py-2 text-sm font-medium text-foreground transition hover:bg-secondary"

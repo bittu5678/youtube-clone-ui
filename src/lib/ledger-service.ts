@@ -513,15 +513,15 @@ export async function distributePremiumVideoIncome(
 
 /**
  * WITHDRAWAL LIMITS & RULES
- * - Minimum withdrawal amount: ₹100
+ * - Minimum withdrawal amount: ₹1,000
  * - Maximum withdrawal amount: ₹10,000 per day
- * - Total Admin & Processing Charge: ₹12 (₹5 Base + ₹0.90 GST [18%] + ₹0.10 PG fee [2%] ≈ ₹6, plus ₹6 Admin allocation)
- * - Charge is deducted from creator's requested payout amount (e.g. ₹100 withdrawal -> ₹88 net payable)
+ * - Deductions: 18% GST + 2% PG fee = 20% Total Deduction
+ * - Net Payout: 80%
  * - If daily withdrawal total reaches ₹10,000, further withdrawals are blocked until next day
  */
 export const WITHDRAWAL_RULES = {
-  MIN_AMOUNT: 100, // ₹100 minimum
-  MAX_DAILY_LIMIT: 1000, // ₹1,000 per day maximum
+  MIN_AMOUNT: 1000, // ₹1,000 minimum
+  MAX_DAILY_LIMIT: 10000, // ₹10,000 per day maximum
 } as const;
 
 export const WITHDRAWAL_CHARGES = {
@@ -606,11 +606,11 @@ export async function validateWithdrawalRequest(
     };
   }
 
-  // Minimum withdrawal amount check: ₹100
+  // Minimum withdrawal amount check: ₹1,000
   if (amount < WITHDRAWAL_RULES.MIN_AMOUNT) {
     return {
       valid: false,
-      error: `Minimum withdrawal amount is ₹${WITHDRAWAL_RULES.MIN_AMOUNT.toLocaleString("en-IN")}. You cannot withdraw less than ₹100.`,
+      error: `Minimum withdrawal amount is ₹${WITHDRAWAL_RULES.MIN_AMOUNT.toLocaleString("en-IN")}. You cannot withdraw less than ₹1,000.`,
       alreadyWithdrawnToday,
       remainingDailyLimit,
       currentBalance: wallet.balance,
@@ -618,7 +618,7 @@ export async function validateWithdrawalRequest(
     };
   }
 
-  // Check if daily total already reached ₹1,000
+  // Check if daily total already reached ₹10,000
   if (alreadyWithdrawnToday >= WITHDRAWAL_RULES.MAX_DAILY_LIMIT) {
     return {
       valid: false,
@@ -629,7 +629,7 @@ export async function validateWithdrawalRequest(
     };
   }
 
-  // Check if adding this amount exceeds daily ₹1,000 limit
+  // Check if adding this amount exceeds daily ₹10,000 limit
   if (alreadyWithdrawnToday + amount > WITHDRAWAL_RULES.MAX_DAILY_LIMIT) {
     return {
       valid: false,

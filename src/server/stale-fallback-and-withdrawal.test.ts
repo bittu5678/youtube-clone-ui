@@ -323,10 +323,10 @@ describe("Regression Tests: Stale Data Fallback & Withdrawal Error Resilience", 
       saveStoredLedger([]);
     });
 
-    it("enforces minimum withdrawal amount of ₹100", async () => {
-      const res = await processWithdrawal("FT483921", 50);
+    it("enforces minimum withdrawal amount of ₹1,000", async () => {
+      const res = await processWithdrawal("FT483921", 500);
       assert.equal(res.success, false);
-      assert.ok(res.error?.includes("Minimum withdrawal amount is ₹100"));
+      assert.ok(res.error?.includes("Minimum withdrawal amount is ₹1,000"));
       const wallet = getStoredWallets()["FT483921"];
       assert.equal(wallet?.balance, 5000, "Balance must not be modified");
     });
@@ -371,7 +371,7 @@ describe("Regression Tests: Stale Data Fallback & Withdrawal Error Resilience", 
         const initialWallet = await getUserWallet("FT483921");
         assert.equal(initialWallet.balance, 5000);
 
-        const res = await processWithdrawal("FT483921", 500, {
+        const res = await processWithdrawal("FT483921", 1000, {
           upiId: "alex@upi",
           accountHolder: "Alex Rivera",
         });
@@ -437,7 +437,7 @@ describe("Regression Tests: Stale Data Fallback & Withdrawal Error Resilience", 
           throw netErr;
         };
 
-        const res = await processWithdrawal("FT483921", 300, {
+        const res = await processWithdrawal("FT483921", 1000, {
           upiId: "alex@upi",
         });
 
@@ -503,7 +503,7 @@ describe("Regression Tests: Stale Data Fallback & Withdrawal Error Resilience", 
       }
     });
 
-    it("correctly executes confirmed withdrawal with exact fee deductions (₹12 total fee)", async () => {
+    it("correctly executes confirmed withdrawal with exact fee deductions (20% total deduction: 18% GST + 2% PG)", async () => {
       const originalWithdraw = api.wallet.withdraw;
       const originalGetBalance = api.wallet.getBalance;
       try {
@@ -542,29 +542,29 @@ describe("Regression Tests: Stale Data Fallback & Withdrawal Error Resilience", 
           },
         });
 
-        // Request ₹500 withdrawal: fee is ₹100 (20% total deduction: 18% GST + 2% PG), net payable is ₹400
-        const res = await processWithdrawal("FT483921", 500, {
+        // Request ₹1,000 withdrawal: fee is ₹200 (20% total deduction: 18% GST + 2% PG), net payable is ₹800
+        const res = await processWithdrawal("FT483921", 1000, {
           upiId: "alex@upi",
           accountHolder: "Alex Rivera",
         });
 
         assert.equal(res.success, true);
         assert.ok(res.transaction);
-        assert.equal(res.transaction.amount, -500);
-        assert.equal(res.transaction.fee, 100, "Fee must be ₹100");
-        assert.equal(res.transaction.netAmount, 400, "Net payable must be ₹400 (500 - 100)");
+        assert.equal(res.transaction.amount, -1000);
+        assert.equal(res.transaction.fee, 200, "Fee must be ₹200");
+        assert.equal(res.transaction.netAmount, 800, "Net payable must be ₹800 (1000 - 200)");
 
         // Verify updated wallet balance
         assert.ok(res.updatedWallet);
-        assert.equal(res.updatedWallet.balance, 4500);
-        assert.equal(res.updatedWallet.totalWithdrawn, 5500);
+        assert.equal(res.updatedWallet.balance, 4000);
+        assert.equal(res.updatedWallet.totalWithdrawn, 6000);
 
         // Verify stored in ledger
         const ledger = getStoredLedger();
         assert.equal(ledger.length, 1);
         assert.equal(ledger[0]?.transactionId, "TX_WD_CONFIRMED_999");
-        assert.equal(ledger[0]?.fee, 100);
-        assert.equal(ledger[0]?.netAmount, 400);
+        assert.equal(ledger[0]?.fee, 200);
+        assert.equal(ledger[0]?.netAmount, 800);
       } finally {
         api.wallet.withdraw = originalWithdraw;
         api.wallet.getBalance = originalGetBalance;

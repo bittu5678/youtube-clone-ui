@@ -4475,21 +4475,21 @@ export async function handleApiRequest(
         effectiveUserId = requestedUserId.toUpperCase();
       }
 
-      if (isNaN(amount) || amount < 100) {
+      if (isNaN(amount) || amount < 1000) {
         return jsonResponse(
           {
             success: false,
-            error: "Minimum withdrawal amount is ₹100. You cannot withdraw less than ₹100.",
+            error: "Minimum withdrawal amount is ₹1,000. You cannot withdraw less than ₹1,000.",
           },
           400,
         );
       }
-      if (amount > 1000) {
+      if (amount > 10000) {
         return jsonResponse(
           {
             success: false,
             error:
-              "Maximum daily withdrawal limit is ₹1,000. You cannot withdraw more than ₹1,000 per day.",
+              "Maximum daily withdrawal limit is ₹10,000. You cannot withdraw more than ₹10,000 per day.",
           },
           400,
         );
@@ -4531,12 +4531,12 @@ export async function handleApiRequest(
       const beneficiaryDetailsJson = buildMaskedBeneficiaryDetails(bankDetails);
 
       // Company Confirmed Withdrawal Fee Rule:
-      // - Minimum: ₹100, Maximum: ₹1,000
+      // - Minimum: ₹1,000, Maximum: ₹10,000
       // - GST: 18% of FULL withdrawal amount
       // - PG Fee: 2% of FULL withdrawal amount
       // - Total Deduction: 20% of withdrawal amount
       // - Net Payout: 80% of withdrawal amount
-      // Examples: ₹100 -> ₹18 GST + ₹2 PG -> ₹80 net; ₹500 -> ₹90 GST + ₹10 PG -> ₹400 net; ₹1,000 -> ₹180 GST + ₹20 PG -> ₹800 net
+      // Examples: ₹1,000 -> ₹180 GST + ₹20 PG -> ₹800 net; ₹5,000 -> ₹900 GST + ₹100 PG -> ₹4,000 net; ₹10,000 -> ₹1,800 GST + ₹200 PG -> ₹8,000 net
       const gstAmount = Math.round(amount * 0.18 * 100) / 100;
       const pgFeeAmount = Math.round(amount * 0.02 * 100) / 100;
       const fee = Math.round((gstAmount + pgFeeAmount) * 100) / 100;
@@ -6359,6 +6359,473 @@ export async function handleApiRequest(
         },
         201,
       );
+    }
+  }
+
+  // 21. Admin User-Wise Earnings & Payouts Report
+  if (route === "admin/earnings-report") {
+    if (method === "GET") {
+      const pool = getMysqlPool();
+      const authUser = await getAuthUserFromRequest(request, store, pool);
+      if (!authUser) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Authentication required. Please provide a valid Bearer session token.",
+          },
+          401,
+        );
+      }
+      if (authUser.role !== "admin") {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Admin authorization required. Only verified administrators can access the earnings report.",
+          },
+          403,
+        );
+      }
+
+      const action = (url.searchParams.get("action") || "").trim().toLowerCase();
+
+      // Sub-Action: Date-wise withdrawal transaction history for a specific user
+      if (action === "withdrawals") {
+        const targetUserId = (
+          url.searchParams.get("userId") ||
+          url.searchParams.get("user_id") ||
+          ""
+        ).trim();
+
+        if (!targetUserId) {
+          return jsonResponse(
+            { success: false, error: "user_id is required for withdrawal history" },
+            400,
+          );
+        }
+
+        const startDate = (url.searchParams.get("start_date") || url.searchParams.get("startDate") || "").trim();
+        const endDate = (url.searchParams.get("end_date") || url.searchParams.get("endDate") || "").trim();
+
+        if (pool) {
+          try {
+            let sql = `
+              SELECT id, transaction_id, user_id, amount, status, description, created_at
+              FROM income_ledger
+              WHERE UPPER(user_id) = UPPER(?) AND income_type = 'withdrawal'
+            `;
+            const params: any[] = [targetUserId];
+            if (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+              sql += " AND created_at >= ?";
+              params.push(`${startDate} 00:00:00`);
+            }
+            if (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+              sql += " AND created_at <= ?";
+              params.push(`${endDate} 23:59:59`);
+            }
+            sql += " ORDER BY created_at DESC LIMIT 200";
+
+            const [rows]: any = await pool.query(sql, params);
+            const mapped = (rows || []).map((tx: any) => ({
+              id: tx.id,
+              transactionId: tx.transaction_id || tx.id,
+              userId: tx.user_id,
+              amount: Number(tx.amount) || 0,
+              status: tx.status,
+              description: tx.description || "Withdrawal request",
+              createdAt: tx.created_at,
+            }));
+            const totalAmount = mapped.reduce((sum: number, item: any) => sum + item.amount, 0);
+
+            return jsonResponse({
+              success: true,
+              userId: targetUserId,
+              total: mapped.length,
+              totalAmount: Math.round(totalAmount * 100) / 100,
+              withdrawals: mapped,
+            });
+          } catch (dbErr: any) {
+            console.error("[earnings-report] MySQL error querying user withdrawals:", dbErr);
+          }
+        }
+
+        // Store fallback for dev/test environments
+        const allTx = store.walletTransactions || [];
+        const normTarget = targetUserId.toUpperCase();
+        let userTxs = allTx.filter((t: any) => {
+          const uId = String(t.user_id || t.userId || "").trim().toUpperCase();
+          const isWithdrawal = (t.type === "withdrawal" || t.income_type === "withdrawal" || t.incomeType === "withdrawal");
+          return uId === normTarget && isWithdrawal;
+        });
+
+        if (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+          const startMs = new Date(`${startDate}T00:00:00Z`).getTime();
+          userTxs = userTxs.filter((t: any) => new Date(t.created_at || t.createdAt || 0).getTime() >= startMs);
+        }
+        if (endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+          const endMs = new Date(`${endDate}T23:59:59Z`).getTime();
+          userTxs = userTxs.filter((t: any) => new Date(t.created_at || t.createdAt || 0).getTime() <= endMs);
+        }
+
+        const mapped = userTxs.map((tx: any) => ({
+          id: String(tx.id || tx.transaction_id || tx.transactionId || `tx_${Math.random()}`),
+          transactionId: String(tx.transaction_id || tx.transactionId || tx.id || ""),
+          userId: targetUserId,
+          amount: Number(tx.amount) || 0,
+          status: String(tx.status || "settled"),
+          description: String(tx.description || "Withdrawal request"),
+          createdAt: tx.created_at || tx.createdAt || new Date().toISOString(),
+        }));
+
+        const totalAmount = mapped.reduce((sum: number, item: any) => sum + item.amount, 0);
+
+        return jsonResponse({
+          success: true,
+          userId: targetUserId,
+          total: mapped.length,
+          totalAmount: Math.round(totalAmount * 100) / 100,
+          withdrawals: mapped,
+        });
+      }
+
+      // Main Report Query: Filtered & Paginated Users
+      const search = (url.searchParams.get("search") || url.searchParams.get("q") || "").trim();
+      const startDate = (url.searchParams.get("start_date") || url.searchParams.get("startDate") || "").trim();
+      const endDate = (url.searchParams.get("end_date") || url.searchParams.get("endDate") || "").trim();
+      const dateMode = (url.searchParams.get("date_mode") || "joined").trim().toLowerCase();
+      const exportType = (url.searchParams.get("export") || url.searchParams.get("format") || "").trim().toLowerCase();
+
+      let page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
+      let limit = Math.max(1, Math.min(100, parseInt(url.searchParams.get("limit") || "20", 10)));
+      if (exportType === "csv") {
+        limit = 5000;
+        page = 1;
+      }
+      const offset = (page - 1) * limit;
+
+      if (pool) {
+        try {
+          const whereClauses: string[] = [];
+          const params: any[] = [];
+
+          if (search) {
+            whereClauses.push("(u.user_id LIKE ? OR u.name LIKE ? OR u.email LIKE ? OR u.referral_code LIKE ?)");
+            const like = `%${search}%`;
+            params.push(like, like, like, like);
+          }
+
+          const hasStart = startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate);
+          const hasEnd = endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate);
+
+          if (dateMode === "activity") {
+            if (hasStart && hasEnd) {
+              whereClauses.push("u.user_id IN (SELECT DISTINCT user_id FROM income_ledger WHERE created_at >= ? AND created_at <= ?)");
+              params.push(`${startDate} 00:00:00`, `${endDate} 23:59:59`);
+            } else if (hasStart) {
+              whereClauses.push("u.user_id IN (SELECT DISTINCT user_id FROM income_ledger WHERE created_at >= ?)");
+              params.push(`${startDate} 00:00:00`);
+            } else if (hasEnd) {
+              whereClauses.push("u.user_id IN (SELECT DISTINCT user_id FROM income_ledger WHERE created_at <= ?)");
+              params.push(`${endDate} 23:59:59`);
+            }
+          } else {
+            if (hasStart) {
+              whereClauses.push("u.created_at >= ?");
+              params.push(`${startDate} 00:00:00`);
+            }
+            if (hasEnd) {
+              whereClauses.push("u.created_at <= ?");
+              params.push(`${endDate} 23:59:59`);
+            }
+          }
+
+          const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+          // 1. Total Count
+          const [countRows]: any = await pool.query(`SELECT COUNT(*) AS total FROM users u ${whereSql}`, params);
+          const totalUsers = Number(countRows?.[0]?.total) || 0;
+
+          // 2. Summary aggregates
+          const summarySql = `
+            SELECT 
+              COUNT(u.id) AS total_count,
+              COALESCE(SUM(wb.balance), 0) AS total_wallet_balance,
+              COALESCE(SUM(wb.total_earned), 0) AS total_earned,
+              COALESCE(SUM(wb.total_withdrawn), 0) AS total_withdrawn,
+              COALESCE(SUM(wb.referral_income), 0) AS total_referral_income,
+              COALESCE(SUM(wb.global_income), 0) AS total_global_income,
+              COALESCE(SUM(wb.adsense_income), 0) AS total_adsense_income,
+              COALESCE(SUM(wb.affiliate_income), 0) AS total_affiliate_income
+            FROM users u
+            LEFT JOIN wallet_balances wb ON UPPER(wb.user_id) = UPPER(u.user_id)
+            ${whereSql}
+          `;
+          const [sumRows]: any = await pool.query(summarySql, params);
+          const sRow = sumRows?.[0] || {};
+          const summary = {
+            totalUsers: Number(sRow.total_count) || totalUsers,
+            totalWalletBalance: Math.round((Number(sRow.total_wallet_balance) || 0) * 100) / 100,
+            totalEarned: Math.round((Number(sRow.total_earned) || 0) * 100) / 100,
+            totalWithdrawn: Math.round((Number(sRow.total_withdrawn) || 0) * 100) / 100,
+            totalReferralIncome: Math.round((Number(sRow.total_referral_income) || 0) * 100) / 100,
+            totalGlobalIncome: Math.round((Number(sRow.total_global_income) || 0) * 100) / 100,
+            totalAdsenseIncome: Math.round((Number(sRow.total_adsense_income) || 0) * 100) / 100,
+            totalAffiliateIncome: Math.round((Number(sRow.total_affiliate_income) || 0) * 100) / 100,
+          };
+
+          // 3. Paginated Data Rows
+          const dataSql = `
+            SELECT 
+              u.id,
+              u.user_id,
+              u.name,
+              u.email,
+              u.role,
+              u.referral_code,
+              u.created_at,
+              COALESCE(wb.balance, 0.00) AS balance,
+              COALESCE(wb.total_earned, 0.00) AS total_earned,
+              COALESCE(wb.total_withdrawn, 0.00) AS total_withdrawn,
+              COALESCE(wb.referral_income, 0.00) AS referral_income,
+              COALESCE(wb.global_income, 0.00) AS global_income,
+              COALESCE(wb.adsense_income, 0.00) AS adsense_income,
+              COALESCE(wb.affiliate_income, 0.00) AS affiliate_income
+            FROM users u
+            LEFT JOIN wallet_balances wb ON UPPER(wb.user_id) = UPPER(u.user_id)
+            ${whereSql}
+            ORDER BY u.created_at DESC
+            LIMIT ? OFFSET ?
+          `;
+          const [dataRows]: any = await pool.query(dataSql, [...params, limit, offset]);
+
+          if (exportType === "csv") {
+            const csvRows: string[] = [
+              "\uFEFFUser ID,Full Name,Email Address,Role,Referral Code,Available Balance (INR),Total Earned (INR),Referral Income (INR),Global Income (INR),AdSense Income (INR),Affiliate Income (INR),Total Withdrawn (INR),Joined Date",
+            ];
+            for (const r of dataRows || []) {
+              const line = [
+                `"${r.user_id}"`,
+                `"${(r.name || "").replace(/"/g, '""')}"`,
+                `"${(r.email || "").replace(/"/g, '""')}"`,
+                `"${r.role}"`,
+                `"${r.referral_code || "N/A"}"`,
+                Number(r.balance || 0).toFixed(2),
+                Number(r.total_earned || 0).toFixed(2),
+                Number(r.referral_income || 0).toFixed(2),
+                Number(r.global_income || 0).toFixed(2),
+                Number(r.adsense_income || 0).toFixed(2),
+                Number(r.affiliate_income || 0).toFixed(2),
+                Number(r.total_withdrawn || 0).toFixed(2),
+                `"${r.created_at || ""}"`,
+              ].join(",");
+              csvRows.push(line);
+            }
+            return new Response(csvRows.join("\r\n"), {
+              status: 200,
+              headers: {
+                "Content-Type": "text/csv; charset=utf-8",
+                "Content-Disposition": `attachment; filename="facetube_earnings_report_${new Date().toISOString().slice(0, 10)}.csv"`,
+              },
+            });
+          }
+
+          const users = (dataRows || []).map((r: any) => ({
+            id: r.id,
+            userId: r.user_id,
+            name: r.name,
+            email: r.email,
+            role: r.role,
+            referralCode: r.referral_code,
+            createdAt: r.created_at,
+            balance: Math.round((Number(r.balance) || 0) * 100) / 100,
+            totalEarned: Math.round((Number(r.total_earned) || 0) * 100) / 100,
+            totalWithdrawn: Math.round((Number(r.total_withdrawn) || 0) * 100) / 100,
+            referralIncome: Math.round((Number(r.referral_income) || 0) * 100) / 100,
+            globalIncome: Math.round((Number(r.global_income) || 0) * 100) / 100,
+            adsenseIncome: Math.round((Number(r.adsense_income) || 0) * 100) / 100,
+            affiliateIncome: Math.round((Number(r.affiliate_income) || 0) * 100) / 100,
+          }));
+
+          const totalPages = totalUsers > 0 ? Math.ceil(totalUsers / limit) : 1;
+          return jsonResponse({
+            success: true,
+            users,
+            pagination: {
+              page,
+              limit,
+              total: totalUsers,
+              totalPages,
+            },
+            summary,
+          });
+        } catch (dbErr: any) {
+          console.error("[earnings-report] MySQL report error:", dbErr);
+        }
+      }
+
+      // In-Memory store implementation for dev/test environment
+      if (!store.wallets) store.wallets = {};
+      const getOrInitWallet = (uId: string) => {
+        const norm = uId.toUpperCase();
+        if (!store.wallets[norm]) {
+          const defaultBalances: Record<string, number> = {
+            FT102857: 15400,
+            FT483921: 4280.5,
+            FT900431: 850,
+          };
+          const defaultEarned: Record<string, number> = {
+            FT102857: 22000,
+            FT483921: 7430.5,
+            FT900431: 850,
+          };
+          const defaultWithdrawn: Record<string, number> = {
+            FT102857: 6600,
+            FT483921: 3150,
+            FT900431: 0,
+          };
+          store.wallets[norm] = {
+            balance: defaultBalances[norm] ?? 0,
+            total_earned: defaultEarned[norm] ?? 0,
+            total_withdrawn: defaultWithdrawn[norm] ?? 0,
+            referral_income: defaultEarned[norm] ? defaultEarned[norm] * 0.4 : 0,
+            global_income: defaultEarned[norm] ? defaultEarned[norm] * 0.3 : 0,
+            adsense_income: defaultEarned[norm] ? defaultEarned[norm] * 0.2 : 0,
+            affiliate_income: defaultEarned[norm] ? defaultEarned[norm] * 0.1 : 0,
+            updated_at: new Date().toISOString(),
+          };
+        }
+        return store.wallets[norm]!;
+      };
+
+      let filteredUsers = [...(store.users || [])];
+
+      if (search) {
+        const sLower = search.toLowerCase();
+        filteredUsers = filteredUsers.filter((u) => {
+          return (
+            u.user_id.toLowerCase().includes(sLower) ||
+            u.name.toLowerCase().includes(sLower) ||
+            u.email.toLowerCase().includes(sLower) ||
+            (u.referral_code && u.referral_code.toLowerCase().includes(sLower))
+          );
+        });
+      }
+
+      const hasStart = startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate);
+      const hasEnd = endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate);
+
+      if (hasStart) {
+        const startMs = new Date(`${startDate}T00:00:00Z`).getTime();
+        filteredUsers = filteredUsers.filter((u) => new Date(u.created_at || 0).getTime() >= startMs);
+      }
+      if (hasEnd) {
+        const endMs = new Date(`${endDate}T23:59:59Z`).getTime();
+        filteredUsers = filteredUsers.filter((u) => new Date(u.created_at || 0).getTime() <= endMs);
+      }
+
+      const totalUsers = filteredUsers.length;
+
+      // Summary across filtered users
+      const summary = filteredUsers.reduce(
+        (acc, u) => {
+          const w = getOrInitWallet(u.user_id);
+          acc.totalWalletBalance += w.balance || 0;
+          acc.totalEarned += w.total_earned || 0;
+          acc.totalWithdrawn += w.total_withdrawn || 0;
+          acc.totalReferralIncome += w.referral_income || 0;
+          acc.totalGlobalIncome += w.global_income || 0;
+          acc.totalAdsenseIncome += w.adsense_income || 0;
+          acc.totalAffiliateIncome += w.affiliate_income || 0;
+          return acc;
+        },
+        {
+          totalUsers,
+          totalWalletBalance: 0,
+          totalEarned: 0,
+          totalWithdrawn: 0,
+          totalReferralIncome: 0,
+          totalGlobalIncome: 0,
+          totalAdsenseIncome: 0,
+          totalAffiliateIncome: 0,
+        },
+      );
+
+      // Round summary
+      summary.totalWalletBalance = Math.round(summary.totalWalletBalance * 100) / 100;
+      summary.totalEarned = Math.round(summary.totalEarned * 100) / 100;
+      summary.totalWithdrawn = Math.round(summary.totalWithdrawn * 100) / 100;
+      summary.totalReferralIncome = Math.round(summary.totalReferralIncome * 100) / 100;
+      summary.totalGlobalIncome = Math.round(summary.totalGlobalIncome * 100) / 100;
+      summary.totalAdsenseIncome = Math.round(summary.totalAdsenseIncome * 100) / 100;
+      summary.totalAffiliateIncome = Math.round(summary.totalAffiliateIncome * 100) / 100;
+
+      // Slicing for pagination
+      const paginatedUsers = filteredUsers.slice(offset, offset + limit);
+
+      if (exportType === "csv") {
+        const csvRows: string[] = [
+          "\uFEFFUser ID,Full Name,Email Address,Role,Referral Code,Available Balance (INR),Total Earned (INR),Referral Income (INR),Global Income (INR),AdSense Income (INR),Affiliate Income (INR),Total Withdrawn (INR),Joined Date",
+        ];
+        for (const u of filteredUsers) {
+          const w = getOrInitWallet(u.user_id);
+          const line = [
+            `"${u.user_id}"`,
+            `"${(u.name || "").replace(/"/g, '""')}"`,
+            `"${(u.email || "").replace(/"/g, '""')}"`,
+            `"${u.role}"`,
+            `"${u.referral_code || "N/A"}"`,
+            (w.balance || 0).toFixed(2),
+            (w.total_earned || 0).toFixed(2),
+            (w.referral_income || 0).toFixed(2),
+            (w.global_income || 0).toFixed(2),
+            (w.adsense_income || 0).toFixed(2),
+            (w.affiliate_income || 0).toFixed(2),
+            (w.total_withdrawn || 0).toFixed(2),
+            `"${u.created_at || ""}"`,
+          ].join(",");
+          csvRows.push(line);
+        }
+        return new Response(csvRows.join("\r\n"), {
+          status: 200,
+          headers: {
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition": `attachment; filename="facetube_earnings_report_${new Date().toISOString().slice(0, 10)}.csv"`,
+          },
+        });
+      }
+
+      const users = paginatedUsers.map((u) => {
+        const w = getOrInitWallet(u.user_id);
+        return {
+          id: u.id,
+          userId: u.user_id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          referralCode: u.referral_code,
+          createdAt: u.created_at,
+          balance: Math.round((w.balance || 0) * 100) / 100,
+          totalEarned: Math.round((w.total_earned || 0) * 100) / 100,
+          totalWithdrawn: Math.round((w.total_withdrawn || 0) * 100) / 100,
+          referralIncome: Math.round((w.referral_income || 0) * 100) / 100,
+          globalIncome: Math.round((w.global_income || 0) * 100) / 100,
+          adsenseIncome: Math.round((w.adsense_income || 0) * 100) / 100,
+          affiliateIncome: Math.round((w.affiliate_income || 0) * 100) / 100,
+        };
+      });
+
+      const totalPages = totalUsers > 0 ? Math.ceil(totalUsers / limit) : 1;
+
+      return jsonResponse({
+        success: true,
+        users,
+        pagination: {
+          page,
+          limit,
+          total: totalUsers,
+          totalPages,
+        },
+        summary,
+      });
     }
   }
 

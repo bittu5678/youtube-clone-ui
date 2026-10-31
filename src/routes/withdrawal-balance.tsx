@@ -207,7 +207,8 @@ export function WithdrawalBalancePage() {
                         </td>
                         <td className="px-4 py-3.5">
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
-                            <CheckCircle2 className="h-3 w-3" /> {item.status === 'pending' ? 'Pending' : 'Settled'}
+                            <CheckCircle2 className="h-3 w-3" />{" "}
+                            {item.status === "pending" ? "Pending" : "Settled"}
                           </span>
                         </td>
                         <td className="px-4 py-3.5 text-right font-mono font-bold text-muted-foreground">

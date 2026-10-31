@@ -355,12 +355,12 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
     });
     const token = login.data.token;
 
-    // Below minimum (< ₹100)
-    const belowMin = await makeApiCall("/api/wallet/withdraw.php", "POST", { amount: 50 }, token);
+    // Below minimum (< ₹1,000)
+    const belowMin = await makeApiCall("/api/wallet/withdraw.php", "POST", { amount: 500 }, token);
     assert.equal(belowMin.status, 400);
-    assert.match(belowMin.data.error, /Minimum withdrawal amount is ₹100/i);
+    assert.match(belowMin.data.error, /Minimum withdrawal amount is ₹1,000/i);
 
-    // Above maximum (> ₹1,000)
+    // Above maximum (> ₹10,000)
     const aboveMax = await makeApiCall(
       "/api/wallet/withdraw.php",
       "POST",
@@ -368,25 +368,25 @@ describe("API Handler Authentication & Authorization Security Tests", () => {
       token,
     );
     assert.equal(aboveMax.status, 400);
-    assert.match(aboveMax.data.error, /Maximum daily withdrawal limit is ₹1,000/i);
+    assert.match(aboveMax.data.error, /Maximum daily withdrawal limit is ₹10,000/i);
 
-    // Valid ₹100 minimum withdrawal with confirmed charges breakdown (20% total charge: 18% GST + 2% PG -> ₹80 net)
+    // Valid ₹1,000 minimum withdrawal with confirmed charges breakdown (20% total charge: 18% GST + 2% PG -> ₹800 net)
     const validWithdrawal = await makeApiCall(
       "/api/wallet/withdraw.php",
       "POST",
-      { amount: 100 },
+      { amount: 1000 },
       token,
     );
     assert.equal(validWithdrawal.status, 200);
     assert.equal(validWithdrawal.data.success, true);
-    assert.equal(validWithdrawal.data.transaction.amount, 100);
-    assert.equal(validWithdrawal.data.transaction.fee, 20);
-    assert.equal(validWithdrawal.data.transaction.netAmount, 80);
+    assert.equal(validWithdrawal.data.transaction.amount, 1000);
+    assert.equal(validWithdrawal.data.transaction.fee, 200);
+    assert.equal(validWithdrawal.data.transaction.netAmount, 800);
     assert.ok(validWithdrawal.data.transaction.chargesBreakdown);
-    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.gstAmount, 18);
-    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.pgFeeAmount, 2);
-    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.totalCharge, 20);
-    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.netPayable, 80);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.gstAmount, 180);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.pgFeeAmount, 20);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.totalCharge, 200);
+    assert.equal(validWithdrawal.data.transaction.chargesBreakdown.netPayable, 800);
   });
 
   it("11. Rejects payment verification for mismatched amount or unsupported purpose", async () => {
@@ -2341,14 +2341,14 @@ describe("Phase 1 Security & Production Safety Tests", () => {
     const bodyBelowMin = await resBelowMin.json();
     assert.match(bodyBelowMin.error, /Minimum withdrawal/i);
 
-    // Balance sufficiency check: when amount is within daily limit (<= ₹1,000) but exceeds balance
+    // Balance sufficiency check: when amount is within daily limit (<= ₹10,000) but exceeds balance
     const reqInsufficient = new Request("http://localhost:3000/api/wallet/withdraw", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ amount: 999 }),
+      body: JSON.stringify({ amount: 1500 }),
     });
     const resInsufficient = await handleApiRequest(reqInsufficient, env);
     assert.ok(resInsufficient);
@@ -2372,18 +2372,18 @@ describe("Phase 1 Security & Production Safety Tests", () => {
         "Content-Type": "application/json",
         Authorization: `Bearer ${adminToken}`,
       },
-      body: JSON.stringify({ amount: 100 }),
+      body: JSON.stringify({ amount: 1000 }),
     });
     const resValid = await handleApiRequest(reqValid, env);
     assert.ok(resValid);
     assert.equal(resValid.status, 200);
     const bodyValid = await resValid.json();
     assert.equal(bodyValid.success, true);
-    assert.equal(bodyValid.transaction.amount, 100);
-    assert.equal(bodyValid.transaction.fee, 20);
-    assert.equal(bodyValid.transaction.netAmount, 80);
-    assert.equal(bodyValid.transaction.chargesBreakdown.totalCharge, 20);
-    assert.equal(bodyValid.transaction.chargesBreakdown.netPayable, 80);
+    assert.equal(bodyValid.transaction.amount, 1000);
+    assert.equal(bodyValid.transaction.fee, 200);
+    assert.equal(bodyValid.transaction.netAmount, 800);
+    assert.equal(bodyValid.transaction.chargesBreakdown.totalCharge, 200);
+    assert.equal(bodyValid.transaction.chargesBreakdown.netPayable, 800);
   });
 
   it("6. Hardcoded password bypass ('admin123' / incorrect password) is strictly rejected", async () => {
@@ -2519,12 +2519,12 @@ describe("Bulk Payout Double-Deduction Regression & Integrity Tests", () => {
     const initBalBody = await initBalRes.json();
     const balanceBeforeWithdrawal = Number(initBalBody.wallet.balance);
 
-    // 3. Initiate a withdrawal request for ₹100
+    // 3. Initiate a withdrawal request for ₹1,000
     const withdrawRes = await handleApiRequest(
       new Request("http://localhost:3000/api/wallet/withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
-        body: JSON.stringify({ amount: 100 }),
+        body: JSON.stringify({ amount: 1000 }),
       }),
       env,
     );
@@ -2535,8 +2535,8 @@ describe("Bulk Payout Double-Deduction Regression & Integrity Tests", () => {
     const txId = withdrawBody.transaction.id;
     const balanceAfterWithdrawal = Number(withdrawBody.updatedWallet.balance);
 
-    // Verify exactly ₹100 was deducted on initial withdrawal
-    assert.equal(balanceAfterWithdrawal, balanceBeforeWithdrawal - 100);
+    // Verify exactly ₹1,000 was deducted on initial withdrawal
+    assert.equal(balanceAfterWithdrawal, balanceBeforeWithdrawal - 1000);
 
     // 4. Fetch transactions to check initial count
     const txsBeforeBulk = await handleApiRequest(
@@ -2733,7 +2733,7 @@ describe("Bulk Payout Double-Deduction Regression & Integrity Tests", () => {
       new Request("http://localhost:3000/api/wallet/withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
-        body: JSON.stringify({ amount: 100 }),
+        body: JSON.stringify({ amount: 1000 }),
       }),
       env,
     );
@@ -2746,7 +2746,7 @@ describe("Bulk Payout Double-Deduction Regression & Integrity Tests", () => {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
         body: JSON.stringify({
-          payouts: [{ userId: "FT483921", amount: 100, transactionId: transaction.id }],
+          payouts: [{ userId: "FT483921", amount: 1000, transactionId: transaction.id }],
         }),
       }),
       env,
@@ -2775,7 +2775,7 @@ describe("Bulk Payout Double-Deduction Regression & Integrity Tests", () => {
       new Request("http://localhost:3000/api/wallet/withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
-        body: JSON.stringify({ amount: 100 }),
+        body: JSON.stringify({ amount: 1000 }),
       }),
       env,
     );
@@ -2788,7 +2788,7 @@ describe("Bulk Payout Double-Deduction Regression & Integrity Tests", () => {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
         body: JSON.stringify({
-          payouts: [{ userId: "FT102857", amount: 100, transactionId: transaction.id }],
+          payouts: [{ userId: "FT102857", amount: 1000, transactionId: transaction.id }],
         }),
       }),
       env,
@@ -2802,7 +2802,7 @@ describe("Bulk Payout Double-Deduction Regression & Integrity Tests", () => {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
         body: JSON.stringify({
-          payouts: [{ userId: "FT102857", amount: 100, transactionId: transaction.id }],
+          payouts: [{ userId: "FT102857", amount: 1000, transactionId: transaction.id }],
         }),
       }),
       env,
@@ -3044,7 +3044,7 @@ describe("Payout Metadata and Sensitive Beneficiary Masking Audit Tests", () => 
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${userToken}` },
         body: JSON.stringify({
-          amount: 100,
+          amount: 1000,
           userId: "FT102857",
           payout_method: "bank_transfer",
           bankDetails: {
@@ -3087,7 +3087,7 @@ describe("Payout Metadata and Sensitive Beneficiary Masking Audit Tests", () => 
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
         body: JSON.stringify({
-          amount: 100,
+          amount: 1000,
           userId: "FT102857",
         }),
       }),
@@ -3109,7 +3109,7 @@ describe("Payout Metadata and Sensitive Beneficiary Masking Audit Tests", () => 
             {
               userId: "FT102857",
               transaction_id: txId,
-              amount: 100,
+              amount: 1000,
               payout_method: "bulk_bank_transfer",
             },
           ],

@@ -739,6 +739,87 @@ export const api = {
         body: JSON.stringify({ name }),
       });
     },
+
+    getEarningsReport: async (params?: {
+      search?: string;
+      startDate?: string;
+      endDate?: string;
+      page?: number;
+      limit?: number;
+      dateMode?: "joined" | "activity";
+      export?: "csv";
+    }) => {
+      const query = new URLSearchParams();
+      if (params?.search) query.set("search", params.search);
+      if (params?.startDate) query.set("start_date", params.startDate);
+      if (params?.endDate) query.set("end_date", params.endDate);
+      if (params?.page) query.set("page", String(params.page));
+      if (params?.limit) query.set("limit", String(params.limit));
+      if (params?.dateMode) query.set("date_mode", params.dateMode);
+      if (params?.export) query.set("export", params.export);
+      const qStr = query.toString() ? `?${query.toString()}` : "";
+      return apiFetch<{
+        success: boolean;
+        users: Array<{
+          id: string;
+          userId: string;
+          name: string;
+          email: string;
+          role: string;
+          referralCode: string | null;
+          createdAt: string;
+          balance: number;
+          totalEarned: number;
+          totalWithdrawn: number;
+          referralIncome: number;
+          globalIncome: number;
+          adsenseIncome: number;
+          affiliateIncome: number;
+        }>;
+        pagination: {
+          page: number;
+          limit: number;
+          total: number;
+          totalPages: number;
+        };
+        summary: {
+          totalUsers: number;
+          totalWalletBalance: number;
+          totalEarned: number;
+          totalWithdrawn: number;
+          totalReferralIncome: number;
+          totalGlobalIncome: number;
+          totalAdsenseIncome: number;
+          totalAffiliateIncome: number;
+        };
+      }>(`/admin/earnings-report.php${qStr}`);
+    },
+
+    getUserWithdrawalHistory: async (
+      userId: string,
+      params?: { startDate?: string; endDate?: string },
+    ) => {
+      const query = new URLSearchParams();
+      query.set("action", "withdrawals");
+      query.set("userId", userId);
+      if (params?.startDate) query.set("start_date", params.startDate);
+      if (params?.endDate) query.set("end_date", params.endDate);
+      return apiFetch<{
+        success: boolean;
+        userId: string;
+        total: number;
+        totalAmount: number;
+        withdrawals: Array<{
+          id: string;
+          transactionId: string;
+          userId: string;
+          amount: number;
+          status: string;
+          description: string;
+          createdAt: string;
+        }>;
+      }>(`/admin/earnings-report.php?${query.toString()}`);
+    },
   },
 
   // Categories
